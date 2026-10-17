@@ -2,7 +2,7 @@
 //
 // Usage: driftwood [--seed N] [--size WxH] [--fullscreen]
 // Capture mode (for docs/CI): --screenshot file.png [--days N] [--hour H] [--zoom Z] [--select K] [--tab T]
-//                             [--center X,Y] (tile) [--pick X,Y] (screen point) [--hide-journal]
+//                             [--center X,Y] (tile) [--pick X,Y] (screen point) [--show-journal]
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -22,7 +22,7 @@ int main(int argc, char** argv) {
         else if (a == "--zoom") o.zoom = float(std::atof(next()));
         else if (a == "--select") o.selectFirst = std::atoi(next());
         else if (a == "--tab") o.tab = std::atoi(next());
-        else if (a == "--hide-journal") o.hideJournal = true;
+        else if (a == "--show-journal") o.showJournal = true;
         else if (a == "--center" || a == "--pick") {
             std::string s = next();
             auto c = s.find(',');

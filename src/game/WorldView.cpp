@@ -7,6 +7,7 @@
 #include "engine/Ui.h"
 #include "game/Art.h"
 #include "game/Iso.h"
+#include "game/Labels.h"
 #include "game/Scale.h"
 #include "rlgl.h"
 
@@ -274,33 +275,9 @@ void WorldView::draw(Sim& s, Rectangle map, int selectedId, float realDt, float 
     }
     for (auto& b : s.plan) if (b.placed && !b.skip && art::isFlat(b.key) && visible(wp(b.x + b.w / 2.f, b.y + b.h / 2.f), 160)) art::building(ctx, b);
 
-    struct Item { float d; std::function<void()> f; };
-    std::vector<Item> items;
-    items.reserve(1200);
-    for (auto& o : s.objs) {
-        if (o.dead || !s.explored[Sim::idx(o.x, o.y)]) continue;
-        if (!visible(wp(o.x + .5f, o.y + .5f))) continue;
-        const Obj* op = &o;
-        if (o.type == "tree") items.push_back({o.x + o.y + 1.f, [&ctx, op] { art::tree(ctx, *op); }});
-        else if (o.type == "rock") items.push_back({o.x + o.y + 1.f, [&ctx, op] { art::rock(ctx, *op); }});
-        else if (o.type == "bush") items.push_back({o.x + o.y + 1.f, [&ctx, op] { art::bush(ctx, *op); }});
-        else if (o.type == "totem") items.push_back({o.x + o.y + 1.f, [&ctx, op] { art::totem(ctx, *op); }});
-        else items.push_back({o.x + o.y + 1.f, [&ctx, op] { art::stump(ctx, *op); }});
-    }
-    for (auto& b : s.plan) if (b.placed && !b.skip && !art::isFlat(b.key)) { Project* bp = &b; items.push_back({float(b.x + b.w + b.y + b.h - 1), [&ctx, bp] { art::building(ctx, *bp); }}); }
-    for (auto& p : s.pois) if (s.explored[Sim::idx(p.x, p.y)]) { const Poi* pp = &p; items.push_back({p.x + p.y + 1.f, [&ctx, pp] { art::poi(ctx, *pp); }}); }
-    items.push_back({float(s.stockX + s.stockY + 2), [&ctx] { art::stockpile(ctx); }});
-    items.push_back({float(s.boatX + s.boatY + 1), [&ctx] { art::boat(ctx); }});
-    for (auto& p : s.people) {
-        if (p.dead || !s.isExplored(p.x, p.y)) continue;
-        const Person* pp = &p;
-        bool sel = p.id == selectedId;
-        items.push_back({p.x + p.y + .01f, [&ctx, pp, sel] { art::person(ctx, *pp, sel); }});
-    }
-    if (s.wolf && s.isExplored(s.wolf->x, s.wolf->y)) items.push_back({s.wolf->x + s.wolf->y, [&ctx, &s] { art::wolf(ctx, *s.wolf); }});
-    std::stable_sort(items.begin(), items.end(), [](const Item& a, const Item& b) { return a.d < b.d; });
-    for (auto& it : items) it.f();
-    drawFog(s);
+    drawFog(s);   // under everything standing, so tall art at the edge of the known island is not cut off
+    Rectangle viewR{tl.x - 90, tl.y - 90, br.x - tl.x + 180, br.y - tl.y + 250};
+    for (auto& d : sorted(collect(s, ctx, viewR, selectedId))) d.draw(ctx);
     EndMode2D();
 
     // screen-space atmosphere
@@ -329,9 +306,82 @@ void WorldView::draw(Sim& s, Rectangle map, int selectedId, float realDt, float 
     drawLabels(s, selectedId);
 }
 
+// ---------------------------------------------------------------- what to draw, in what order
+std::vector<Drawable> WorldView::collect(Sim& s, const art::Ctx& ctx, Rectangle viewR, int selectedId) const {
+    std::vector<Drawable> out;
+    out.reserve(1200);
+    auto inView = [&](float tx, float ty) { V2 w = wp(tx, ty); return CheckCollisionPointRec(w, viewR); };
+    // footprint helpers: a box of half-size r around a ground point, or a tile rectangle
+    auto around = [](float x, float y, float r) { return depth::Item{x - r, y - r, x + r, y + r, 0, 0, 0, 0}; };
+    auto rectOf = [](float x, float y, float w, float h) { return depth::Item{x, y, x + w, y + h, 0, 0, 0, 0}; };
+    auto add = [&](Drawable::Kind k, int id, depth::Item fp, std::function<void(const art::Ctx&)> f) { out.push_back({k, id, fp, std::move(f)}); };
+
+    for (auto& o : s.objs) {
+        if (o.dead || !s.explored[Sim::idx(o.x, o.y)] || !inView(o.x + .5f, o.y + .5f)) continue;
+        const Obj* op = &o;
+        float r = o.type == "rock" ? .35f : o.type == "stump" ? .15f : .25f;
+        std::function<void(const art::Ctx&)> f;
+        if (o.type == "tree") f = [op](const art::Ctx& c) { art::tree(c, *op); };
+        else if (o.type == "rock") f = [op](const art::Ctx& c) { art::rock(c, *op); };
+        else if (o.type == "bush") f = [op](const art::Ctx& c) { art::bush(c, *op); };
+        else if (o.type == "totem") f = [op](const art::Ctx& c) { art::totem(c, *op); };
+        else f = [op](const art::Ctx& c) { art::stump(c, *op); };
+        add(Drawable::OBJECT, o.i, around(o.x + .5f, o.y + .6f, r), f);
+    }
+    for (auto& b : s.plan) {
+        if (!b.placed || b.skip || art::isFlat(b.key) || !inView(b.x + b.w / 2.f, b.y + b.h / 2.f)) continue;
+        Project* bp = &b;
+        add(Drawable::BUILDING, b.id, rectOf(b.x + .05f, b.y + .05f, b.w - .1f, b.h - .1f), [bp](const art::Ctx& c) { art::building(c, *bp); });
+    }
+    for (size_t i = 0; i < s.pois.size(); i++) {
+        auto& p = s.pois[i];
+        if (!s.explored[Sim::idx(p.x, p.y)] || !inView(p.x + .5f, p.y + .5f)) continue;
+        const Poi* pp = &p;
+        add(Drawable::POI, int(i), rectOf(p.x + .1f, p.y + .1f, .8f, .8f), [pp](const art::Ctx& c) { art::poi(c, *pp); });
+    }
+    if (inView(s.stockX + 1.f, s.stockY + .5f)) add(Drawable::STOCKPILE, 0, rectOf(s.stockX, s.stockY, 2, 1), [](const art::Ctx& c) { art::stockpile(c); });
+    if (inView(s.boatX + .5f, s.boatY + .5f)) add(Drawable::BOAT, 0, around(s.boatX + .5f, s.boatY + .5f, .6f), [](const art::Ctx& c) { art::boat(c); });
+    for (auto& p : s.people) {
+        if (p.dead || p.hidden || !s.isExplored(p.x, p.y) || !inView(p.x, p.y)) continue;
+        const Person* pp = &p;
+        bool sel = p.id == selectedId;
+        add(Drawable::PERSON, p.id, around(p.x, p.y, .12f), [pp, sel](const art::Ctx& c) { art::person(c, *pp, sel); });
+    }
+    if (s.wolf && s.isExplored(s.wolf->x, s.wolf->y) && inView(s.wolf->x, s.wolf->y)) {
+        const Wolf* w = &*s.wolf;
+        add(Drawable::WOLF, 0, around(w->x, w->y, .2f), [w](const art::Ctx& c) { art::wolf(c, *w); });
+    }
+    // measure what each piece of art covers
+    art::Ctx quiet = ctx;
+    quiet.effects = false;
+    for (auto& d : out) {
+        draw::Box box;
+        draw::record(&box);
+        d.draw(quiet);
+        draw::record(nullptr);
+        if (box.empty()) { V2 w = wp((d.at.x0 + d.at.x1) / 2, (d.at.y0 + d.at.y1) / 2); box = {w.x, w.y, w.x, w.y}; }
+        d.at.sx0 = box.x0; d.at.sy0 = box.y0; d.at.sx1 = box.x1; d.at.sy1 = box.y1;
+    }
+    return out;
+}
+
+std::vector<Drawable> WorldView::sorted(std::vector<Drawable> items) {
+    std::vector<depth::Item> at;
+    at.reserve(items.size());
+    for (auto& d : items) at.push_back(d.at);
+    std::vector<Drawable> out;
+    out.reserve(items.size());
+    for (int i : depth::order(at)) out.push_back(std::move(items[i]));
+    return out;
+}
+
 void WorldView::drawLabels(Sim& s, int selectedId) {
     if (cam.zoom < .55f) return;
-    float size = 13;
+    const float size = 13;
+    // Gather names and speech bubbles, lay them out so none overlap, then draw.
+    struct Lab { const Person* p; std::string text; bool bubble; };
+    std::vector<Lab> labs;
+    std::vector<labels::Want> wants;
     std::map<int, int> stackAtBed;
     for (auto& p : s.people) {
         if (p.dead || !s.isExplored(p.x, p.y)) continue;
@@ -346,18 +396,34 @@ void WorldView::drawLabels(Sim& s, int selectedId) {
         if (sc.x < -60 || sc.y < -60 || sc.x > GetScreenWidth() + 60 || sc.y > GetScreenHeight() + 60) continue;
         std::string lab = p.name + (p.sleeping ? "  zz" : p.status == "hermit" ? " (hermit)" : p.status == "arriving" ? " (stranger)" : "");
         V2 m = ui::measure(ui::F.bold, lab, size);
-        Rectangle r{sc.x - m.x / 2 - 6, sc.y - 8, m.x + 12, 16};
         bool sel = p.id == selectedId;
-        DrawRectangleRounded(r, 1, 8, sel ? Color{255, 210, 122, 245} : p.status != "member" ? Color{80, 60, 40, 160} : Color{18, 26, 22, 160});
-        ui::text(ui::F.bold, lab, r.x + 6, r.y + 1.5f, size, sel ? Color{30, 42, 35, 255} : Color{244, 241, 232, 255});
+        labs.push_back({&p, lab, false});
+        wants.push_back({{sc.x - m.x / 2 - 6, sc.y - 8, m.x + 12, 16}, sel});
         if (p.bubble && s.tMin < p.bubble->until && !p.hidden) {
             V2 head = GetWorldToScreen2D(wp(p.x, p.y), cam);
             float by = head.y - (px(p.child ? scale::CHILD : scale::PERSON) + 14) * cam.zoom;
             V2 bm = ui::measure(ui::F.body, p.bubble->text, 14);
-            Rectangle br{head.x - bm.x / 2 - 8, by - 11, bm.x + 16, 22};
-            DrawRectangleRounded(br, .8f, 8, Color{255, 255, 255, 240});
-            DrawTriangle({head.x - 4, by + 10}, {head.x, by + 16}, {head.x + 4, by + 10}, Color{255, 255, 255, 240});
-            ui::text(ui::F.body, p.bubble->text, br.x + 8, br.y + 3, 14, Color{30, 42, 35, 255});
+            labs.push_back({&p, p.bubble->text, true});
+            wants.push_back({{head.x - bm.x / 2 - 8, by - 11, bm.x + 16, 22}, sel});
+        }
+    }
+    auto boxes = labels::layout(wants);
+    for (size_t i = 0; i < labs.size(); i++) {
+        const auto& L = labs[i];
+        const auto& b = boxes[i];
+        if (b.h == 0) continue;
+        Rectangle r{b.x, b.y, b.w, b.h};
+        bool sel = L.p->id == selectedId;
+        if (L.bubble) {
+            V2 head = GetWorldToScreen2D(wp(L.p->x, L.p->y), cam);
+            DrawRectangleRounded(r, .8f, 8, Color{255, 255, 255, 240});
+            // the tail points at the speaker even when the bubble had to move
+            float tx = std::clamp(head.x, r.x + 8, r.x + r.width - 8);
+            DrawTriangle({tx - 4, r.y + r.height - 1}, {tx, r.y + r.height + 5}, {tx + 4, r.y + r.height - 1}, Color{255, 255, 255, 240});
+            ui::text(ui::F.body, L.text, r.x + 8, r.y + 3, 14, Color{30, 42, 35, 255});
+        } else {
+            DrawRectangleRounded(r, 1, 8, sel ? Color{255, 210, 122, 245} : L.p->status != "member" ? Color{80, 60, 40, 160} : Color{18, 26, 22, 160});
+            ui::text(ui::F.bold, L.text, r.x + 6, r.y + 1.5f, size, sel ? Color{30, 42, 35, 255} : Color{244, 241, 232, 255});
         }
     }
 }

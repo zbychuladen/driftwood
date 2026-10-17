@@ -50,6 +50,8 @@ if(DRIFTWOOD_BUILD_GAME)
     src/engine/Ui.cpp
     src/engine/Lighting.cpp
     src/game/Art.cpp
+    src/game/Depth.cpp
+    src/game/Labels.cpp
     src/game/WorldView.cpp
     src/game/Hud.cpp
     src/game/Game.cpp)

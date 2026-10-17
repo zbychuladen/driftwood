@@ -345,7 +345,20 @@ void Game::drawJournal() {
     DrawRectangleRoundedLinesEx(r, .06f, 8, 1, T.line);
     text(F.head, "Camp Journal", r.x + 14, r.y + 8, 20, T.text);
     if (button({r.x + r.width - 86, r.y + 6, 74, 26}, journalOpen ? "Hide" : "Show", true, false, 13)) journalOpen = !journalOpen;
-    if (!journalOpen) return;
+    if (!journalOpen) {
+        // the newest line, cut to fit beside the title
+        if (sim.journal.empty()) return;
+        auto& e = sim.journal.front();
+        float x0 = r.x + 14 + measure(F.head, "Camp Journal", 20).x + 18, room = r.x + r.width - 100 - x0;
+        std::string line = e.text;
+        if (measure(F.hand, line, 21).x > room) {
+            while (!line.empty() && measure(F.hand, line + "...", 21).x > room) line.pop_back();
+            line += "...";
+        }
+        Color c = e.cls == "big" ? T.accent : e.cls == "sad" ? T.berry : e.cls == "voice" ? T.voice : T.text;
+        text(F.hand, line, x0, r.y + 9, 21, c);
+        return;
+    }
     Rectangle a{r.x + 12, r.y + 40, r.width - 20, r.height - 48};
     float tw = a.width - 110;
     if (journalVersionCached != sim.journalVersion || journalWidthCached != tw) {

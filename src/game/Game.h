@@ -17,7 +17,7 @@ struct Options {
     int selectFirst = 0;
     int tab = 0;
     bool fullscreen = false;
-    bool hideJournal = false;
+    bool showJournal = false;
     bool hasCenter = false, hasPick = false;
     float centerX = 0, centerY = 0;   // tile to center the camera on
     float pickX = 0, pickY = 0;       // screen point to click, result printed to stdout
@@ -49,7 +49,7 @@ private:
     int selected = -1;
     float speed = 1, prevSpeed = 1;
     int tab = 0;
-    bool journalOpen = true, sandFocus = false;
+    bool journalOpen = false, sandFocus = false;   // collapsed to a one-line strip so the map stays clear
     std::string sandText, sandNote;
     ui::Scroll sideScroll, journalScroll;
     Rectangle rTop{}, rSide{}, rJournal{}, rMap{};

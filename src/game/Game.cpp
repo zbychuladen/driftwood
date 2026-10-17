@@ -90,7 +90,7 @@ int Game::run() {
         else view.centerOnTile(sim.campX + 1.f, sim.campY + 1.f);
         if (opt.hasCenter) view.centerOnTile(opt.centerX, opt.centerY);
         if (opt.zoom > 0) view.cam.zoom = opt.zoom;
-        if (opt.hideJournal) journalOpen = false;
+        if (opt.showJournal) journalOpen = true;
         speed = 1;
         for (int i = 0; i < 4; i++) frame(1.f / 60);
         if (opt.hasPick) {
