@@ -12,6 +12,7 @@
 #include "engine/Draw.h"
 #include "engine/Ui.h"
 #include "game/Art.h"
+#include "game/Building.h"
 #include "game/Depth.h"
 #include "game/Figure.h"
 #include "game/Inspect.h"
@@ -603,6 +604,86 @@ static void testFigures() {
           && figure::facingToward(0, 0, figure::NW) == figure::NW, "a figure faces the way it moves, and keeps its facing when still");
 }
 
+// ---------------------------------------------------------------- assembled buildings
+static void testBuildings() {
+    std::printf("assembled buildings\n");
+    struct T { const char* key; int w, h; float tall; };
+    const T types[] = {{"hut", 2, 2, scale::HUT_WALL + scale::HUT_ROOF}, {"leanto", 3, 1, scale::LEANTO}, {"longhouse", 4, 2, scale::LONGHOUSE_WALL + scale::LONGHOUSE_ROOF},
+                       {"store", 2, 2, scale::STORE_WALL + scale::STORE_ROOF}, {"school", 2, 2, scale::SCHOOL_WALL + scale::SCHOOL_ROOF}, {"forge", 2, 2, scale::FORGE_CHIMNEY},
+                       {"smoke", 2, 1, scale::SMOKE_WALL + scale::SMOKE_ROOF}, {"loomhouse", 2, 2, scale::LOOM_WALL + scale::LOOM_ROOF}, {"infirmary", 2, 2, scale::INFIRMARY_WALL + scale::INFIRMARY_ROOF}};
+    std::string missing, outside, tall, front, stages, hinge;
+    int made = 0;
+    std::map<std::string, std::set<std::string>> variety;
+    for (auto& t : types)
+        for (int id = 0; id < 50; id++) {
+            int side = id % 4;
+            auto d = bld::make(t.key, id, 10, 10, t.w, t.h, side, false);
+            made++;
+            auto count = [&](bld::Part p) { int n = 0; for (auto& pc : d.pieces) n += pc.part == p; return n; };
+            std::string k = t.key;
+            // the recipe's must-haves
+            std::string lack;
+            if (!count(bld::ROOF)) lack += " roof";
+            if (!count(bld::WALL)) lack += " walls";
+            if (!d.openSide && (!count(bld::DOOR) || d.doorWidth <= 0)) lack += " door";
+            if (k == "longhouse" && (d.windows < 2 || !d.smokes)) lack += " windows or smoke outlet";
+            if (k == "forge" && (!d.chimney || !d.openSide || count(bld::EXTRA) < 2)) lack += " chimney, open front or anvil";
+            if (k == "store" && d.doorWidth < 1.6f) lack += " wide door";
+            if (k == "school" && d.windows < 3) lack += " three windows";
+            if ((k == "loomhouse" || k == "infirmary") && d.windows < 2) lack += " two windows";
+            if (!lack.empty() && missing.size() < 300) missing += cat("\n          ", k, " #", id, ":", lack);
+            variety[k].insert(d.walls + "|" + d.roof + "|" + d.doorStyle + "|" + std::to_string(d.windows) + (d.porch ? "|porch" : ""));
+            // everything stays on the footprint, give or take the eaves and a porch
+            float x0 = 10 * scale::TILE_M - .9f, y0 = x0, x1 = (10 + t.w) * scale::TILE_M + .9f, y1 = (10 + t.h) * scale::TILE_M + .9f;
+            for (auto& pc : d.pieces) {
+                const auto& sl = pc.s;
+                float ex = std::abs(sl.ax[0].x) * sl.h[0] + std::abs(sl.ax[1].x) * sl.h[1] + std::abs(sl.ax[2].x) * sl.h[2];
+                float ey = std::abs(sl.ax[0].y) * sl.h[0] + std::abs(sl.ax[1].y) * sl.h[1] + std::abs(sl.ax[2].y) * sl.h[2];
+                if ((sl.c.x - ex < x0 || sl.c.x + ex > x1 || sl.c.y - ey < y0 || sl.c.y + ey > y1) && outside.size() < 200) { outside += cat("\n          ", k, " #", id, " part ", int(pc.part)); break; }
+            }
+            // height: the table's, plus at most the plinth and a chimney standing clear of the ridge
+            if ((d.top < t.tall * .95f || d.top > t.tall + .7f) && tall.size() < 200) tall += cat("\n          ", k, " #", id, ": ", int(d.top * 100), " cm, wanted ", int(t.tall * 100));
+            // the door is on the side it was asked for
+            if (d.doorPiece >= 0) {
+                const solid::V3 dirs[4] = {{1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {-1, 0, 0}};
+                solid::V3 mid{(10 + t.w / 2.f) * scale::TILE_M, (10 + t.h / 2.f) * scale::TILE_M, 0};
+                solid::V3 off = d.pieces[d.doorPiece].s.c - mid;
+                float along = off.x * dirs[side].x + off.y * dirs[side].y;
+                if (along < .25f && front.size() < 200) front += cat("\n          ", k, " #", id, " door not on side ", side);
+            }
+            // construction only ever adds pieces
+            int last = 0;
+            for (float p = 0; p <= 1.001f; p += .05f) {
+                int n = bld::visible(d, p);
+                if (n < last && stages.size() < 200) stages += cat("\n          ", k, " #", id, " at ", int(p * 100), "%");
+                last = n;
+            }
+            if (bld::visible(d, 1) != int(d.pieces.size())) stages += cat("\n          ", k, " #", id, " not all pieces at 100%");
+            // an opening door stays on its hinge: the hinge edge does not move
+            if (d.doorPiece >= 0) {
+                const auto& sl = d.pieces[d.doorPiece].s;
+                solid::V3 edge = sl.c - sl.ax[0] * sl.h[0];
+                float a = -1.75f;
+                solid::V3 rel = edge - d.hinge, moved = {rel.x * std::cos(a) - rel.y * std::sin(a), rel.x * std::sin(a) + rel.y * std::cos(a), rel.z};
+                float gap = std::hypot(moved.x - rel.x, moved.y - rel.y);
+                if (std::hypot(rel.x, rel.y) > .05f || gap > .1f) if (hinge.size() < 200) hinge += cat("\n          ", k, " #", id);
+            }
+        }
+    CHECK(missing.empty(), cat("every one of ", made, " buildings has its recipe's parts", missing).c_str());
+    CHECK(outside.empty(), ("every part stays within the footprint, eaves and porch" + outside).c_str());
+    CHECK(tall.empty(), ("buildings stand at the scale table's height" + tall).c_str());
+    CHECK(front.empty(), ("the door is on the side facing camp" + front).c_str());
+    CHECK(stages.empty(), ("construction only adds parts, and finishes with all of them" + stages).c_str());
+    CHECK(hinge.empty(), ("doors swing about their hinge" + hinge).c_str());
+    std::string few;
+    for (auto& [k, v] : variety) if (v.size() < 6) few += cat(" ", k, " (", int(v.size()), ")");
+    CHECK(few.empty(), ("each type comes in at least six different designs over 50 seeds" + (few.empty() ? std::string() : ":" + few)).c_str());
+    auto a = bld::make("longhouse", 7, 3, 4, 4, 2, 1, false), b = bld::make("longhouse", 7, 3, 4, 4, 2, 1, false);
+    bool same = a.pieces.size() == b.pieces.size() && a.walls == b.walls && a.roof == b.roof;
+    for (size_t i = 0; same && i < a.pieces.size(); i++) same = a.pieces[i].s.c.x == b.pieces[i].s.c.x && a.pieces[i].s.col.r == b.pieces[i].s.col.r;
+    CHECK(same, "the same building id always makes the same building");
+}
+
 int main() {
     testProjection();
     testPickPeople(20261017);
@@ -620,6 +701,7 @@ int main() {
     testTags();
     testVisibleTiles();
     testFigures();
+    testBuildings();
     std::printf(failures ? "\n%d check(s) failed\n" : "\nall checks passed\n", failures);
     return failures;
 }

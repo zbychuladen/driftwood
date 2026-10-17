@@ -53,6 +53,7 @@ if(DRIFTWOOD_BUILD_GAME)
     src/game/Depth.cpp
     src/game/Figure.cpp
     src/game/Solid.cpp
+    src/game/Building.cpp
     src/game/Labels.cpp
     src/game/WorldView.cpp
     src/game/Hud.cpp
