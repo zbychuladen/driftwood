@@ -7,3 +7,5 @@ village-wide     --days 60 --hour 14 --zoom 0.8
 village-night    --days 45 --hour 22 --zoom 1.4
 grown-village    --days 100 --hour 12 --zoom 1.8
 other-island     --seed 7 --days 40 --hour 12 --zoom 1.5
+settler-link     --days 60 --hour 10 --zoom 1.6 --select 3
+all-links        --days 60 --hour 10 --zoom 1.1 --links

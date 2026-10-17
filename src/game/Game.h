@@ -19,6 +19,7 @@ struct Options {
     int tab = 0;
     bool fullscreen = false;
     bool showJournal = false;
+    bool allLinks = false;            // draw every settler's link to their work
     bool hasCenter = false, hasPick = false;
     float centerX = 0, centerY = 0;   // tile to center the camera on
     float pickX = 0, pickY = 0;       // screen point to click, result printed to stdout

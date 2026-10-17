@@ -70,15 +70,24 @@ void Sim::clearQ(Person& p) {
     if (p.release) p.release();
     p.release = nullptr;
     p.q.clear();
+    p.focus = {};
     p.anim.clear();
     p.sleeping = false;
     p.hidden = false;
 }
 
-void Sim::setQ(Person& p, const std::string& kind, const std::string& doing, std::deque<Action> q) {
-    p.kind = kind; p.doing = doing; p.q = std::move(q);
-    if (p.q.empty()) { p.q = wanderQ(p); p.kind = "idle"; p.doing = "Taking a breather"; }
+void Sim::setQ(Person& p, const std::string& kind, const std::string& doing, std::deque<Action> q, Focus f) {
+    p.kind = kind; p.doing = doing; p.q = std::move(q); p.focus = f;
+    if (p.q.empty()) { p.q = wanderQ(p); p.kind = "idle"; p.doing = "Taking a breather"; p.focus = {}; }
 }
+
+// Focus shorthands for the jobs below.
+static Focus onProject(const Project& b, bool fromStock = false, bool toStock = false) { Focus f; f.kind = Focus::PROJECT; f.id = b.id; f.fromStock = fromStock; f.toStock = toStock; return f; }
+static Focus onObject(int i, bool toStock = false) { Focus f; f.kind = Focus::OBJECT; f.id = i; f.toStock = toStock; return f; }
+static Focus onPerson(const Person& q) { Focus f; f.kind = Focus::PERSON; f.id = q.id; return f; }
+static Focus onPoi(int i) { Focus f; f.kind = Focus::POI; f.id = i; return f; }
+static Focus onStock() { Focus f; f.kind = Focus::STOCK; return f; }
+static Focus onSpot(float x, float y, bool toStock = false) { Focus f; f.kind = Focus::SPOT; f.x = x; f.y = y; f.toStock = toStock; return f; }
 
 Obj* Sim::nearestObj(const std::function<bool(const Obj&)>& f, float x, float y) {
     Obj* best = nullptr;
@@ -112,13 +121,14 @@ std::deque<Action> Sim::wanderQ(Person& p, bool play) {
     return {walkA(x, y), workA(20 + rnd() * 25, play ? "Playing" : "Resting", "idle")};
 }
 
-std::deque<Action> Sim::drinkQ(Person& p) {
-    struct O { float x, y, d; };
+std::deque<Action> Sim::drinkQ(Person& p, Focus* where) {
+    struct O { float x, y, d; int well; };
     std::vector<O> opts;
-    for (auto& s : pondShore) opts.push_back({s.x + .5f + s.dx * .35f, s.y + .5f + s.dy * .35f, std::hypot(s.x - p.x, s.y - p.y)});
-    if (auto* w = built("well")) opts.push_back({w->x + 1.3f, w->y + .5f, std::hypot(w->x - p.x, w->y - p.y) - 4});
+    for (auto& s : pondShore) opts.push_back({s.x + .5f + s.dx * .35f, s.y + .5f + s.dy * .35f, std::hypot(s.x - p.x, s.y - p.y), -1});
+    if (auto* w = built("well")) opts.push_back({w->x + 1.3f, w->y + .5f, std::hypot(w->x - p.x, w->y - p.y) - 4, w->id});
     if (opts.empty()) return {};
     auto o = *std::min_element(opts.begin(), opts.end(), [](const O& a, const O& b) { return a.d < b.d; });
+    if (where) *where = o.well >= 0 ? onProject(*projectById(o.well)) : onSpot(o.x, o.y);
     return {walkA(o.x, o.y), workA(12, "Drinking", "drink", [this](Person& p) { p.needs.thirst = 0; if (rnd() < .12f) bubble(p, "ahh"); })};
 }
 
@@ -222,21 +232,24 @@ void Sim::plan_(Person& p) {
     auto& n = p.needs;
     double h = hour();
     bool night = h >= 22 || h < 6;
-    if (p.sick > 0) return setQ(p, "rest", "Resting, feverish", sleepQ(p, true));
-    if (n.thirst > 62) return setQ(p, "drink", "Going for water", drinkQ(p));
-    if (n.hunger > 58 && stock.food >= 1) return setQ(p, "eat", "Having a meal", eatQ(p));
-    if (n.fatigue > 90) return setQ(p, "sleep", "Collapsing into sleep", sleepQ(p, false));
-    if (n.cold > 58 && fireLit()) return setQ(p, "warm", "Warming up by the fire", warmQ(p));
+    Focus bed = projectById(p.bed) ? onProject(*projectById(p.bed)) : Focus{};
+    Focus atFire = fire() ? onProject(*fire()) : Focus{};
+    Focus mealAt = fire() ? onProject(*fire(), true) : onStock();
+    if (p.sick > 0) return setQ(p, "rest", "Resting, feverish", sleepQ(p, true), bed);
+    if (n.thirst > 62) { Focus water; auto q = drinkQ(p, &water); return setQ(p, "drink", "Going for water", std::move(q), water); }
+    if (n.hunger > 58 && stock.food >= 1) return setQ(p, "eat", "Having a meal", eatQ(p), mealAt);
+    if (n.fatigue > 90) return setQ(p, "sleep", "Collapsing into sleep", sleepQ(p, false), bed);
+    if (n.cold > 58 && fireLit()) return setQ(p, "warm", "Warming up by the fire", warmQ(p), atFire);
     if (night) {
-        if (n.fatigue > 20 || h < 5) return setQ(p, "sleep", "Sleeping", sleepQ(p, false));
-        return setQ(p, "social", "Sitting up by the fire", socialQ(p));
+        if (n.fatigue > 20 || h < 5) return setQ(p, "sleep", "Sleeping", sleepQ(p, false), bed);
+        return setQ(p, "social", "Sitting up by the fire", socialQ(p), atFire);
     }
     bool meal = (h >= 12 && h < 13.5) || (h >= 18 && h < 19.5);
-    if (meal && n.hunger > 38 && stock.food >= 1) return setQ(p, "eat", "Sharing a meal", eatQ(p));
+    if (meal && n.hunger > 38 && stock.food >= 1) return setQ(p, "eat", "Sharing a meal", eatQ(p), mealAt);
     auto* f = fire();
     if (f && f->done && f->fuel < 2.5f && stock.wood >= 1 && (h >= 16 || temp() < 10) && fuelRes < 0)
-        return setQ(p, "fuel", "Feeding the fire", fuelQ(p, *f));
-    if (h >= 19.5 && h < 22) return setQ(p, "social", "Talking by the fire", socialQ(p));
+        return setQ(p, "fuel", "Feeding the fire", fuelQ(p, *f), onProject(*f, true));
+    if (h >= 19.5 && h < 22) return setQ(p, "social", "Talking by the fire", socialQ(p), atFire);
     if (!p.child && !p.calling.empty() && p.callingNeed > 55 && h >= 9 && h < 18 && p.gates[3] > .45f && foodDays() > 3) return callingJob(p);
     if (p.child) return setQ(p, "play", "Playing near camp", wanderQ(p, true));
     if (p.whisper && p.whisper->until > tMin) {
@@ -351,7 +364,7 @@ void Sim::chopJob(Person& p) {
         if (!firsts.count("chop")) { firsts.insert("chop"); note(cat(p.name, " felled the first tree with our only hatchet. Slow work.")); }
     })};
     for (auto& a : deliver("Stacking logs")) q.push_back(a);
-    setQ(p, "wood", "Chopping wood", q);
+    setQ(p, "wood", "Chopping wood", q, onObject(ti, true));
 }
 
 void Sim::mineJob(Person& p) {
@@ -363,7 +376,7 @@ void Sim::mineJob(Person& p) {
             toolWear = std::min(100.f, toolWear + .5f);
         })};
         for (auto& a : deliver("Piling stones")) q.push_back(a);
-        return setQ(p, "stone", "Working the mine", q);
+        return setQ(p, "stone", "Working the mine", q, onProject(*mine, false, true));
     }
     Obj* r = nearestObj([&](const Obj& o) { return o.type == "rock" && o.res < 0 && explored[idx(o.x, o.y)]; }, p.x, p.y);
     if (!r) return chopJob(p);
@@ -381,7 +394,7 @@ void Sim::mineJob(Person& p) {
         if (r.stone <= 0) removeObj(r); else r.size = std::max(.45f, r.size * .88f);
     })};
     for (auto& a : deliver("Piling stones")) q.push_back(a);
-    setQ(p, "stone", "Breaking stone", q);
+    setQ(p, "stone", "Breaking stone", q, onObject(ri_, true));
 }
 
 void Sim::foodJob(Person& p) {
@@ -402,7 +415,7 @@ void Sim::foodJob(Person& p) {
             gain(p, "forage");
         })};
         for (auto& a : deliver("Storing berries")) q.push_back(a);
-        return setQ(p, "food", "Picking berries", q);
+        return setQ(p, "food", "Picking berries", q, onObject(bi, true));
     }
     Project* dock = built("dock");
     float sx, sy; int face = 1;
@@ -442,7 +455,7 @@ void Sim::foodJob(Person& p) {
     w.start = [face](Person& p) { p.face = face; };
     auto q = std::deque<Action>{walkA(sx, sy), w};
     for (auto& a : deliver("Storing fish")) q.push_back(a);
-    setQ(p, "food", "Fishing", q);
+    setQ(p, "food", "Fishing", q, onDock ? onProject(*dock, false, true) : onSpot(sx, sy, true));
 }
 
 void Sim::buildJob(Person& p, Project& b) {
@@ -462,7 +475,7 @@ void Sim::buildJob(Person& p, Project& b) {
             if (p.carry) { if (p.carry->t == "wood") bp->dw += p.carry->n; else bp->ds += p.carry->n; p.carry.reset(); }
         });
         drop.cancel = cancel;
-        return setQ(p, "build", cat("Hauling ", t, " to the ", lower(b.name)), {walkA(stockX + .5f + rnd(), stockY + 1.3f), load, walkA(sx, sy), drop});
+        return setQ(p, "build", cat("Hauling ", t, " to the ", lower(b.name)), {walkA(stockX + .5f + rnd(), stockY + 1.3f), load, walkA(sx, sy), drop}, onProject(b, true));
     }
     auto w = workA(60, cat("Building the ", lower(b.name)), "build", [this, bp](Person& p) {
         if (bp->done) return;
@@ -474,7 +487,7 @@ void Sim::buildJob(Person& p, Project& b) {
     });
     w.cancel = cancel;
     w.start = [](Person& p) { p.face = -1; };
-    setQ(p, "build", cat("Building the ", lower(b.name)), {walkA(sx, sy), w});
+    setQ(p, "build", cat("Building the ", lower(b.name)), {walkA(sx, sy), w}, onProject(b));
 }
 
 void Sim::farmJob(Person& p, Project& g, const std::string& job) {
@@ -484,7 +497,7 @@ void Sim::farmJob(Person& p, Project& g, const std::string& job) {
         return setQ(p, "farm", "Planting the field", {walkA(sx, sy), workA(80 / skillF(p, "farm"), "Sowing seeds", "farm", [this, gp](Person& p) {
             gp->state = "growing"; gp->growth = 0; gain(p, "farm");
             if (!firsts.count("plant")) { firsts.insert("plant"); note(cat(p.name, " sowed the garden: beans, squash and something nobody can name.")); }
-        })});
+        })}, onProject(g));
     auto q = std::deque<Action>{walkA(sx, sy), workA(70 / skillF(p, "farm"), "Harvesting", "farm", [this, gp](Person& p) {
         int n = int(std::lround(((gp->key == "fields" ? 30 : 14) + p.sk["farm"] * .8f) * (1 + (p.gifts.count("farmer") ? p.gifts["farmer"] : 0) * .06f)));
         gp->state = "empty"; gp->growth = 0;
@@ -493,7 +506,7 @@ void Sim::farmJob(Person& p, Project& g, const std::string& job) {
         if (!firsts.count("harvest")) { firsts.insert("harvest"); note(cat("First harvest! ", p.name, " carried in ", n, " baskets of squash and beans."), "big"); }
     })};
     for (auto& a : deliver("Storing the harvest")) q.push_back(a);
-    setQ(p, "farm", "Harvesting", q);
+    setQ(p, "farm", "Harvesting", q, onProject(g, false, true));
 }
 
 void Sim::exploreJob(Person& p) {
@@ -506,7 +519,7 @@ void Sim::exploreJob(Person& p) {
     setQ(p, "explore", "Exploring the " + dir, {walkA(best.first + .5f, best.second + .5f), workA(30, "Surveying the land", "idle", [this, dir](Person& p) {
         reveal(p.x, p.y, inventions.count("compass") ? 8.5f : 6);
         if (!firsts.count("explore")) { firsts.insert("explore"); note(cat(p.name, " went off to explore the ", dir, " of the island and came back with scratched legs and stories.")); }
-    })});
+    })}, onSpot(best.first + .5f, best.second + .5f));
 }
 
 void Sim::visitJob(Person& p, Poi& hp) {
@@ -528,7 +541,7 @@ void Sim::visitJob(Person& p, Poi& hp) {
             hpp->mentioned = true;
             note(cat(p.name, " shared a meal with ", h->name, ". The hermit barely spoke, but did not chase them off."));
         }
-    })});
+    })}, onPoi(int(hpp - pois.data())));
 }
 
 void Sim::friendJob(Person& p) {
@@ -544,7 +557,7 @@ void Sim::friendJob(Person& p) {
         affAdd(p, q->id, 4); affAdd(*q, p.id, 3);
         static const std::vector<std::string> lines = {"how are you, really?", "I had the strangest dream", "you look tired", "thanks for yesterday", "do you miss home?"};
         if (rnd() < .35f) bubble(p, pick(lines));
-    })});
+    })}, onPerson(*q));
 }
 
 void Sim::craftJob(Person& p, const std::string& kind) {
@@ -564,7 +577,7 @@ void Sim::craftJob(Person& p, const std::string& kind) {
         p.esteemPts = std::min(100.f, p.esteemPts + 3);
     });
     w.start = [](Person& p) { p.face = -1; };
-    setQ(p, "craft", LAB.at(kind), {walkA(b->x + b->w + .3f, b->y + b->h / 2.f), w});
+    setQ(p, "craft", LAB.at(kind), {walkA(b->x + b->w + .3f, b->y + b->h / 2.f), w}, onProject(*b));
 }
 
 std::optional<std::pair<int, int>> Sim::totemSpot() {
@@ -615,7 +628,7 @@ void Sim::callingJob(Person& p) {
             if (totems == 1 || totems % 4 == 0) note(cat(q.name, " finished a carved totem. People touch it for luck as they pass. There are ", totems, " around camp now."));
         }));
         w.start = [](Person& q) { q.face = -1; };
-        return setQ(p, "calling", "Carving a totem", {walkA(tx + 1.2f, ty + .6f), w});
+        return setQ(p, "calling", "Carving a totem", {walkA(tx + 1.2f, ty + .6f), w}, onSpot(tx + .5f, ty + .6f));
     }
     if (c == "musician")
         return setQ(p, "calling", "Practicing the flute", {walkA(cx + 1.6f, cy + .4f), workA(90, "Playing music", "music", done([this](Person& q) {
@@ -637,16 +650,16 @@ void Sim::callingJob(Person& p) {
         return;
     }
     if (c == "inventor")
-        return setQ(p, "calling", "Tinkering with an idea", {walkA(stockX + 2.4f, stockY + .5f), workA(150, "Tinkering", "build", done([this](Person& q) { invent(q); }))});
+        return setQ(p, "calling", "Tinkering with an idea", {walkA(stockX + 2.4f, stockY + .5f), workA(150, "Tinkering", "build", done([this](Person& q) { invent(q); }))}, onStock());
     if (c == "healer") {
         Person* sick = nullptr;
         for (auto* q : members()) if (q->sick > 0 && q != &p) sick = q;
         if (sick)
             return setQ(p, "calling", "Tending to " + sick->name, {walkA(sick->x + .8f, sick->y + .3f), workA(60, "Tending the sick", "farm", done([this, sick](Person& q) {
                 sick->sick = std::max(0.f, sick->sick - 14); bubble(*sick, "thank you"); affAdd(*sick, q.id, 8);
-            }))});
+            }))}, onPerson(*sick));
         if (Obj* b = nearestObj([&](const Obj& o) { return o.type == "bush" && explored[idx(o.x, o.y)]; }, p.x, p.y))
-            return setQ(p, "calling", "Gathering healing herbs", {walkA(b->x + 1.05f, b->y + .5f), workA(70, "Gathering herbs", "forage", done([this](Person&) { herbs = std::min(12.f, herbs + 2); }))});
+            return setQ(p, "calling", "Gathering healing herbs", {walkA(b->x + 1.05f, b->y + .5f), workA(70, "Gathering herbs", "forage", done([this](Person&) { herbs = std::min(12.f, herbs + 2); }))}, onObject(b->i));
     }
     if (c == "teacher") {
         std::vector<Person*> kids;
@@ -663,7 +676,7 @@ void Sim::callingJob(Person& p) {
         if (st)
             return setQ(p, "calling", cat("Teaching ", st->name, " ", skillNames().at(best)), {walkA(st->x + .8f, st->y + .3f), workA(80, "Teaching", "sit", done([this, st, best](Person& q) {
                 st->sk[best] = std::min(10.f, st->sk[best] + .35f); affAdd(*st, q.id, 4);
-            }))});
+            }))}, onPerson(*st));
     }
     if (c == "mystic") {
         auto* sh = built("shrine");

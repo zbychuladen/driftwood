@@ -50,6 +50,7 @@ void Game::frame(float dt) {
         if (IsKeyPressed(KEY_THREE)) speed = 5;
         if (IsKeyPressed(KEY_J)) journalOpen = !journalOpen;
         if (IsKeyPressed(KEY_ESCAPE)) inspected = {};
+        if (IsKeyPressed(KEY_C)) view.showAllLinks = !view.showAllLinks;
     }
     if (!fate && speed > 0) sim.step(dt * speed * MIN_PER_SEC);
     if (view.clickedMap()) {
@@ -99,6 +100,7 @@ int Game::run() {
         if (opt.hasCenter) view.centerOnTile(opt.centerX, opt.centerY);
         if (opt.zoom > 0) view.cam.zoom = opt.zoom;
         if (opt.showJournal) journalOpen = true;
+        view.showAllLinks = opt.allLinks;
         speed = 1;
         for (int i = 0; i < 4; i++) frame(1.f / 60);
         if (opt.hasPick) {

@@ -25,6 +25,11 @@ struct Pick {
     bool is(Drawable::Kind k, int i) const { return ok && kind == k && id == i; }
 };
 
+// Where a settler's focus points on the ground, and the thing it names.
+// ok is false when the target is gone (a felled tree, say).
+struct FocusTarget { bool ok = false; float x = 0, y = 0; Pick what; };
+FocusTarget focusTarget(dw::Sim& sim, const dw::Focus& f);
+
 class WorldView {
 public:
     void init(dw::Sim& sim);
@@ -32,6 +37,7 @@ public:
     // Camera input. mapRect is the visible map area (excludes the sidebar).
     void handleInput(float dt, Rectangle mapRect, bool pointerFree);
     void draw(dw::Sim& sim, Rectangle mapRect, int selectedId, float realDt, float speed, Pick inspected = {});
+    bool showAllLinks = false;                // every settler's link to their work, not just the selected one
     // Returns a person id under the screen point, or -1.
     int pick(dw::Sim& sim, Vector2 screen);
     // Whatever is drawn front-most under the screen point: its visible shape
@@ -57,6 +63,9 @@ private:
     void drawWeather(dw::Sim& sim, float dt, float speed);
     void drawLabels(dw::Sim& sim, int selectedId);
     void drawHighlight(dw::Sim& sim, Pick p);
+    void drawLinks(dw::Sim& sim, int selectedId, Pick inspected);
+    struct Caption { Vector2 world; std::string text; };
+    std::vector<Caption> captions;            // filled by drawLinks, drawn in screen space
     void clampCam();
 
     RenderTexture2D ground{};
