@@ -1,6 +1,7 @@
 #include "game/Inspect.h"
 #include <cmath>
 #include <map>
+#include "game/Art.h"
 #include "game/Scale.h"
 
 using namespace dw;
@@ -52,6 +53,13 @@ static Info building(Sim& s, Project& b) {
     float pct = b.work > 0 ? b.progress / b.work : 0;
     in.rows.push_back({"Status", b.done ? "Built" : b.progress > 0 ? cat("Being built, ", int(pct * 100), "%") : "Planned"});
     in.rows.push_back({"Size", cat(int(b.w * scale::TILE_M), " by ", int(b.h * scale::TILE_M), " m")});
+    if (const bld::Design* d = art::designFor(s, b)) {
+        // what this one was built from: its own materials, not just its type's
+        std::string made = d->walls + " walls, " + d->roof + " roof";
+        if (d->windows) made += cat(", ", d->windows, d->windows == 1 ? " window" : " windows");
+        if (d->porch) made += ", a porch";
+        in.rows.push_back({"Built of", made});
+    }
     if (!b.done) {
         if (b.wood > 0) in.rows.push_back({"Wood", cat(int(std::floor(b.dw)), " of ", b.wood, " delivered")});
         if (b.stone > 0) in.rows.push_back({"Stone", cat(int(std::floor(b.ds)), " of ", b.stone, " delivered")});

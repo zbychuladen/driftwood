@@ -164,6 +164,13 @@ static void testScale() {
     for (auto& bd : builds) {
         const ProjectDef* def = projectDef(bd.key);
         if (!def) { rows.push_back({std::string(bd.key) + " (no such project)", 0, 1, 1}); continue; }
+        // assembled buildings are measured in 3D by their recipes (testBuildings);
+        // their eaves run past the point this on-screen measure stands under
+        if (bld::assembled(bd.key)) {
+            auto d = bld::make(bd.key, 1, 20, 20, def->w, def->h, 0, false);
+            if (def->beds > 0 || std::string(bd.key) == "store" || std::string(bd.key) == "school") shelters.push_back({std::string(bd.key) + " / person", d.top / scale::PERSON, 2.2f, 4});
+            continue;
+        }
         Project b;
         static_cast<ProjectDef&>(b) = *def;
         b.x = b.y = 20;
@@ -684,6 +691,37 @@ static void testBuildings() {
     CHECK(same, "the same building id always makes the same building");
 }
 
+// ---------------------------------------------------------------- doors in the game
+static void testDoors() {
+    std::printf("doors\n");
+    Sim s;
+    s.newWorld(20261017);
+    runDays(s, 40);   // long enough for huts and a longhouse, where settlers sleep indoors
+    WorldView v;
+    std::map<int, bool> inside;
+    std::map<int, double> passed;
+    for (auto& p : s.people) inside[p.id] = p.hidden;
+    int passes = 0, openWhenPassing = 0, shutAfter = 0, checkedShut = 0;
+    for (int i = 0; i < 3 * 24 * 12; i++) {   // three days in five-minute steps
+        s.step(5);
+        if (!s.pendingFate.empty()) { auto f = s.pendingFate[0]; s.pendingFate.clear(); s.applyFate(f); }
+        v.updateDoors(s);
+        for (auto& p : s.people) {
+            if (p.dead) continue;
+            if (inside.count(p.id) && inside[p.id] != p.hidden && s.projectById(p.bed)) {
+                passes++;
+                passed[p.bed] = s.tMin;
+                if (v.doorOpen(p.bed) == 1) openWhenPassing++;
+            }
+            inside[p.id] = p.hidden;
+        }
+        for (auto& [id, t] : passed)
+            if (s.tMin - t > WorldView::DOOR_OPEN_MIN + WorldView::DOOR_CLOSE_MIN + 1) { checkedShut++; if (v.doorOpen(id) == 0) shutAfter++; }
+    }
+    CHECK(passes > 10 && openWhenPassing == passes, cat("a door is open whenever someone goes in or out (", openWhenPassing, " of ", passes, ")").c_str());
+    CHECK(checkedShut > 100 && shutAfter == checkedShut, "doors swing shut once nobody has passed for a while");
+}
+
 int main() {
     testProjection();
     testPickPeople(20261017);
@@ -702,6 +740,7 @@ int main() {
     testVisibleTiles();
     testFigures();
     testBuildings();
+    testDoors();
     std::printf(failures ? "\n%d check(s) failed\n" : "\nall checks passed\n", failures);
     return failures;
 }
