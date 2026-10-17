@@ -54,6 +54,7 @@ if(DRIFTWOOD_BUILD_GAME)
     src/game/Labels.cpp
     src/game/WorldView.cpp
     src/game/Hud.cpp
+    src/game/Inspect.cpp
     src/game/Game.cpp)
   target_link_libraries(driftwood_game PUBLIC driftwood_sim raylib)
   target_include_directories(driftwood_game PUBLIC src)

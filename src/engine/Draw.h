@@ -27,6 +27,16 @@ struct Box {
 };
 void record(Box* box);                  // nullptr returns to drawing
 
+// Hit testing: while a Probe is set (only together with record()), any
+// opaque-enough triangle that contains the point sets hit. Faint shapes such
+// as shadows do not count (judged against the global alpha, so a half-built
+// building drawn see-through is still solid to a click).
+struct Probe {
+    V2 at;
+    bool hit = false;
+};
+void probe(Probe* p);
+
 Color hex(uint32_t rgb, float a = 1.f);
 Color rgba(int r, int g, int b, float a = 1.f);
 Color shade(Color c, float f);          // brighten/darken rgb, keep alpha

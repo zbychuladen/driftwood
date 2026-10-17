@@ -5,11 +5,13 @@
 #include <cmath>
 #include <cstdio>
 #include <functional>
+#include <map>
 #include <string>
 #include <vector>
 #include "engine/Draw.h"
 #include "game/Art.h"
 #include "game/Depth.h"
+#include "game/Inspect.h"
 #include "game/Iso.h"
 #include "game/Labels.h"
 #include "game/Scale.h"
@@ -274,6 +276,150 @@ static void testLabels() {
     CHECK(out[0].y == 0 && out[1].y == 0, "labels with room stay where they are");
 }
 
+// ---------------------------------------------------------------- clicking things
+static const char* kindName(Drawable::Kind k) {
+    const char* n[] = {"settler", "object", "building", "place", "stockpile", "boat", "wolf"};
+    return n[k];
+}
+
+// A world point the art of d visibly covers, found by probing a grid over its box.
+static bool pointOn(const Drawable& d, const art::Ctx& ctx, Vector2& out) {
+    const auto& a = d.at;
+    for (float fy = .3f; fy <= .9f; fy += .1f)
+        for (float fx = .5f; fx > .05f; fx -= .1f)
+            for (float side : {1.f, -1.f}) {
+                Vector2 w{a.sx0 + (a.sx1 - a.sx0) * (.5f + (fx - .5f) * side), a.sy0 + (a.sy1 - a.sy0) * fy};
+                draw::Box box;
+                draw::Probe pr{w};
+                draw::record(&box);
+                draw::probe(&pr);
+                d.draw(ctx);
+                draw::probe(nullptr);
+                draw::record(nullptr);
+                if (pr.hit) { out = w; return true; }
+            }
+    return false;
+}
+
+static void testInspect(uint32_t seed, int days) {
+    std::printf("clicking things, seed %u, day %d\n", seed, days + 1);
+    Sim s;
+    s.newWorld(seed);
+    runDays(s, days);
+    WorldView v;
+    setupView(v, 1.5f);
+    art::Ctx ctx{&s, s.tMin, s.season(), s.hour()};
+    ctx.effects = false;
+    Rectangle all{-200, -200, iso::WORLD_W + 400, iso::WORLD_H + 400};
+    auto items = WorldView::sorted(v.collect(s, ctx, all, -1));
+
+    // every drawable has a card with a title, a kind, and the facts its kind promises
+    std::string bad;
+    for (auto& d : items) {
+        Info in = describe(s, {d.kind, d.id, true});
+        auto has = [&](const char* row) { for (auto& r : in.rows) if (r.first == row) return true; return false; };
+        bool ok = !in.title.empty() && !in.kind.empty() && (d.kind == Drawable::PERSON || !in.desc.empty());
+        if (d.kind == Drawable::BUILDING) ok = ok && has("Status") && has("Size");
+        if (d.kind == Drawable::STOCKPILE) ok = ok && has("Wood") && has("Food");
+        if (d.kind == Drawable::OBJECT && in.kind == "Tree") ok = ok && has("Height");
+        if (!ok && bad.size() < 300) bad += cat("\n          ", kindName(d.kind), " #", d.id, " '", in.title, "'");
+    }
+    CHECK(bad.empty(), ("every building, tree, rock and place has a full info card" + bad).c_str());
+
+    // a click on a part of something that nothing else covers selects it, for
+    // up to three of each kind
+    auto covers = [&](const Drawable& d, Vector2 w) {
+        const auto& a = d.at;
+        if (w.x < a.sx0 || w.x > a.sx1 || w.y < a.sy0 || w.y > a.sy1) return false;
+        draw::Box box;
+        draw::Probe pr{w};
+        draw::record(&box);
+        draw::probe(&pr);
+        d.draw(ctx);
+        draw::probe(nullptr);
+        draw::record(nullptr);
+        return pr.hit;
+    };
+    std::map<std::string, int> tried, hit;
+    for (size_t i = 0; i < items.size(); i++) {
+        std::string k = items[i].kind == Drawable::OBJECT ? describe(s, {items[i].kind, items[i].id, true}).kind : kindName(items[i].kind);
+        if (tried[k] >= 3) continue;
+        Vector2 w;
+        if (!pointOn(items[i], ctx, w)) continue;
+        bool clear = true;
+        for (size_t j = 0; j < items.size() && clear; j++) if (j != i && covers(items[j], w)) clear = false;
+        if (!clear) continue;
+        tried[k]++;
+        v.cam.target = w;
+        Pick p = v.pickAt(s, GetWorldToScreen2D(w, v.cam));
+        if (p.is(items[i].kind, items[i].id)) hit[k]++;
+    }
+    std::string missed, covered;
+    for (auto& [k, n] : tried) {
+        covered += " " + k;
+        if (hit[k] != n) missed += cat("\n          ", k, ": ", hit[k], " of ", n);
+    }
+    CHECK(missed.empty() && tried.count("Tree") && tried.count("building"), ("a click on a visible part selects it (" + covered.substr(1) + ")" + missed).c_str());
+
+    // where two pieces of art cover the same spot, the one drawn in front wins
+    int pairs = 0, frontWins = 0;
+    for (size_t j = 0; j < items.size() && pairs < 20; j++) {
+        Vector2 w;
+        if (items[j].kind == Drawable::PERSON || !pointOn(items[j], ctx, w)) continue;
+        for (size_t i = 0; i < j; i++) {
+            const auto& a = items[i].at;
+            if (w.x < a.sx0 || w.x > a.sx1 || w.y < a.sy0 || w.y > a.sy1) continue;
+            draw::Box box;
+            draw::Probe pr{w};
+            draw::record(&box);
+            draw::probe(&pr);
+            items[i].draw(ctx);
+            draw::probe(nullptr);
+            draw::record(nullptr);
+            if (!pr.hit) continue;
+            // something behind is also under the point; nothing in front of j may cover it
+            bool frontmost = true;
+            for (size_t k = j + 1; k < items.size() && frontmost; k++) {
+                const auto& b = items[k].at;
+                if (w.x < b.sx0 || w.x > b.sx1 || w.y < b.sy0 || w.y > b.sy1) continue;
+                draw::Box bb;
+                draw::Probe pk{w};
+                draw::record(&bb);
+                draw::probe(&pk);
+                items[k].draw(ctx);
+                draw::probe(nullptr);
+                draw::record(nullptr);
+                if (pk.hit) frontmost = false;
+            }
+            if (!frontmost) break;
+            pairs++;
+            v.cam.target = w;
+            if (v.pickAt(s, GetWorldToScreen2D(w, v.cam)).is(items[j].kind, items[j].id)) frontWins++;
+            break;
+        }
+    }
+    char msg[120];
+    std::snprintf(msg, sizeof msg, "where art overlaps, the click goes to the front one (%d of %d)", frontWins, pairs);
+    CHECK(pairs > 0 && frontWins == pairs, msg);
+
+    // a tree's shadow on the grass is not the tree
+    bool shadowChecked = false, shadowIgnored = true;
+    for (auto& d : items) {
+        if (d.kind != Drawable::OBJECT || s.objs[d.id].type != "tree" || s.objs[d.id].palm) continue;
+        const Obj& o = s.objs[d.id];
+        Vector2 base = iso::wp(o.x + .5f, o.y + .6f);
+        // the shadow reaches right of the trunk along the ground, below the crown
+        float k = scale::px(o.conifer ? scale::CONIFER : scale::BROADLEAF) / (o.conifer ? 40.f : 36.f) * o.size * (o.sapling ? .35f + o.grow * .6f : 1);
+        Vector2 w{base.x + 14 * k, base.y + 1};
+        v.cam.target = w;
+        Pick p = v.pickAt(s, GetWorldToScreen2D(w, v.cam));
+        shadowChecked = true;
+        if (p.is(d.kind, d.id)) shadowIgnored = false;
+        break;
+    }
+    CHECK(shadowChecked && shadowIgnored, "clicking a tree's shadow does not select the tree");
+}
+
 int main() {
     testProjection();
     testPickPeople(20261017);
@@ -283,6 +429,8 @@ int main() {
     testDepthVillage(20261017, 60);
     testDepthVillage(7, 100);
     testLabels();
+    testInspect(20261017, 60);
+    testInspect(7, 100);
     std::printf(failures ? "\n%d check(s) failed\n" : "\nall checks passed\n", failures);
     return failures;
 }
