@@ -1,5 +1,6 @@
 // Headless simulation tests. No framework needed: each check prints and
 // counts failures; the process exit code is the number of failures.
+#include <cmath>
 #include <cstdio>
 #include <set>
 #include <string>
@@ -24,6 +25,12 @@ static void testSurvival(uint32_t seed) {
     Sim s;
     s.newWorld(seed);
     CHECK(s.members().size() == 5, "starts with five castaways");
+    int start = 0;
+    for (auto e : s.explored) start += e;
+    bool knownAround = true;
+    for (int y = 0; y < GH; y++) for (int x = 0; x < GW; x++)
+        if (std::hypot(float(x - s.campX), float(y - s.campY)) < START_REVEAL - .5f && !s.explored[Sim::idx(x, y)]) knownAround = false;
+    CHECK(knownAround, "on the first morning they know everything within 20 tiles of camp");
     runDays(s, 100);
     int built = 0;
     for (auto& b : s.plan) if (b.done) built++;
@@ -32,7 +39,7 @@ static void testSurvival(uint32_t seed) {
     CHECK(s.fire() != nullptr, "campfire built");
     int explored = 0;
     for (auto e : s.explored) explored += e;
-    CHECK(explored > GW * GH / 4, "a quarter of the island explored");
+    CHECK(explored >= start * 2, "they explore at least twice the ground they started with");
     bool giftsRespected = true;
     for (auto& b : s.plan) if (b.done && !b.gift.empty() && !b.holderAtFinish) giftsRespected = false;
     CHECK(giftsRespected, "specialist projects only finish with a gifted person present");

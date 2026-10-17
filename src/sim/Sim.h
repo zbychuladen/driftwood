@@ -18,7 +18,9 @@
 
 namespace dw {
 
-constexpr int GW = 64, GH = 64;
+constexpr int GW = 128, GH = 128;   // tiles; a tile is 2 m, so the island spans about 256 m
+// The patch around camp the castaways know from the first morning, in tiles.
+constexpr float START_REVEAL = 20;
 
 enum Tile : uint8_t { DEEP = 0, SHALLOW = 1, SAND = 2, GRASS = 3, FOREST = 4, HILL = 5 };
 enum Tier { BODY = 0, SAFETY = 1, BELONGING = 2, ESTEEM = 3, PURPOSE = 4 };
