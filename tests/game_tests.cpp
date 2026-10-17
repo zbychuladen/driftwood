@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 #include "engine/Draw.h"
+#include "engine/Ui.h"
 #include "game/Art.h"
 #include "game/Depth.h"
 #include "game/Inspect.h"
@@ -456,6 +457,47 @@ static void testLinks(uint32_t seed, int days) {
     CHECK(needDrawn > 20 && drawn == needDrawn, cat("every line ends at something drawn on the map (", drawn, " of ", needDrawn, ")").c_str());
 }
 
+// ---------------------------------------------------------------- readable colors
+static float luminance(Color c) {
+    auto ch = [](unsigned char v) { float f = v / 255.f; return f <= .03928f ? f / 12.92f : std::pow((f + .055f) / 1.055f, 2.4f); };
+    return .2126f * ch(c.r) + .7152f * ch(c.g) + .0722f * ch(c.b);
+}
+static float contrast(Color a, Color b) {
+    float la = luminance(a), lb = luminance(b);
+    return (std::max(la, lb) + .05f) / (std::min(la, lb) + .05f);
+}
+// a translucent fill as it ends up over the panel behind it
+static Color over(Color fill, float a, Color back) {
+    auto m = [&](unsigned char f, unsigned char b) { return (unsigned char)std::lround(f * a + b * (1 - a)); };
+    return {m(fill.r, back.r), m(fill.g, back.g), m(fill.b, back.b), 255};
+}
+
+static void testContrast() {
+    std::printf("readable colors\n");
+    using ui::T;
+    struct Pair { const char* what; Color fg, bg; float need; };
+    std::vector<Pair> pairs = {
+        {"body text on a panel", T.text, T.panel, 7}, {"body text on a card", T.text, T.panel2, 7},
+        {"secondary text on a panel", T.muted, T.panel, 4.5f}, {"secondary text on a card", T.muted, T.panel2, 4.5f},
+        {"accent text", T.accent, T.panel, 4.5f}, {"the Voice's text", T.voice, T.panel, 4.5f},
+        {"warning text", T.berry, T.panel, 4.5f}, {"ember text", T.ember, T.panel, 4.5f}, {"good-news text", T.ok, T.panel, 4.5f},
+        {"a selected button's label", T.onAccent, T.accent, 4.5f}, {"a hovered button's label", T.text, T.hover, 7},
+        {"typing in a text field", T.text, T.field, 7}, {"a text field's placeholder", T.muted, T.field, 4.5f},
+        {"a settler's name tag", {38, 52, 40, 255}, {250, 249, 244, 255}, 7}, {"the selected settler's tag", {255, 255, 255, 255}, {79, 107, 69, 255}, 4.5f},
+        {"a work caption", {60, 46, 24, 255}, {255, 246, 224, 255}, 7}};
+    const char* needs[5] = {"body", "safety", "belonging", "esteem", "purpose"};
+    for (int i = 0; i < 5; i++) {
+        pairs.push_back({needs[i], ui::TIER_INK[i], T.panel, 4.5f});
+        pairs.push_back({needs[i], T.dark, over(ui::TIER[i], .85f, T.panel2), 4.5f});   // labels on the need bars
+    }
+    std::string bad;
+    for (auto& p : pairs) {
+        float c = contrast(p.fg, p.bg);
+        if (c < p.need) { char b[120]; std::snprintf(b, sizeof b, "\n          %s: %.1f:1, needs %.1f:1", p.what, c, p.need); bad += b; }
+    }
+    CHECK(bad.empty(), ("every text color reads against its background (WCAG AA)" + bad).c_str());
+}
+
 int main() {
     testProjection();
     testPickPeople(20261017);
@@ -469,6 +511,7 @@ int main() {
     testInspect(7, 100);
     testLinks(20261017, 40);
     testLinks(777, 40);
+    testContrast();
     std::printf(failures ? "\n%d check(s) failed\n" : "\nall checks passed\n", failures);
     return failures;
 }

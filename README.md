@@ -20,7 +20,9 @@ An isometric island colony sim. Five castaways wash ashore with a hatchet, a kni
 |---|---|
 | Pan | Hold left mouse button and drag, or arrow keys / WASD |
 | Zoom | Mouse wheel, or `+` / `-` |
-| Select a settler | Click them on the map or in the Settlers tab |
+| Select a settler | Click them on the map or in the Settlers tab; a dashed line shows what they are working on |
+| Inspect anything | Click a building, tree, rock or place for its card; Esc or a click on open ground closes it |
+| Show all work | `C` draws every settler's line to their work |
 | Pause / speeds | `Space`, `1` `2` `3`, or the buttons at the top |
 | Toggle journal | `J` |
 

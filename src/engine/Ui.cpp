@@ -5,19 +5,26 @@
 namespace ui {
 
 Fonts F;
+// Light, paper-like panels with deep green ink and a sage accent, matching the
+// illustrated world. tests/game_tests.cpp checks the text pairs for contrast.
 Theme T = {
-    {22, 29, 27, 238},   // panel
-    {31, 40, 37, 255},   // panel2
-    {58, 72, 66, 255},   // line
-    {234, 228, 214, 255},// text
-    {156, 166, 158, 255},// muted
-    {111, 181, 169, 255},// accent
-    {185, 154, 230, 255},// voice
-    {233, 162, 75, 255}, // ember
-    {224, 112, 120, 255},// berry
-    {127, 189, 120, 255},// ok
-    {14, 19, 18, 255},   // dark
+    {250, 249, 244, 250},// panel
+    {240, 239, 231, 255},// panel2
+    {218, 215, 202, 255},// line
+    {34, 48, 37, 255},   // text
+    {92, 102, 90, 255},  // muted
+    {74, 102, 64, 255},  // accent
+    {112, 78, 168, 255}, // voice
+    {160, 92, 26, 255},  // ember
+    {166, 52, 64, 255},  // berry
+    {58, 112, 52, 255},  // ok
+    {30, 40, 32, 255},   // dark
+    {255, 255, 255, 255},// onAccent
+    {255, 255, 252, 255},// field
+    {231, 234, 222, 255},// hover
 };
+const Color TIER[5] = {{233, 162, 75, 255}, {98, 184, 162, 255}, {232, 138, 162, 255}, {127, 166, 230, 255}, {180, 142, 232, 255}};
+const Color TIER_INK[5] = {{150, 88, 18, 255}, {28, 112, 92, 255}, {168, 56, 92, 255}, {48, 90, 168, 255}, {112, 70, 170, 255}};
 
 static std::vector<Rectangle> blockers, blockersPrev;
 static std::vector<Rectangle> clipStack;
@@ -93,10 +100,10 @@ bool clicked(Rectangle r) { return IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && h
 
 bool button(Rectangle r, const std::string& label, bool enabled, bool active, float size) {
     bool h = enabled && hovered(r);
-    Color bg = active ? T.accent : h ? Color{48, 61, 56, 255} : T.panel2;
-    Color fg = active ? T.dark : enabled ? T.text : T.muted;
+    Color bg = active ? T.accent : h ? T.hover : T.panel2;
+    Color fg = active ? T.onAccent : enabled ? T.text : T.muted;
     DrawRectangleRounded(r, .35f, 8, bg);
-    if (!active) DrawRectangleRoundedLinesEx(r, .35f, 8, 1, enabled ? T.line : Color{44, 54, 50, 255});
+    if (!active) DrawRectangleRoundedLinesEx(r, .35f, 8, 1, T.line);
     textCentered(F.bold, label, r, size, fg);
     return enabled && clicked(r);
 }
@@ -124,14 +131,14 @@ void endScroll(Rectangle r, Scroll& s, float h) {
     s.content = h;
     if (h > r.height) {
         float th = std::max(24.f, r.height * r.height / h), ty = r.y + (r.height - th) * (s.y / (h - r.height));
-        DrawRectangleRounded({r.x + r.width - 4, ty, 3, th}, 1, 4, Color{90, 104, 98, 180});
+        DrawRectangleRounded({r.x + r.width - 4, ty, 3, th}, 1, 4, Color{160, 166, 152, 200});
     }
     if (!clipStack.empty()) { auto& c = clipStack.back(); BeginScissorMode(int(c.x), int(c.y), int(c.width), int(c.height)); }
 }
 
 bool textField(Rectangle r, std::string& buf, bool& focus, int maxLen, const std::string& ph) {
     if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) focus = hovered(r);
-    DrawRectangleRounded(r, .25f, 6, T.dark);
+    DrawRectangleRounded(r, .25f, 6, T.field);
     DrawRectangleRoundedLinesEx(r, .25f, 6, 1, focus ? T.voice : T.line);
     bool enter = false;
     if (focus) {

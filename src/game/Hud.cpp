@@ -8,7 +8,6 @@ using namespace dw;
 using namespace ui;
 
 namespace {
-const Color TIER[5] = {{233, 162, 75, 255}, {98, 184, 162, 255}, {232, 138, 162, 255}, {127, 166, 230, 255}, {180, 142, 232, 255}};
 Color C(uint32_t rgb) { return draw::hex(rgb); }
 
 const char* moodWord(float m) { return m > 78 ? "content" : m > 60 ? "okay" : m > 42 ? "uneasy" : m > 25 ? "miserable" : "desperate"; }
@@ -72,7 +71,7 @@ void Game::drawInspect() {
     h += pad - 4;
     inspectH = h;
     Rectangle r{x, y, w, h};
-    DrawRectangleRounded(r, .05f, 8, Color{20, 27, 24, 236});
+    DrawRectangleRounded(r, .05f, 8, draw::withA(T.panel, .97f));
     DrawRectangleRoundedLinesEx(r, .05f, 8, 1, T.line);
     text(F.bold, in.kind, x + pad, y + pad, 12, T.accent);
     if (button({x + w - 40, y + 10, 28, 26}, "x", true, false, 14)) inspected = {};
@@ -87,7 +86,7 @@ void Game::drawInspect() {
 }
 
 void Game::drawTopBar() {
-    DrawRectangleRec(rTop, Color{18, 24, 22, 248});
+    DrawRectangleRec(rTop, T.panel);
     DrawLine(0, int(rTop.height), int(rTop.width), int(rTop.height), T.line);
     std::string title = sim.villageName.empty() ? "Driftwood Isle" : sim.villageName;
     text(F.head, title, 18, 12, 30, T.text);
@@ -160,8 +159,8 @@ float Game::settlerCard(Person& p, float x, float y, float w, bool d) {
         std::string gifts;
         for (auto& [k, v] : p.gifts) gifts += (gifts.empty() ? "" : " / ") + giftInfo().at(k).n;
         if (!gifts.empty()) { text(F.bold, gifts, sx, sy, 12.5f, T.text); sx += measure(F.bold, gifts, 12.5f).x + 8; }
-        if (p.seeking >= 0) { std::string s = cat("seeking ", lower(TIER_NAMES[p.seeking])); text(F.bold, s, sx, sy, 12.5f, TIER[p.seeking]); sx += measure(F.bold, s, 12.5f).x + 8; }
-        else { text(F.bold, "fulfilled", sx, sy, 12.5f, TIER[4]); sx += measure(F.bold, "fulfilled", 12.5f).x + 8; }
+        if (p.seeking >= 0) { std::string s = cat("seeking ", lower(TIER_NAMES[p.seeking])); text(F.bold, s, sx, sy, 12.5f, TIER_INK[p.seeking]); sx += measure(F.bold, s, 12.5f).x + 8; }
+        else { text(F.bold, "fulfilled", sx, sy, 12.5f, TIER_INK[4]); sx += measure(F.bold, "fulfilled", 12.5f).x + 8; }
         if (!p.calling.empty()) text(F.body, callingInfo().at(p.calling).n, sx, sy, 12.5f, T.muted);
     }
     h = pad + 58;
@@ -349,7 +348,7 @@ void Game::drawCamp(Rectangle a) {
         else if (now) { draw::ring(cx, cy, 7, 7, 2, T.ember); for (int k = 0; k < 24; k++) if (k / 24.f < pct) { float a0 = -1.5708f + k / 24.f * 6.283f; draw::line(cx, cy, cx + std::cos(a0) * 6, cy + std::sin(a0) * 6, 2, T.ember); } }
         else draw::ring(cx, cy, 7, 7, 2, T.line);
         std::string name = b.name + (b.voiced ? " *" : "");
-        Color nc = b.done ? T.muted : blocked ? Color{120, 128, 122, 255} : T.text;
+        Color nc = b.done ? T.muted : blocked ? Color{146, 150, 140, 255} : T.text;
         text(now ? F.bold : F.body, name, x + 24, y + 2, 15, nc);
         float nx = x + 24 + measure(now ? F.bold : F.body, name, 15).x + 6;
         if (!b.gift.empty() && !b.done) text(F.body, giftInfo().at(b.gift).n, nx, y + 4, 12, T.muted);
@@ -368,7 +367,7 @@ void Game::drawCamp(Rectangle a) {
 
 void Game::drawJournal() {
     Rectangle r = rJournal;
-    DrawRectangleRounded(r, .06f, 8, Color{20, 27, 24, 228});
+    DrawRectangleRounded(r, .06f, 8, draw::withA(T.panel, .95f));
     DrawRectangleRoundedLinesEx(r, .06f, 8, 1, T.line);
     text(F.head, "Camp Journal", r.x + 14, r.y + 8, 20, T.text);
     if (button({r.x + r.width - 86, r.y + 6, 74, 26}, journalOpen ? "Hide" : "Show", true, false, 13)) journalOpen = !journalOpen;

@@ -13,8 +13,14 @@ extern Fonts F;
 
 struct Theme {
     Color panel, panel2, line, text, muted, accent, voice, ember, berry, ok, dark;
+    Color onAccent;   // text on an accent fill
+    Color field;      // text input background
+    Color hover;      // button under the pointer
 };
 extern Theme T;
+// The five needs (body, safety, belonging, esteem, purpose): fills, and darker
+// versions for text on the light panels.
+extern const Color TIER[5], TIER_INK[5];
 
 bool load(const std::string& assetDir);
 void unload();
