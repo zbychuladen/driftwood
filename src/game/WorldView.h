@@ -32,6 +32,13 @@ FocusTarget focusTarget(dw::Sim& sim, const dw::Focus& f);
 
 class WorldView {
 public:
+    static constexpr float MIN_ZOOM = .35f, MAX_ZOOM = 5.f;
+    // From this zoom up the ground is painted live for the visible tiles, so it
+    // stays sharp close up; below it the baked image is cheaper and sharp enough.
+    static constexpr float LIVE_GROUND_ZOOM = .6f;
+    struct TileRange { int x0, y0, x1, y1; };
+    // The tiles that can show inside a screen rectangle, with a margin.
+    TileRange visibleTiles(Rectangle screen) const;
     void init(dw::Sim& sim);
     void unload();
     // Camera input. mapRect is the visible map area (excludes the sidebar).
@@ -61,7 +68,9 @@ public:
 
     Camera2D cam{};
 private:
-    void renderGround(dw::Sim& sim);
+    void buildGround(dw::Sim& sim);
+    void paintGround(dw::Sim& sim, int x0, int y0, int x1, int y1);
+    void bakeGround(dw::Sim& sim);
     void buildFog(dw::Sim& sim);
     void drawFog(dw::Sim& sim);
     void drawWeather(dw::Sim& sim, float dt, float speed);
@@ -73,8 +82,17 @@ private:
     void clampCam();
 
     RenderTexture2D ground{};
-    int groundSeason = -1;
-    uint32_t groundSeed = 0;
+    // ground colors and marks for one season and seed, filed by tile
+    struct GroundCache {
+        int season = -1;
+        uint32_t seed = 0;
+        std::vector<Color> col, corner;
+        struct Mark { float tx, ty; enum Kind : uint8_t { SNOW, BLADE, FLOWER, LEAF, PEBBLE, SPECK } kind; Color c; float a, b; };
+        std::vector<Mark> marks;
+        std::vector<int> markStart;   // marks of tile i are [markStart[i], markStart[i + 1])
+    } gc;
+    int bakedSeason = -1;
+    uint32_t bakedSeed = 0;
     std::vector<float> fogCorner;       // (GW+1)*(GH+1) fog density per tile corner
     int fogVersion = -1;
     std::vector<int> waterTiles;

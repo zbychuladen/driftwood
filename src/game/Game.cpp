@@ -149,6 +149,14 @@ int Game::run() {
         speed = 1;
         if (opt.gallery) for (int i = 0; i < 3; i++) { BeginDrawing(); drawGallery(); EndDrawing(); }
         else for (int i = 0; i < 4; i++) frame(1.f / 60);
+        if (opt.bench > 0) {
+            // whole frames, sim and drawing, as the player gets them (vsync off so they are not capped)
+            ClearWindowState(FLAG_VSYNC_HINT);
+            SetTargetFPS(0);
+            double t0 = GetTime(), worst = 0;
+            for (int i = 0; i < opt.bench; i++) { double f0 = GetTime(); frame(1.f / 60); worst = std::max(worst, GetTime() - f0); }
+            std::printf("bench: %d frames, %.2f ms average, %.2f ms worst, zoom %.2f\n", opt.bench, (GetTime() - t0) * 1000 / opt.bench, worst * 1000, view.cam.zoom);
+        }
         if (opt.hasPick) {
             // Report what a click at this screen point would select (for scripted checks).
             Pick p = view.pickAt(sim, {opt.pickX, opt.pickY});

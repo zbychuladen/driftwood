@@ -27,7 +27,8 @@ void WorldView::init(Sim& sim) {
         ground = LoadRenderTexture(int(iso::WORLD_W), int(iso::WORLD_H));
         SetTextureFilter(ground.texture, TEXTURE_FILTER_BILINEAR);
     }
-    groundSeason = -1;
+    gc.season = -1;
+    bakedSeason = -1;
     fogVersion = -1;
     centerOnTile(sim.campX + .5f, sim.campY + .5f);
     cam.zoom = 1.15f;
@@ -42,7 +43,7 @@ void WorldView::unload() {
 void WorldView::centerOnTile(float tx, float ty) { V2 w = wp(tx, ty); cam.target = w; }
 
 void WorldView::clampCam() {
-    cam.zoom = std::clamp(cam.zoom, .35f, 3.f);
+    cam.zoom = std::clamp(cam.zoom, MIN_ZOOM, MAX_ZOOM);
     cam.target.x = std::clamp(cam.target.x, 0.f, iso::WORLD_W);
     cam.target.y = std::clamp(cam.target.y, 0.f, iso::WORLD_H);
 }
@@ -94,7 +95,10 @@ void WorldView::handleInput(float dt, Rectangle map, bool pointerFree) {
 }
 
 // ---------------------------------------------------------------- terrain
-void WorldView::renderGround(Sim& s) {
+// The ground's colors and marks are worked out once per season and seed, then
+// painted either into one big baked image (zoomed out) or live for just the
+// visible tiles (zoomed in, where the baked image would look soft).
+void WorldView::buildGround(Sim& s) {
     int season = s.season();
     const int N = GW * GH;
     // distance from land, for water depth shading
@@ -112,7 +116,8 @@ void WorldView::renderGround(Sim& s) {
     const uint32_t sand[4] = {0xeee3c4, 0xf0e4c2, 0xeadcbc, 0xeeece5};
     const uint32_t hill[4] = {0xb0b592, 0xabb08a, 0xbcae88, 0xd9dcdc};
     Mulberry r(s.seed + 7);
-    std::vector<Color> col(N);
+    auto& col = gc.col;
+    col.assign(N, {});
     waterTiles.clear();
     for (int y = 0; y < GH; y++) for (int x = 0; x < GW; x++) {
         int i = Sim::idx(x, y), t = s.tt[i];
@@ -128,7 +133,8 @@ void WorldView::renderGround(Sim& s) {
         }
         col[i] = c;
     }
-    auto cornerCol = [&](int cx, int cy) {
+    gc.corner.assign((GW + 1) * (GH + 1), {});
+    for (int cy = 0; cy <= GH; cy++) for (int cx = 0; cx <= GW; cx++) {
         int rr = 0, gg = 0, bb = 0, n = 0;
         for (int dy = -1; dy <= 0; dy++) for (int dx = -1; dx <= 0; dx++) {
             int x = cx + dx, y = cy + dy;
@@ -136,43 +142,70 @@ void WorldView::renderGround(Sim& s) {
             Color c = col[Sim::idx(x, y)];
             rr += c.r; gg += c.g; bb += c.b; n++;
         }
-        return n ? Color{(unsigned char)(rr / n), (unsigned char)(gg / n), (unsigned char)(bb / n), 255} : col[0];
-    };
-    BeginTextureMode(ground);
-    rlDisableBackfaceCulling();
-    ClearBackground(Color{0, 0, 0, 0});
-    for (int y = 0; y < GH; y++) for (int x = 0; x < GW; x++) {
-        Color c = col[Sim::idx(x, y)];
+        gc.corner[cy * (GW + 1) + cx] = n ? Color{(unsigned char)(rr / n), (unsigned char)(gg / n), (unsigned char)(bb / n), 255} : col[0];
+    }
+    // grass blades, flowers, leaves, pebbles, sand speckles, snow: the same
+    // density whatever the island's size, then filed under the tile they sit on
+    std::vector<GroundCache::Mark> all;
+    const int marks = 12000 * GW * GH / (64 * 64);
+    for (int k = 0; k < marks; k++) {
+        float tx = r() * GW, ty = r() * GH;
+        int t = s.tt[Sim::idx(int(tx), int(ty))];
+        using M = GroundCache::Mark;
+        if (t >= 3) {
+            if (season == 3) { all.push_back({tx, ty, M::SNOW, draw::rgba(255, 255, 255, .3f + r() * .4f), 0, 0}); continue; }
+            Color bl = r() < .5f ? draw::rgba(60, 80, 50, .1f + r() * .08f) : draw::rgba(250, 250, 230, .12f + r() * .1f);
+            float dx = (r() - .5f) * 2, dy = -2 - r() * 3;
+            all.push_back({tx, ty, M::BLADE, bl, dx, dy});
+            if (t == GRASS && r() < .04f && season <= 1) { const uint32_t fl[4] = {0xfff7d6, 0xf6d24a, 0xe98ab3, 0xc9b6f2}; all.push_back({tx, ty, M::FLOWER, draw::hex(fl[int(r() * 4) % 4]), 0, 0}); }
+            if (season == 2 && r() < .05f) { const uint32_t lv[3] = {0xc8642c, 0xe0a83a, 0xa9442a}; all.push_back({tx, ty, M::LEAF, draw::hex(lv[int(r() * 3) % 3]), 0, 0}); }
+            if (t == HILL && r() < .08f) all.push_back({tx, ty, M::PEBBLE, draw::rgba(90, 90, 80, .35f), 0, 0});
+        } else if (t == SAND) all.push_back({tx, ty, M::SPECK, draw::rgba(120, 100, 60, .15f + r() * .2f), 0, 0});
+    }
+    gc.markStart.assign(N + 1, 0);
+    for (auto& m : all) gc.markStart[Sim::idx(int(m.tx), int(m.ty)) + 1]++;
+    for (int i = 0; i < N; i++) gc.markStart[i + 1] += gc.markStart[i];
+    gc.marks.assign(all.size(), {});
+    std::vector<int> fill(gc.markStart.begin(), gc.markStart.end() - 1);
+    for (auto& m : all) gc.marks[fill[Sim::idx(int(m.tx), int(m.ty))]++] = m;
+    gc.season = season;
+    gc.seed = s.seed;
+}
+
+void WorldView::paintGround(Sim& s, int x0, int y0, int x1, int y1) {
+    int season = gc.season;
+    auto corner = [&](int x, int y) { return gc.corner[y * (GW + 1) + x]; };
+    for (int y = y0; y <= y1; y++) for (int x = x0; x <= x1; x++) {
+        Color c = gc.col[Sim::idx(x, y)];
         V2 a = wp(x, y), b = wp(x + 1, y), cc = wp(x + 1, y + 1), d = wp(x, y + 1), m = wp(x + .5f, y + .5f);
-        Color ca = cornerCol(x, y), cb = cornerCol(x + 1, y), ccc = cornerCol(x + 1, y + 1), cd = cornerCol(x, y + 1);
+        Color ca = corner(x, y), cb = corner(x + 1, y), ccc = corner(x + 1, y + 1), cd = corner(x, y + 1);
         draw::quad(m, a, b, m, c, ca, cb, c);
         draw::quad(m, b, cc, m, c, cb, ccc, c);
         draw::quad(m, cc, d, m, c, ccc, cd, c);
         draw::quad(m, d, a, m, c, cd, ca, c);
     }
-    // grass blades, flowers, sand speckles, snow
-    // the same density of grass and speckles whatever the island's size
-    const int marks = 12000 * GW * GH / (64 * 64);
-    for (int k = 0; k < marks; k++) {
-        float tx = r() * GW, ty = r() * GH;
-        int t = s.tt[Sim::idx(int(tx), int(ty))];
-        V2 p = wp(tx, ty);
-        if (t >= 3) {
-            if (season == 3) { draw::rect(p.x, p.y, 1.6f, 1.2f, draw::rgba(255, 255, 255, .3f + r() * .4f)); continue; }
-            Color bl = r() < .5f ? draw::rgba(60, 80, 50, .1f + r() * .08f) : draw::rgba(250, 250, 230, .12f + r() * .1f);
-            draw::line(p.x, p.y, p.x + (r() - .5f) * 2, p.y - 2 - r() * 3, 1, bl);
-            if (t == GRASS && r() < .04f && season <= 1) { const uint32_t fl[4] = {0xfff7d6, 0xf6d24a, 0xe98ab3, 0xc9b6f2}; draw::circle(p.x, p.y, 1.3f, draw::hex(fl[int(r() * 4) % 4])); }
-            if (season == 2 && r() < .05f) { const uint32_t lv[3] = {0xc8642c, 0xe0a83a, 0xa9442a}; draw::rect(p.x, p.y, 2.4f, 1.4f, draw::hex(lv[int(r() * 3) % 3])); }
-            if (t == HILL && r() < .08f) draw::ellipse(p.x, p.y, 3, 1.5f, draw::rgba(90, 90, 80, .35f));
-        } else if (t == SAND) draw::rect(p.x, p.y, 1.3f, 1.1f, draw::rgba(120, 100, 60, .15f + r() * .2f));
+    for (int y = y0; y <= y1; y++) for (int x = x0; x <= x1; x++) {
+        int i = Sim::idx(x, y);
+        for (int k = gc.markStart[i]; k < gc.markStart[i + 1]; k++) {
+            const auto& mk = gc.marks[k];
+            V2 p = wp(mk.tx, mk.ty);
+            switch (mk.kind) {
+            case GroundCache::Mark::SNOW: draw::rect(p.x, p.y, 1.6f, 1.2f, mk.c); break;
+            case GroundCache::Mark::BLADE: draw::line(p.x, p.y, p.x + mk.a, p.y + mk.b, 1, mk.c); break;
+            case GroundCache::Mark::FLOWER: draw::circle(p.x, p.y, 1.3f, mk.c); break;
+            case GroundCache::Mark::LEAF: draw::rect(p.x, p.y, 2.4f, 1.4f, mk.c); break;
+            case GroundCache::Mark::PEBBLE: draw::ellipse(p.x, p.y, 3, 1.5f, mk.c); break;
+            case GroundCache::Mark::SPECK: draw::rect(p.x, p.y, 1.3f, 1.1f, mk.c); break;
+            }
+        }
     }
-    for (int y = 0; y < GH; y++) for (int x = 0; x < GW; x++) {
+    for (int y = y0; y <= y1; y++) for (int x = x0; x <= x1; x++) {
         if (s.tt[Sim::idx(x, y)] != HILL) continue;
         V2 c = wp(x + .5f, y + .5f);
         draw::radial(c.x - 6, c.y - 4, 26, 13, season == 3 ? draw::rgba(255, 255, 255, .35f) : draw::rgba(255, 255, 230, .18f), draw::rgba(255, 255, 230, 0));
     }
     // shore foam
-    for (int y = 0; y < GH; y++) for (int x = 0; x < GW; x++) {
+    for (int y = y0; y <= y1; y++) for (int x = x0; x <= x1; x++) {
         if (s.tt[Sim::idx(x, y)] < 2) continue;
         struct E { int dx, dy; V2 a, b; } edges[4] = {{1, 0, P(x + 1, y), P(x + 1, y + 1)}, {-1, 0, P(x, y), P(x, y + 1)}, {0, 1, P(x, y + 1), P(x + 1, y + 1)}, {0, -1, P(x, y), P(x + 1, y)}};
         for (auto& e : edges) {
@@ -186,9 +219,26 @@ void WorldView::renderGround(Sim& s) {
             draw::curve(e.a, {(e.a.x + e.b.x) / 2 + ox * .4f, (e.a.y + e.b.y) / 2 + oy * .4f}, e.b, 1.2f, draw::rgba(255, 255, 255, .35f), 6);
         }
     }
+}
+
+void WorldView::bakeGround(Sim& s) {
+    BeginTextureMode(ground);
+    rlDisableBackfaceCulling();
+    ClearBackground(Color{0, 0, 0, 0});
+    paintGround(s, 0, 0, GW - 1, GH - 1);
     EndTextureMode();
-    groundSeason = season;
-    groundSeed = s.seed;
+    bakedSeason = gc.season;
+    bakedSeed = gc.seed;
+}
+
+WorldView::TileRange WorldView::visibleTiles(Rectangle screen) const {
+    // the tiles under the four corners of the view, widened for marks and foam that spill over
+    float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
+    for (V2 sc : {V2{screen.x, screen.y}, V2{screen.x + screen.width, screen.y}, V2{screen.x, screen.y + screen.height}, V2{screen.x + screen.width, screen.y + screen.height}}) {
+        V2 w = GetScreenToWorld2D(sc, cam), t = iso::toTile(w.x, w.y);
+        x0 = std::min(x0, t.x); y0 = std::min(y0, t.y); x1 = std::max(x1, t.x); y1 = std::max(y1, t.y);
+    }
+    return {std::max(0, int(std::floor(x0)) - 2), std::max(0, int(std::floor(y0)) - 2), std::min(GW - 1, int(std::ceil(x1)) + 2), std::min(GH - 1, int(std::ceil(y1)) + 2)};
 }
 
 // ---------------------------------------------------------------- fog
@@ -257,7 +307,9 @@ static float darkness(double h) {
 // ---------------------------------------------------------------- main draw
 void WorldView::draw(Sim& s, Rectangle map, int selectedId, float realDt, float speed, Pick inspected) {
     draw::tone = WORLD_TONE;
-    if (groundSeason != s.season() || groundSeed != s.seed) renderGround(s);
+    if (gc.season != s.season() || gc.seed != s.seed) buildGround(s);
+    bool liveGround = cam.zoom >= LIVE_GROUND_ZOOM;
+    if (!liveGround && (bakedSeason != gc.season || bakedSeed != gc.seed)) bakeGround(s);
     lighting.resize(GetScreenWidth(), GetScreenHeight());
     ClearBackground(FOG);
     art::Ctx ctx{&s, s.tMin, s.season(), s.hour()};
@@ -266,7 +318,10 @@ void WorldView::draw(Sim& s, Rectangle map, int selectedId, float realDt, float 
     auto visible = [&](V2 w, float m = 90) { return w.x > tl.x - m && w.x < br.x + m && w.y > tl.y - m && w.y < br.y + m * 1.8f; };
 
     BeginMode2D(cam);
-    DrawTextureRec(ground.texture, {0, 0, iso::WORLD_W, -iso::WORLD_H}, {0, 0}, WHITE);
+    if (liveGround) {
+        TileRange tr = visibleTiles({0, 0, float(GetScreenWidth()), float(GetScreenHeight())});
+        paintGround(s, tr.x0, tr.y0, tr.x1, tr.y1);
+    } else DrawTextureRec(ground.texture, {0, 0, iso::WORLD_W, -iso::WORLD_H}, {0, 0}, WHITE);
     // water shimmer
     for (int i : waterTiles) {
         int x = i % GW, y = i / GW;

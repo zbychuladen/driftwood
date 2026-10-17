@@ -20,7 +20,8 @@ struct Options {
     bool fullscreen = false;
     bool showJournal = false;
     bool allLinks = false;
-    bool gallery = false;             // capture a sheet of every tree and plant instead of the world            // draw every settler's link to their work
+    bool gallery = false;
+    int bench = 0;                    // capture: time this many frames and print the average             // capture a sheet of every tree and plant instead of the world            // draw every settler's link to their work
     bool hasCenter = false, hasPick = false;
     float centerX = 0, centerY = 0;   // tile to center the camera on
     float pickX = 0, pickY = 0;       // screen point to click, result printed to stdout
