@@ -268,8 +268,8 @@ void Sim::newWorld(uint32_t s) {
         h.gifts = {{"herbalist", 7 + ri(3)}}; h.charisma = 3;
         hp.who = h.id;
     }
-    reveal(campX, campY, 10);
-    reveal(boatX, boatY, 5);
+    reveal(campX, campY, START_REVEAL);
+    reveal(boatX, boatY, START_REVEAL / 2);
     note(cat("The storm spat our little boat onto an unknown island. Five of us: ", listNames(members()), ". A hatchet, a knife, and a sack of seeds."), "big");
     {
         std::vector<std::string> know;

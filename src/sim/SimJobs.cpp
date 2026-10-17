@@ -102,8 +102,13 @@ Obj* Sim::nearestObj(const std::function<bool(const Obj&)>& f, float x, float y)
 
 std::vector<std::pair<int, int>> Sim::frontier() {
     std::vector<std::pair<int, int>> out;
+    // sample inside the known part of the island, so a big map still finds its edges
+    int x0 = GW, y0 = GH, x1 = 0, y1 = 0;
+    for (int y = 0; y < GH; y++) for (int x = 0; x < GW; x++) if (explored[idx(x, y)]) { x0 = std::min(x0, x); y0 = std::min(y0, y); x1 = std::max(x1, x); y1 = std::max(y1, y); }
+    x0 = std::max(1, x0 - 2); y0 = std::max(1, y0 - 2); x1 = std::min(GW - 2, x1 + 2); y1 = std::min(GH - 2, y1 + 2);
+    if (x1 < x0 || y1 < y0) return out;
     for (int k = 0; k < 600 && out.size() < 40; k++) {
-        int x = 1 + ri(GW - 2), y = 1 + ri(GH - 2), i = idx(x, y);
+        int x = x0 + ri(x1 - x0 + 1), y = y0 + ri(y1 - y0 + 1), i = idx(x, y);
         if (!explored[i] || tt[i] < 2) continue;
         bool f = false;
         for (int yy = -2; yy <= 2 && !f; yy++) for (int xx = -2; xx <= 2; xx++)

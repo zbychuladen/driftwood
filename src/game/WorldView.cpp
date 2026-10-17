@@ -151,7 +151,9 @@ void WorldView::renderGround(Sim& s) {
         draw::quad(m, d, a, m, c, cd, ca, c);
     }
     // grass blades, flowers, sand speckles, snow
-    for (int k = 0; k < 12000; k++) {
+    // the same density of grass and speckles whatever the island's size
+    const int marks = 12000 * GW * GH / (64 * 64);
+    for (int k = 0; k < marks; k++) {
         float tx = r() * GW, ty = r() * GH;
         int t = s.tt[Sim::idx(int(tx), int(ty))];
         V2 p = wp(tx, ty);
@@ -208,9 +210,13 @@ void WorldView::buildFog(Sim& s) {
 void WorldView::drawFog(Sim& s) {
     if (fogVersion != s.exploredVersion || int(fogCorner.size()) != (GW + 1) * (GH + 1)) buildFog(s);
     V2 tl = GetScreenToWorld2D({0, 0}, cam), br = GetScreenToWorld2D({float(GetScreenWidth()), float(GetScreenHeight())}, cam);
-    auto fc = [&](int x, int y) { float v = fogCorner[y * (GW + 1) + x]; return Color{FOG.r, FOG.g, FOG.b, (unsigned char)(std::min(1.f, v * 1.15f) * 255)}; };
-    for (int y = 0; y < GH; y++) for (int x = 0; x < GW; x++) {
-        float a = fogCorner[y * (GW + 1) + x], b = fogCorner[y * (GW + 1) + x + 1], c = fogCorner[(y + 1) * (GW + 1) + x + 1], d = fogCorner[(y + 1) * (GW + 1) + x];
+    // corners off the map count as unknown, so the fog runs a few tiles past the
+    // edge and no seam shows where the map meets the paper around it
+    auto at = [&](int x, int y) { return x < 0 || y < 0 || x > GW || y > GH ? 1.f : fogCorner[y * (GW + 1) + x]; };
+    auto fc = [&](int x, int y) { return Color{FOG.r, FOG.g, FOG.b, (unsigned char)(std::min(1.f, at(x, y) * 1.15f) * 255)}; };
+    const int margin = 3;
+    for (int y = -margin; y < GH + margin; y++) for (int x = -margin; x < GW + margin; x++) {
+        float a = at(x, y), b = at(x + 1, y), c = at(x + 1, y + 1), d = at(x, y + 1);
         if (a + b + c + d == 0) continue;
         V2 m = wp(x + .5f, y + .5f);
         if (m.x < tl.x - 64 || m.x > br.x + 64 || m.y < tl.y - 64 || m.y > br.y + 64) continue;
