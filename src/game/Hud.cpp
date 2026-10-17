@@ -1,0 +1,396 @@
+// All screen UI: top bar, sidebar tabs (settlers, narrator, camp), journal and fate cards.
+#include <algorithm>
+#include <cmath>
+#include "engine/Draw.h"
+#include "game/Game.h"
+
+using namespace dw;
+using namespace ui;
+
+namespace {
+const Color TIER[5] = {{233, 162, 75, 255}, {98, 184, 162, 255}, {232, 138, 162, 255}, {127, 166, 230, 255}, {180, 142, 232, 255}};
+Color C(uint32_t rgb) { return draw::hex(rgb); }
+
+const char* moodWord(float m) { return m > 78 ? "content" : m > 60 ? "okay" : m > 42 ? "uneasy" : m > 25 ? "miserable" : "desperate"; }
+
+std::string truncate(const Font& f, std::string s, float size, float w) {
+    if (measure(f, s, size).x <= w) return s;
+    while (!s.empty() && measure(f, s + "...", size).x > w) s.pop_back();
+    return s + "...";
+}
+
+void miniPyramid(const Person& p, float x, float y, float W) {
+    float H = W * .86f, lh = H / 5;
+    for (int i = 0; i < 5; i++) {
+        float yb = y + H - i * lh, yt = yb - lh + 1, wb = W * (1 - i / 5.f), wt = W * (1 - (i + 1) / 5.f);
+        float xb = x + (W - wb) / 2, xt = x + (W - wt) / 2;
+        float op = p.gates[i] < .3f ? .14f : .22f + p.tiers[i] / 100 * .78f;
+        draw::poly({{xb, yb}, {xb + wb, yb}, {xt + wt, yt}, {xt, yt}}, draw::withA(TIER[i], op));
+    }
+}
+
+// Five stacked bars, narrowest on top, like the pyramid.
+float pyramidRows(const std::array<float, 5>& t, const std::array<float, 5>& g, float x, float y, float w, bool drawIt) {
+    float rowH = 22, gap = 3;
+    if (drawIt)
+        for (int r = 0; r < 5; r++) {
+            int i = 4 - r;
+            float rw = w * (.44f + i * .14f), rx = x + (w - rw) / 2, ry = y + r * (rowH + gap);
+            bool locked = g[i] < .3f;
+            DrawRectangleRounded({rx, ry, rw, rowH}, .3f, 6, T.panel2);
+            if (!locked) DrawRectangleRounded({rx, ry, std::max(rowH * .6f, rw * t[i] / 100), rowH}, .3f, 6, draw::withA(TIER[i], .85f));
+            else DrawRectangleRoundedLinesEx({rx, ry, rw, rowH}, .3f, 6, 1, draw::withA(TIER[i], .35f));
+            float fillW = locked ? 0 : std::max(rowH * .6f, rw * t[i] / 100);
+            text(F.bold, TIER_NAMES[i], rx + 8, ry + 4, 13, locked || fillW < 70 ? T.text : T.dark);
+            std::string v = locked ? "locked" : std::to_string(int(t[i]));
+            float vx = rx + rw - 8 - measure(F.bold, v, 13).x;
+            text(F.bold, v, vx, ry + 4, 13, locked || rx + fillW < vx + 4 ? T.muted : T.dark);
+        }
+    return 5 * (rowH + gap) + 4;
+}
+
+float sectionTitle(const std::string& s, float x, float y) { text(F.head, s, x, y, 20, T.text); return 30; }
+} // namespace
+
+void Game::drawHud() {
+    drawTopBar();
+    drawSidebar();
+    drawJournal();
+    if (!sim.pendingFate.empty()) drawFate();
+}
+
+void Game::drawTopBar() {
+    DrawRectangleRec(rTop, Color{18, 24, 22, 248});
+    DrawLine(0, int(rTop.height), int(rTop.width), int(rTop.height), T.line);
+    std::string title = sim.villageName.empty() ? "Driftwood Isle" : sim.villageName;
+    text(F.head, title, 18, 12, 30, T.text);
+    float x = 18 + measure(F.head, title, 30).x + 36;
+    auto chip = [&](const std::string& label, const std::string& value) {
+        text(F.bold, label, x, 9, 11, T.muted);
+        text(F.bold, value, x, 24, 19, T.text);
+        x += std::max(measure(F.bold, label, 11).x, measure(F.bold, value, 19).x) + 30;
+    };
+    int explored = 0;
+    for (auto e : sim.explored) explored += e;
+    std::string wx = sim.weather == "clear" ? "Clear" : sim.weather == "rain" ? "Rain" : sim.weather == "storm" ? "Storm" : "Snow";
+    chip(cat(SEASONS[sim.season()], ", year ", sim.yearN()), cat("Day ", sim.day()));
+    chip("TIME", sim.clock());
+    chip("WEATHER", cat(wx, " ", int(std::lround(sim.temp())), "\xC2\xB0""C"));
+    chip("ISLAND KNOWN", cat(explored * 100 / (GW * GH), "%"));
+    chip("PEOPLE", cat(int(sim.members().size())));
+    float bx = rTop.width - 16;
+    auto btn = [&](const char* l, float w, bool active) { bx -= w; bool r = button({bx, 14, w, 30}, l, true, active, 14); bx -= 6; return r; };
+    if (btn("New island", 104, false)) newGame(uint32_t(GetRandomValue(1, 1 << 30)));
+    if (btn("Camp", 64, false)) view.centerOnTile(sim.campX + .5f, sim.campY + .5f);
+    bx -= 12;
+    if (btn("Fast", 58, speed == 5)) speed = 5;
+    if (btn("Normal", 74, speed == 2)) speed = 2;
+    if (btn("Slow", 58, speed == 1)) speed = 1;
+    if (btn("Pause", 66, speed == 0)) speed = 0;
+}
+
+void Game::drawSidebar() {
+    DrawRectangleRec(rSide, T.panel);
+    DrawLine(int(rSide.x), int(rSide.y), int(rSide.x), int(rSide.y + rSide.height), T.line);
+    const char* tabs[3] = {"Settlers", "Narrator", "Camp"};
+    float tw = (rSide.width - 32) / 3;
+    for (int i = 0; i < 3; i++)
+        if (button({rSide.x + 16 + i * tw, rSide.y + 12, tw - 6, 32}, tabs[i], true, tab == i, 15)) { tab = i; sideScroll.y = 0; }
+    Rectangle area{rSide.x + 12, rSide.y + 56, rSide.width - 20, rSide.height - 64};
+    if (tab == 0) drawSettlers(area);
+    else if (tab == 1) drawNarrator(area);
+    else drawCamp(area);
+}
+
+float Game::settlerCard(Person& p, float x, float y, float w, bool d) {
+    bool sel = p.id == selected;
+    float pad = 10, cy = y + pad, inner = w - 2 * pad;
+    if (p.status != "member") {
+        if (d) {
+            Rectangle r{x, y, w, 52};
+            if (hovered(r)) DrawRectangleRounded(r, .12f, 6, T.panel2);
+            draw::circle(x + 18, y + 18, 5, C(p.tunic));
+            text(F.bold, p.name, x + 30, y + 9, 16, T.text);
+            std::string st = p.status == "hermit" ? "hermit" : p.status == "arriving" ? "stranger" : "leaving";
+            text(F.body, st, x + w - pad - measure(F.body, st, 13).x, y + 11, 13, T.muted);
+            text(F.body, p.status == "hermit" ? cat("Trust ", std::min(100, int(p.trust)), "/100") : p.doing, x + 30, y + 30, 13, T.muted);
+            if (clicked(r)) select(sel ? -1 : p.id, !sel);
+        }
+        return 52;
+    }
+    float h = 0;
+    // header row
+    if (d) {
+        miniPyramid(p, x + pad, cy + 2, 30);
+        draw::circle(x + pad + 44, cy + 9, 4.5f, C(p.tunic));
+        std::string nm = p.name + (p.child ? "  (child)" : "");
+        text(F.bold, nm, x + pad + 54, cy, 17, T.text);
+        std::string mood = p.inspired ? "inspired" : moodWord(p.mood);
+        text(F.body, mood, x + w - pad - measure(F.body, mood, 13).x, cy + 3, 13, p.inspired ? T.voice : T.muted);
+        std::string doing = std::string(p.sick > 0 ? "Sick - " : "") + (p.whisper && p.whisper->until > sim.tMin ? "* " : "") + p.doing;
+        text(F.body, truncate(F.body, doing, 13.5f, inner - 44), x + pad + 44, cy + 21, 13.5f, T.muted);
+        float sx = x + pad + 44, sy = cy + 39;
+        std::string gifts;
+        for (auto& [k, v] : p.gifts) gifts += (gifts.empty() ? "" : " / ") + giftInfo().at(k).n;
+        if (!gifts.empty()) { text(F.bold, gifts, sx, sy, 12.5f, T.text); sx += measure(F.bold, gifts, 12.5f).x + 8; }
+        if (p.seeking >= 0) { std::string s = cat("seeking ", lower(TIER_NAMES[p.seeking])); text(F.bold, s, sx, sy, 12.5f, TIER[p.seeking]); sx += measure(F.bold, s, 12.5f).x + 8; }
+        else { text(F.bold, "fulfilled", sx, sy, 12.5f, TIER[4]); sx += measure(F.bold, "fulfilled", 12.5f).x + 8; }
+        if (!p.calling.empty()) text(F.body, callingInfo().at(p.calling).n, sx, sy, 12.5f, T.muted);
+    }
+    h = pad + 58;
+    if (sel) {
+        float dy = y + h;
+        dy += pyramidRows(p.tiers, p.gates, x + pad, dy, inner, d);
+        for (auto& l : sim.lacking(p)) dy += wrapped(F.body, "- " + l, x + pad, dy, inner, 13.5f, T.muted, d);
+        std::string traits;
+        for (size_t i = 0; i < p.traits.size(); i++) traits += (i ? " and " : "") + traitNames().at(p.traits[i]);
+        std::string best;
+        std::vector<std::pair<float, std::string>> sk;
+        for (auto& [k, v] : p.sk) sk.push_back({v, k});
+        std::sort(sk.rbegin(), sk.rend());
+        for (int i = 0; i < 2 && i < int(sk.size()); i++) best += (i ? ", " : "") + skillNames().at(sk[i].second) + " " + std::to_string(int(sk[i].first * 10) / 10) + "." + std::to_string(int(sk[i].first * 10) % 10);
+        Person* partner = sim.person(p.partner);
+        Person* friendP = nullptr;
+        for (auto* q : sim.members()) if (q != &p && (!friendP || affOf(p, q->id) > affOf(p, friendP->id))) friendP = q;
+        std::string desc = cat(p.name, " is ", traits, p.calling.empty() ? "" : ", a " + lower(callingInfo().at(p.calling).n) + " at heart", ". Best at ", best, ".");
+        if (partner) desc += " Partner: " + partner->name + ".";
+        else if (friendP) desc += " Closest to " + friendP->name + ".";
+        desc += cat("\nGifts: ", p.gifts.empty() ? "none, a jack of all trades" : sim.giftText(p), ". Charisma ", p.charisma, "/10 (", Sim::charWord(p.charisma), "). Faith in the Voice: ", int(p.belief), ".");
+        if (sim.agenda && sim.agenda->by == p.id) desc += "\nCurrently setting the camp's agenda.";
+        dy += 6;
+        dy += wrapped(F.body, desc, x + pad, dy, inner, 13.5f, T.text, d);
+        h = dy - y + 8;
+    }
+    if (d) {
+        Rectangle r{x, y, w, h};
+        if (sel) DrawRectangleRoundedLinesEx(r, .06f, 6, 1.5f, T.accent);
+        else if (hovered(r)) DrawRectangleRoundedLinesEx(r, .12f, 6, 1, T.line);
+        if (clicked(r)) select(sel ? -1 : p.id, !sel);
+    }
+    return h;
+}
+
+void Game::drawSettlers(Rectangle a) {
+    beginScroll(a, sideScroll);
+    float y = a.y - sideScroll.y, x = a.x, w = a.width - 8;
+    auto m = sim.members();
+    y += sectionTitle(cat("The Settlers"), x, y);
+    text(F.body, cat(int(m.size()), " souls, ", int(sim.avgBelief()), " faith"), x + 140, y - 25, 13, T.muted);
+    for (auto* p : m) { y += settlerCard(*p, x, y, w, true) + 4; }
+    for (auto& p : sim.people) if (!p.dead && p.status != "member") y += settlerCard(p, x, y, w, true) + 4;
+    endScroll(a, sideScroll, y + sideScroll.y - a.y + 20);
+}
+
+void Game::drawNarrator(Rectangle a) {
+    beginScroll(a, sideScroll);
+    float x = a.x, w = a.width - 10, y = a.y - sideScroll.y;
+    // faith
+    y += sectionTitle("The Voice", x, y);
+    float f = sim.avgBelief();
+    bar({x, y + 6, w - 60, 10}, f / 100, T.voice, T.panel2);
+    text(F.head, cat(int(f)), x + w - 44, y - 4, 26, T.voice);
+    y += 30;
+    y += wrapped(F.body, f > 75 ? "They speak of you openly and listen for your guidance." : f > 50 ? "Most of them believe something is guiding them." : f > 25 ? "They half-believe. Some think they are going mad." : "They barely believe you exist. Whispers rarely land.", x, y, w, 14, T.muted) + 18;
+    // whisper
+    y += sectionTitle("Whisper", x, y);
+    Person* p = sim.person(selected);
+    if (!p || p->status != "member" || p->child) {
+        y += wrapped(F.body, "Select an adult settler on the map or in the Settlers tab, then whisper an idea to them. Whispers land more often with those who believe.", x, y, w, 14, T.muted) + 16;
+    } else {
+        y += wrapped(F.body, cat("To ", p->name, ", faith ", int(p->belief), ". ", p->lastWhisper == sim.day() ? "You already whispered today. Again will unsettle them." : "One whisper a day is safe."), x, y, w, 14, T.text) + 8;
+        struct W { std::string label, job; Person* target = nullptr; };
+        std::vector<W> opts = {{"Explore beyond the trees", "explore"}, {"Gather food", "food"}, {"Fetch wood", "wood"}, {"Help build", "build"}, {"Rest a while", "rest"}};
+        if (!p->calling.empty()) opts.push_back({"Follow your calling", "calling"});
+        for (auto& hp : sim.pois) if (hp.type == "hermit" && hp.found && !hp.joined) opts.push_back({"Visit the hermit", "hermit"});
+        Person* low = nullptr;
+        for (auto* q : sim.members()) if (q != p && !q->child && (!low || affOf(*p, q->id) < affOf(*p, low->id))) low = q;
+        if (low) opts.push_back({"Make peace with " + low->name, "peace", low});
+        float bx = x, rowY = y;
+        for (auto& o : opts) {
+            float bw = measure(F.bold, o.label, 13).x + 24;
+            if (bx + bw > x + w) { bx = x; rowY += 36; }
+            if (button({bx, rowY, bw, 30}, o.label, true, false, 13)) sim.whisper(*p, o.job, o.target);
+            bx += bw + 6;
+        }
+        y = rowY + 40;
+        if (sim.lastWhisperName == p->name && !sim.lastWhisperResult.empty()) {
+            std::string r = sim.lastWhisperResult == "ok" ? p->name + " heard you." : sim.lastWhisperResult == "ignored" ? p->name + " shrugged it off as the wind." : "Too much. " + p->name + " is frightened by the voice.";
+            y += wrapped(F.body, r, x, y, w, 14, T.voice) + 6;
+        }
+        y += 10;
+    }
+    // words in the sand
+    y += sectionTitle("Words in the sand", x, y);
+    y += wrapped(F.body, "Write a line. They will find it at dawn and take it as a sign. Once a day.", x, y, w, 14, T.muted) + 8;
+    bool enter = textField({x, y, w - 84, 36}, sandText, sandFocus, 120, "Winter will be long and hungry...");
+    if (button({x + w - 76, y + 3, 76, 30}, "Write", true, false, 14) || enter) {
+        auto r = sim.writeSand(sandText);
+        if (!r.empty()) { sandNote = r; if (r.find("tide") == std::string::npos) sandText.clear(); }
+        sandFocus = false;
+    }
+    y += 44;
+    if (!sandNote.empty()) y += wrapped(F.body, sandNote, x, y, w, 13.5f, T.voice) + 6;
+    y += 12;
+    // proposals
+    y += sectionTitle("Propose a project", x, y);
+    y += wrapped(F.body, "Plant an idea. The settlers argue and vote. One proposal a day.", x, y, w, 14, T.muted) + 8;
+    bool used = sim.lastProposal == sim.day();
+    auto props = sim.proposalList();
+    if (props.empty()) y += wrapped(F.body, "No new ideas right now. Some unlock later (a dock, a signal fire, children).", x, y, w, 14, T.muted) + 8;
+    for (auto* o : props) {
+        bool gok = sim.giftOk(*o);
+        float top = y;
+        float tw = w - 104;
+        std::string info = o->desc + cat(" ", o->wood, " wood", o->stone ? cat(", ", o->stone, " stone") : "", ".");
+        float hgt = 22 + wrapped(F.body, info, x + 10, 0, tw, 13, T.muted, false);
+        std::string gl;
+        if (!o->gift.empty()) { auto* hld = sim.giftHolder(o->gift, o->min); gl = gok ? giftInfo().at(o->gift).n + ": " + hld->name : "needs a skilled " + lower(giftInfo().at(o->gift).n); hgt += 18; }
+        DrawRectangleRounded({x, top, w, hgt + 14}, .1f, 6, T.panel2);
+        text(F.bold, o->name, x + 10, top + 8, 15, T.text);
+        float yy = top + 30;
+        yy += wrapped(F.body, info, x + 10, yy, tw, 13, T.muted);
+        if (!gl.empty()) text(F.bold, gl, x + 10, yy, 12.5f, gok ? T.ok : T.berry);
+        if (button({x + w - 92, top + (hgt + 14) / 2 - 15, 82, 30}, "Propose", !used && gok, false, 13)) sim.propose(o->key);
+        y = top + hgt + 20;
+    }
+    if (sim.vote) {
+        auto& v = *sim.vote;
+        std::string s = cat(v.name, ": ", v.pass ? "approved " : "rejected ", v.y, " to ", v.n, ".\n");
+        for (auto& r : v.rows) if (auto* q = sim.person(r.pid)) s += q->name + (r.yes ? " yes" : " no") + " (" + r.why + ").  ";
+        DrawRectangle(int(x), int(y), 3, int(wrapped(F.body, s, x + 12, y + 6, w - 16, 13.5f, T.text, false) + 12), T.voice);
+        y += wrapped(F.body, s, x + 12, y + 6, w - 16, 13.5f, T.text) + 18;
+    }
+    endScroll(a, sideScroll, y + sideScroll.y - a.y + 20);
+}
+
+void Game::drawCamp(Rectangle a) {
+    beginScroll(a, sideScroll);
+    float x = a.x, w = a.width - 10, y = a.y - sideScroll.y;
+    y += sectionTitle("Village needs", x, y);
+    std::vector<Person*> ad;
+    for (auto* p : sim.members()) if (!p->child) ad.push_back(p);
+    if (!ad.empty()) {
+        std::array<float, 5> t{}, g{};
+        std::map<int, int> seek;
+        for (auto* p : ad) { for (int i = 0; i < 5; i++) { t[i] += p->tiers[i] / ad.size(); g[i] += p->gates[i] / ad.size(); } if (p->seeking >= 0) seek[p->seeking]++; }
+        y += pyramidRows(t, g, x, y, w, true);
+        int top = -1, tc = 0;
+        for (auto& [k, c] : seek) if (c > tc) { tc = c; top = k; }
+        std::string s = top >= 0 ? cat("Most are seeking ", lower(TIER_NAMES[top]), ". ") : "Everyone feels fulfilled. ";
+        std::string calls;
+        for (auto* p : ad) if (!p->calling.empty()) calls += (calls.empty() ? "" : ", ") + p->name + " (" + lower(callingInfo().at(p->calling).n) + ")";
+        s += calls.empty() ? "Nobody has found a calling yet." : "Callings: " + calls + ".";
+        if (!sim.inventions.empty()) { s += " Inventions: "; bool first = true; for (auto& i : inventionList()) if (sim.inventions.count(i.k)) { s += (first ? "" : ", ") + i.n; first = false; } s += "."; }
+        y += wrapped(F.body, s, x, y, w, 13.5f, T.muted) + 16;
+    }
+    y += sectionTitle("Stores", x, y);
+    float bw = (w - 16) / 3;
+    struct Box { const char* k; int n; std::string sub; } boxes[3] = {
+        {"FOOD", int(sim.stock.food), cat(int(sim.foodDays() * 10) / 10, ".", int(sim.foodDays() * 10) % 10, " days")},
+        {"WOOD", int(sim.stock.wood), sim.fire() ? (sim.fireLit() ? "fire lit" : "fire out") : "no fire yet"},
+        {"STONE", int(sim.stock.stone), cat("tools ", 100 - int(sim.toolWear), "%")}};
+    for (int i = 0; i < 3; i++) {
+        Rectangle r{x + i * (bw + 8), y, bw, 70};
+        DrawRectangleRounded(r, .15f, 6, T.panel2);
+        text(F.bold, boxes[i].k, r.x + 10, r.y + 8, 11, T.muted);
+        text(F.head, std::to_string(boxes[i].n), r.x + 10, r.y + 22, 24, T.text);
+        text(F.body, boxes[i].sub, r.x + 10, r.y + 50, 12, T.muted);
+    }
+    y += 86;
+    y += sectionTitle("Projects", x, y);
+    if (sim.agenda) if (auto* ag = sim.person(sim.agenda->by)) {
+        static const std::map<std::string, std::string> verb = {{"stone", "breaking stone"}, {"wood", "hauling timber"}, {"farm", "working the fields"}, {"food", "gathering food"}};
+        y += wrapped(F.body, cat("Agenda: ", ag->name, " the ", lower(giftInfo().at(sim.agenda->gift).n), " (charisma ", ag->charisma, ") has people ", verb.at(sim.agenda->job), "."), x, y, w, 13.5f, T.ember) + 8;
+    }
+    Project* cur = sim.activeProject();
+    struct Row { Project* b; int order; float score; int i; };
+    std::vector<Row> rows;
+    int i = 0;
+    for (auto& b : sim.plan) {
+        if (b.skip) { i++; continue; }
+        int ord = &b == cur ? 0 : b.done ? 3 : (!sim.giftOk(b) || !sim.prereqOk(b)) ? 2 : 1;
+        rows.push_back({&b, ord, sim.projScore(b, i), i});
+        i++;
+    }
+    std::stable_sort(rows.begin(), rows.end(), [](const Row& a, const Row& b) { return a.order != b.order ? a.order < b.order : a.score > b.score; });
+    for (auto& r : rows) {
+        auto& b = *r.b;
+        bool now = &b == cur, blocked = r.order == 2;
+        float pct = b.done ? 1 : b.progress / b.work;
+        float cx = x + 8, cy = y + 10;
+        if (b.done) draw::circle(cx, cy, 6, T.ok);
+        else if (now) { draw::ring(cx, cy, 7, 7, 2, T.ember); for (int k = 0; k < 24; k++) if (k / 24.f < pct) { float a0 = -1.5708f + k / 24.f * 6.283f; draw::line(cx, cy, cx + std::cos(a0) * 6, cy + std::sin(a0) * 6, 2, T.ember); } }
+        else draw::ring(cx, cy, 7, 7, 2, T.line);
+        std::string name = b.name + (b.voiced ? " *" : "");
+        Color nc = b.done ? T.muted : blocked ? Color{120, 128, 122, 255} : T.text;
+        text(now ? F.bold : F.body, name, x + 24, y + 2, 15, nc);
+        float nx = x + 24 + measure(now ? F.bold : F.body, name, 15).x + 6;
+        if (!b.gift.empty() && !b.done) text(F.body, giftInfo().at(b.gift).n, nx, y + 4, 12, T.muted);
+        std::string need;
+        if (b.done) need = "";
+        else if (!sim.giftOk(b)) need = "needs a " + lower(giftInfo().at(b.gift).n);
+        else if (!sim.prereqOk(b)) need = b.req == "child" ? "needs children" : "needs " + lower(projectDef(b.req)->name);
+        else if (now) need = (b.wood - b.dw > 0 || b.stone - b.ds > 0) ? cat(b.wood - b.dw > 0 ? cat(int(std::ceil(b.wood - b.dw)), " wood ") : "", b.stone - b.ds > 0 ? cat(int(std::ceil(b.stone - b.ds)), " stone") : "", " to go") : cat(int(pct * 100), "% built");
+        else if (auto ch = sim.champion(b)) need = ch->p->name + " pushes";
+        else need = cat(b.wood, "w", b.stone ? cat(" ", b.stone, "s") : "");
+        text(F.body, need, x + w - measure(F.body, need, 12.5f).x, y + 4, 12.5f, blocked ? T.berry : T.muted);
+        y += 26;
+    }
+    endScroll(a, sideScroll, y + sideScroll.y - a.y + 20);
+}
+
+void Game::drawJournal() {
+    Rectangle r = rJournal;
+    DrawRectangleRounded(r, .06f, 8, Color{20, 27, 24, 228});
+    DrawRectangleRoundedLinesEx(r, .06f, 8, 1, T.line);
+    text(F.head, "Camp Journal", r.x + 14, r.y + 8, 20, T.text);
+    if (button({r.x + r.width - 86, r.y + 6, 74, 26}, journalOpen ? "Hide" : "Show", true, false, 13)) journalOpen = !journalOpen;
+    if (!journalOpen) return;
+    Rectangle a{r.x + 12, r.y + 40, r.width - 20, r.height - 48};
+    float tw = a.width - 110;
+    if (journalVersionCached != sim.journalVersion || journalWidthCached != tw) {
+        journalHeights.clear();
+        for (auto& e : sim.journal) journalHeights.push_back(wrapped(F.hand, e.text, 0, 0, tw, 23, WHITE, false, 1.05f) + 6);
+        journalVersionCached = sim.journalVersion;
+        journalWidthCached = tw;
+    }
+    beginScroll(a, journalScroll);
+    float y = a.y - journalScroll.y, total = 0;
+    size_t i = 0;
+    for (auto& e : sim.journal) {
+        float h = i < journalHeights.size() ? journalHeights[i] : 30;
+        if (y + h > a.y && y < a.y + a.height) {
+            text(F.bold, cat("DAY ", e.d), a.x, y + 6, 11, T.muted);
+            text(F.body, e.season, a.x, y + 20, 11, T.muted);
+            Color c = e.cls == "big" ? T.accent : e.cls == "sad" ? T.berry : e.cls == "voice" ? T.voice : T.text;
+            wrapped(F.hand, e.text, a.x + 100, y, tw, 23, c, true, 1.05f);
+        }
+        y += h; total += h; i++;
+    }
+    endScroll(a, journalScroll, total);
+}
+
+void Game::drawFate() {
+    DrawRectangleRec(rMap, Color{10, 14, 22, 170});
+    float cx = rMap.x + rMap.width / 2, cy = rMap.y + rMap.height / 2;
+    textCentered(F.head, "The fates offer a choice", {rMap.x, cy - 190, rMap.width, 40}, 32, Color{243, 238, 226, 255});
+    textCentered(F.body, "A new season turns. As the unseen narrator, choose what the island brings next.", {rMap.x, cy - 150, rMap.width, 24}, 16, Color{207, 214, 208, 255});
+    int n = int(sim.pendingFate.size());
+    float cw = 250, ch = 210, gap = 18, total = n * cw + (n - 1) * gap;
+    int chosen = -1;
+    for (int i = 0; i < n; i++) {
+        auto& f = sim.pendingFate[i];
+        Rectangle r{cx - total / 2 + i * (cw + gap), cy - 100, cw, ch};
+        bool h = hovered(r);
+        if (h) r.y -= 4;
+        DrawRectangleRounded({r.x + 3, r.y + 6, r.width, r.height}, .06f, 8, Color{0, 0, 0, 90});
+        DrawRectangleRounded(r, .06f, 8, Color{246, 241, 228, 255});
+        if (h) DrawRectangleRoundedLinesEx(r, .06f, 8, 2, T.voice);
+        text(F.bold, "FATE", r.x + 18, r.y + 16, 12, Color{122, 79, 176, 255});
+        float yy = r.y + 36;
+        yy += wrapped(F.head, f.title, r.x + 18, yy, cw - 36, 20, Color{42, 36, 28, 255}, true, 1.15f) + 6;
+        wrapped(F.body, f.desc, r.x + 18, yy, cw - 36, 14.5f, Color{74, 66, 54, 255});
+        if (clicked(r)) chosen = i;
+    }
+    if (chosen >= 0) { auto f = sim.pendingFate[chosen]; sim.pendingFate.clear(); sim.applyFate(f); }
+}

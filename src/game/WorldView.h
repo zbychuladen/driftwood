@@ -1,0 +1,44 @@
+// Renders the simulation as an isometric world: terrain, objects, people,
+// fog of war, weather and lighting. Owns the camera and map input.
+#pragma once
+#include <vector>
+#include "engine/Lighting.h"
+#include "raylib.h"
+#include "sim/Sim.h"
+
+class WorldView {
+public:
+    void init(dw::Sim& sim);
+    void unload();
+    // Camera input. mapRect is the visible map area (excludes the sidebar).
+    void handleInput(float dt, Rectangle mapRect, bool pointerFree);
+    void draw(dw::Sim& sim, Rectangle mapRect, int selectedId, float realDt, float speed);
+    // Returns a person id under the screen point, or -1.
+    int pick(dw::Sim& sim, Vector2 screen);
+    void centerOnTile(float tx, float ty);
+    void zoomBy(float f, Vector2 screenPivot);
+    bool clickedMap() const { return clicked; }   // left click without drag this frame
+    Vector2 clickPos() const { return clickAt; }
+
+    Camera2D cam{};
+private:
+    void renderGround(dw::Sim& sim);
+    void buildFog(dw::Sim& sim);
+    void drawFog(dw::Sim& sim);
+    void drawWeather(dw::Sim& sim, float dt, float speed);
+    void drawLabels(dw::Sim& sim, int selectedId);
+    void clampCam();
+
+    RenderTexture2D ground{};
+    int groundSeason = -1;
+    uint32_t groundSeed = 0;
+    std::vector<float> fogCorner;       // (GW+1)*(GH+1) fog density per tile corner
+    int fogVersion = -1;
+    std::vector<int> waterTiles;
+    Lighting lighting;
+    struct Drop { float x, y, v; };
+    std::vector<Drop> drops;
+    bool dragging = false, pressOnMap = false, clicked = false;
+    Vector2 pressAt{}, clickAt{}, camAtPress{};
+    Rectangle lastMap{};
+};
