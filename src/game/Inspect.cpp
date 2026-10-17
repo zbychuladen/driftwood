@@ -34,7 +34,8 @@ static std::string purpose(const Project& b) {
         {"mine", "A shaft into the hill for good stone."},
         {"herbs", "Healing plants, grown on purpose instead of hunted for."},
         {"pottery", "A kiln for pots, so food and water keep."},
-        {"loomhouse", "Looms for cloth, so the cold bites less."}};
+        {"loomhouse", "Looms for cloth, so the cold bites less."},
+        {"cookhouse", "A hearth and a long table. Meals here fill people up better, if it is in a good spot."}};
     if (!b.desc.empty()) return b.desc;
     auto it = d.find(b.key);
     return it != d.end() ? it->second : "Something the camp built together.";
@@ -53,6 +54,14 @@ static Info building(Sim& s, Project& b) {
     float pct = b.work > 0 ? b.progress / b.work : 0;
     in.rows.push_back({"Status", b.done ? "Built" : b.progress > 0 ? cat("Being built, ", int(pct * 100), "%") : "Planned"});
     in.rows.push_back({"Size", cat(int(b.w * scale::TILE_M), " by ", int(b.h * scale::TILE_M), " m")});
+    if (Sim::specialist(b) && b.placed) {
+        // how good its spot is, and the main reason, as the specialist would put it
+        SiteReport r = s.evaluateSite(b, b.x, b.y);
+        float q = b.siteQuality;
+        std::string word = q >= 1.15f ? "Excellent" : q >= 1.03f ? "Good" : q >= .92f ? "Fair" : q >= .8f ? "Poor" : "Bad";
+        std::string why = r.factors.empty() ? "" : ", " + (q < 1 ? r.factors.front().text : r.factors.back().text);
+        in.rows.push_back({"Spot", cat(word, why, b.sited ? " (your choice)" : "")});
+    }
     if (const bld::Design* d = art::designFor(s, b)) {
         // what this one was built from: its own materials, not just its type's
         std::string made = !d->made.empty() ? d->made : d->walls + " walls, " + d->roof + " roof";

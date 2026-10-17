@@ -48,6 +48,10 @@ public:
     void handleInput(float dt, Rectangle mapRect, bool pointerFree);
     void draw(dw::Sim& sim, Rectangle mapRect, int selectedId, float realDt, float speed, Pick inspected = {});
     bool showAllLinks = false;                // every settler's link to their work, not just the selected one
+    // A building being placed: its footprint under the pointer, and the settlers' suggestion.
+    struct Ghost { bool on = false, legal = false; int x = 0, y = 0, w = 1, h = 1, sx = 0, sy = 0; float quality = 1; } ghost;
+    // The footprint of a w-by-h building centred on the tile under a screen point.
+    void footprintAt(Vector2 screen, int w, int h, int& x, int& y) const;
     // Doors open as settlers go in to sleep or come out, then swing shut.
     void updateDoors(dw::Sim& sim);
     float doorOpen(int buildingId) const;
@@ -90,6 +94,7 @@ private:
     std::unordered_map<int, double> lastPass;     // building id: when someone last went through its door
     double lastPassClock = 0;                     // the sim's clock at the last door update
     void drawHighlight(dw::Sim& sim, Pick p);
+    void drawGhost();
     void drawLinks(dw::Sim& sim, int selectedId, Pick inspected);
     struct Caption { Vector2 world; std::string text; };
     std::vector<Caption> captions;            // filled by drawLinks, drawn in screen space

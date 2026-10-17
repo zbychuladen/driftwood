@@ -564,7 +564,7 @@ void building(const Ctx& c, dw::Project& b) {
             for (auto* m : S.members()) if (m->bed == b.id && (m->hidden || m->sleeping)) home = true;
             bld::draw(*d, prog, doorOf(b.id), b.done && night && home);
             // a hearth smokes all day in the forge and smokehouse, mornings and evenings in a hall
-            bool hearth = k == "forge" || k == "smoke" || k == "pottery" || (k == "longhouse" && (c.hour >= 17 || c.hour < 8));
+            bool hearth = k == "forge" || k == "smoke" || k == "pottery" || (k == "cookhouse" && c.hour >= 6 && c.hour < 21) || (k == "longhouse" && (c.hour >= 17 || c.hour < 8));
             if (b.done && d->smokes && hearth) { V2 q = solid::project(d->smoke); smoke(c, q.x, q.y, 3, 1); }
             if (b.done && d->flames) {
                 V2 f = solid::project(d->flame);

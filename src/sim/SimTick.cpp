@@ -6,6 +6,7 @@ namespace dw {
 
 void Sim::step(double minutes) {
     while (minutes > 0) {
+        if (pendingPlacement) return;   // the narrator is choosing a spot
         double dm = std::min(2.0, minutes);
         minutes -= dm;
         tMin += dm;
@@ -42,7 +43,7 @@ void Sim::updatePerson(Person& p, double dmd) {
         if (nearFire || inside || t >= 12) n.cold = std::max(0.f, n.cold - hrs * (nearFire ? 35.f : inside ? 20.f : 12.f) - (built("bath") ? hrs * 5 : 0));
         else n.cold = std::min(100.f, n.cold + hrs * (12 - t) * .55f * (p.has("tough") ? .55f : 1) * (p.sleepIn == "leanto" && asleep ? .5f : 1)
                                   * (mods.count("wolves") ? .8f : 1) * (1 - std::min(.5f, cloth * .03f)));
-        if (p.sick > 0) p.sick -= hrs * (built("herbs") ? 1.6f : 1) * (hasHerb ? 1.4f : 1) * (built("infirmary") ? 1.5f : 1);
+        if (p.sick > 0) p.sick -= hrs * (built("herbs") ? 1 + .6f * siteQ("herbs") : 1) * (hasHerb ? 1.4f : 1) * (built("infirmary") ? 1 + .5f * siteQ("infirmary") : 1);
         if (n.hunger >= 100) { p.starve += hrs; if (p.starve > 80) { die(p); return; } } else p.starve = 0;
         static const std::set<std::string> needKinds = {"drink", "eat", "sleep", "rest"};
         if (a && !needKinds.count(p.kind) && (n.thirst > 88 || (n.hunger > 85 && stock.food >= 1) || n.fatigue > 97)) { clearQ(p); p.carry.reset(); plan_(p); return; }
@@ -108,7 +109,7 @@ void Sim::hourly() {
         auto& n = p->needs;
         float m = computeTiers(*p);
         if (built("shrine")) m += 2;
-        if (built("bath")) m += 5;
+        if (built("bath")) m += 5 * siteQ("bath");
         if (fireLit() && (h >= 18 || h < 6)) m += 3;
         if (p->has("cheerful")) m += 8;
         if (p->has("gloomy")) m -= 8;
@@ -154,7 +155,8 @@ void Sim::hourly() {
 void Sim::daily() {
     int d = day(), s = season(), prevS = ((d - 2) / 10) % 4;
     auto m = members();
-    float rate = (built("smoke") ? .006f : built("store") ? .01f : built("rack") ? .035f : .07f) * (1 - std::min(.6f, pots * .04f));
+    // a well-placed store or smokehouse keeps food better; a damp or out-of-the-way one worse
+    float rate = (built("smoke") ? .006f * (2 - siteQ("smoke")) : built("store") ? .01f * (2 - siteQ("store")) : built("rack") ? .035f : .07f) * (1 - std::min(.6f, pots * .04f));
     stock.food -= std::floor(stock.food * rate);
     float grow = mods.count("bounty") && mods["bounty"] >= d ? 2.f : 1.f;
     for (auto& o : objs) {
@@ -166,7 +168,7 @@ void Sim::daily() {
     for (auto key : {"garden", "fields"}) {
         auto* g = built(key);
         if (!g || g->state != "growing") continue;
-        g->growth += (s <= 1 ? .19f : s == 2 ? .12f : 0) * grow;
+        g->growth += (s <= 1 ? .19f : s == 2 ? .12f : 0) * grow * g->siteQuality;
         if (s == 3) { g->state = "empty"; g->growth = 0; note("Frost blackened what was left in the fields.", "sad"); }
         if (g->growth >= 1) g->state = "ripe";
     }
@@ -239,7 +241,7 @@ void Sim::daily() {
         if (!b || b->dead) continue;
         if (a->mood > 50 && b->mood > 50 && days > 3 && totalBeds(false) > int(m.size()) && kids < 4 && d - a->lastBaby > 18 && rnd() < .05f) { a->lastBaby = d; birth(*a, *b); kids++; }
     }
-    int grownAt = built("school") ? 25 : 40;
+    int grownAt = built("school") ? int(std::lround(40 - 15 * siteQ("school"))) : 40;
     for (auto* c : m) if (c->child && d - c->bornDay >= grownAt) {
         c->child = false; c->age = 16; c->gifts = rollGifts(c->traits);
         note(cat(c->name, " is old enough to help with the work now."), "big");

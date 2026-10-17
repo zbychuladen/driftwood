@@ -57,6 +57,7 @@ template <class A> void io(A& a, Vote& v);
 template <class A> void io(A& a, Wolf& v);
 template <class A> void io(A& a, Agenda& v);
 template <class A> void io(A& a, Stock& v);
+template <class A> void io(A& a, PendingPlacement& v);
 
 // ---- plain values
 template <class A> void io(A& a, int& v) { a.pod(v); }
@@ -155,7 +156,7 @@ template <class A> void io(A& a, Project& b) {
     io(a, b.like); io(a, b.dislike);
     io(a, b.id); io(a, b.dw); io(a, b.ds); io(a, b.progress); io(a, b.fuel); io(a, b.growth); io(a, b.done); io(a, b.placed);
     io(a, b.skip); io(a, b.voiced); io(a, b.waitNoted); io(a, b.holderAtFinish); io(a, b.workers); io(a, b.x); io(a, b.y);
-    io(a, b.dx); io(a, b.dy); io(a, b.lx); io(a, b.ly); io(a, b.wait); io(a, b.state);
+    io(a, b.dx); io(a, b.dy); io(a, b.lx); io(a, b.ly); io(a, b.wait); io(a, b.state); io(a, b.siteQuality); io(a, b.sited);
 }
 template <class A> void io(A& a, Poi& v) { io(a, v.type); io(a, v.x); io(a, v.y); io(a, v.found); io(a, v.joined); io(a, v.mentioned); io(a, v.who); }
 template <class A> void io(A& a, Entry& v) { io(a, v.d); io(a, v.season); io(a, v.text); io(a, v.cls); }
@@ -165,6 +166,7 @@ template <class A> void io(A& a, Vote& v) { io(a, v.name); io(a, v.rows); io(a, 
 template <class A> void io(A& a, Wolf& v) { io(a, v.x); io(a, v.y); io(a, v.sx); io(a, v.sy); io(a, v.state); io(a, v.face); io(a, v.ph); }
 template <class A> void io(A& a, Agenda& v) { io(a, v.by); io(a, v.gift); io(a, v.job); io(a, v.str); }
 template <class A> void io(A& a, Stock& v) { io(a, v.wood); io(a, v.stone); io(a, v.food); }
+template <class A> void io(A& a, PendingPlacement& v) { io(a, v.project); io(a, v.sx); io(a, v.sy); }
 
 template <class A> void io(A& a, Sim::SaveInfo& v) { io(a, v.village); io(a, v.day); io(a, v.year); io(a, v.season); io(a, v.people); io(a, v.seed); }
 
@@ -179,7 +181,7 @@ template <class A> void body(A& a, Sim& s) {
     io(a, s.lastProposal); io(a, s.lastSand); io(a, s.newcomerDay); io(a, s.lastRaid); io(a, s.lastSick); io(a, s.lastFeast);
     io(a, s.totems); io(a, s.vote); io(a, s.pendingFate); io(a, s.nextProjId); io(a, s.nextPid); io(a, s.active);
     io(a, s.fuelRes); io(a, s.dockRes); io(a, s.toolWear); io(a, s.pots); io(a, s.cloth); io(a, s.herbs); io(a, s.ironTools);
-    io(a, s.hasHerb); io(a, s.agenda); io(a, s.lastWhisperName); io(a, s.lastWhisperResult);
+    io(a, s.hasHerb); io(a, s.agenda); io(a, s.lastWhisperName); io(a, s.lastWhisperResult); io(a, s.pendingPlacement);
     // the behaviour random generator, so a loaded game goes on the same way every time
     std::string rng;
     if constexpr (!A::reading) { std::ostringstream o; o << s.gen; rng = o.str(); }

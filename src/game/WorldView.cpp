@@ -359,6 +359,7 @@ void WorldView::draw(Sim& s, Rectangle map, int selectedId, float realDt, float 
     for (auto& d : sorted(collect(s, ctx, viewR, selectedId))) d.draw(ctx);
     draw::ink.width = 0;
     drawLinks(s, selectedId, inspected);
+    drawGhost();   // over the trees, so a spot in the woods can still be seen
     EndMode2D();
 
     draw::tone = {};
@@ -671,6 +672,41 @@ void WorldView::drawLinks(Sim& s, int selectedId, Pick inspected) {
             captions.push_back({{(me.x + to.x) / 2, (me.y + to.y) / 2 - 6}, p.doing});
         }
     }
+}
+
+void WorldView::footprintAt(Vector2 screen, int w, int h, int& x, int& y) const {
+    V2 wpt = GetScreenToWorld2D(screen, cam), t = iso::toTile(wpt.x, wpt.y);
+    x = int(std::floor(t.x - w / 2.f + .5f));
+    y = int(std::floor(t.y - h / 2.f + .5f));
+}
+
+// The building being placed: tinted from red through amber to green by how good
+// the spot is, grey where it cannot go, with the settlers' suggestion outlined.
+void WorldView::drawGhost() {
+    if (!ghost.on) return;
+    auto diamond = [&](int x, int y, int w, int h, Color fill, Color edge, float width, bool dashes) {
+        V2 c[4] = {wp(x, y), wp(x + w, y), wp(x + w, y + h), wp(x, y + h)};
+        if (fill.a) draw::quad(c[0], c[1], c[2], c[3], fill, fill, fill, fill);
+        for (int i = 0; i < 4; i++) {
+            V2 a = c[i], b = c[(i + 1) % 4];
+            if (!dashes) { draw::line(a.x, a.y, b.x, b.y, width, edge); continue; }
+            for (int k = 0; k < 10; k += 2) {
+                float f0 = k / 10.f, f1 = (k + 1) / 10.f;
+                draw::line(a.x + (b.x - a.x) * f0, a.y + (b.y - a.y) * f0, a.x + (b.x - a.x) * f1, a.y + (b.y - a.y) * f1, width, edge);
+            }
+        }
+    };
+    float w = 2.4f / cam.zoom + .8f;
+    diamond(ghost.sx, ghost.sy, ghost.w, ghost.h, Color{0, 0, 0, 0}, draw::hex(0xd8a03a), w, true);
+    Color c;
+    if (!ghost.legal) c = draw::rgba(120, 120, 120, .45f);
+    else {
+        float t = std::clamp((ghost.quality - .6f) / .65f, 0.f, 1.f);
+        Color bad = draw::hex(0xc0503c), mid = draw::hex(0xd8a03a), good = draw::hex(0x5a9a4a);
+        c = t < .55f ? draw::mix(bad, mid, t / .55f) : draw::mix(mid, good, (t - .55f) / .45f);
+        c.a = 120;
+    }
+    diamond(ghost.x, ghost.y, ghost.w, ghost.h, c, draw::withA(c, 1), w, false);
 }
 
 // A gold outline on the ground around what the card is describing.

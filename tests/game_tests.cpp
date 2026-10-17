@@ -621,6 +621,7 @@ static void testBuildings() {
     const T types[] = {{"hut", 2, 2, scale::HUT_WALL + scale::HUT_ROOF}, {"leanto", 3, 1, scale::LEANTO}, {"longhouse", 4, 2, scale::LONGHOUSE_WALL + scale::LONGHOUSE_ROOF},
                        {"store", 2, 2, scale::STORE_WALL + scale::STORE_ROOF}, {"school", 2, 2, scale::SCHOOL_WALL + scale::SCHOOL_ROOF}, {"forge", 2, 2, scale::FORGE_CHIMNEY},
                        {"smoke", 2, 1, scale::SMOKE_WALL + scale::SMOKE_ROOF}, {"loomhouse", 2, 2, scale::LOOM_WALL + scale::LOOM_ROOF}, {"infirmary", 2, 2, scale::INFIRMARY_WALL + scale::INFIRMARY_ROOF},
+                       {"cookhouse", 2, 2, scale::COOK_WALL + scale::COOK_ROOF},
                        {"well", 1, 1, scale::WELL_ROOF}, {"rack", 1, 1, scale::RACK}, {"tower", 1, 1, scale::TOWER}, {"lighthouse", 1, 1, scale::LIGHTHOUSE},
                        {"signal", 1, 1, scale::SIGNAL}, {"mine", 1, 1, scale::MINE_HILL}, {"dock", 1, 3, .6f}, {"shrine", 2, 2, scale::SHRINE_STONE},
                        {"pottery", 2, 2, scale::KILN}, {"boatyard", 2, 2, scale::MAST}};

@@ -26,6 +26,7 @@ struct Options {
     bool structures = false;          // capture a sheet of the assembled structures (well, tower, dock...)
     bool title = false;               // capture the title screen instead of the game
     bool menu = false;                // capture the game paused with the save picker open
+    bool placement = false;           // capture: run until a building is waiting to be placed, show the placement screen
     std::string saveDir;              // where saves go (default: the platform's place for app data)           // capture a sheet of assembled buildings and their construction              // capture a sheet of settler figures, poses and facings
     int bench = 0;                    // capture: time this many frames and print the average             // capture a sheet of every tree and plant instead of the world            // draw every settler's link to their work
     bool hasCenter = false, hasPick = false;
@@ -62,6 +63,7 @@ private:
     void say(const std::string& text);
     void saveTo(int slot);
     void loadFrom(int slot);
+    void drawPlacement();
     float settlerCard(dw::Person& p, float x, float y, float w, bool drawIt);
     void select(int id, bool center);
 
@@ -88,4 +90,8 @@ private:
     std::string toast;
     double toastUntil = 0;
     float titleClock = 0;                 // the title backdrop's camera drift
+    bool settlersPlace = false;           // the settlers choose every building's spot themselves
+    float placeH = 0;                     // the placement panel's height last frame, to keep clicks off the map
+    bool placingOverride = false;         // captures: aim the footprint at a fixed screen point
+    Vector2 placingAt{};
 };

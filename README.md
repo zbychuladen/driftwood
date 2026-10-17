@@ -27,6 +27,7 @@ An isometric island colony sim. Five castaways wash ashore with a hatchet, a kni
 | Toggle journal | `J` |
 | Menu (save, load, quit to title) | `Esc` |
 | Quick save / quick load | `F5` / `F9` |
+| Place a specialist building | Click a spot when the game asks; `Esc` lets the settlers choose |
 
 ## Building
 
