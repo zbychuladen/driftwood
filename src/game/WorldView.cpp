@@ -6,6 +6,7 @@
 #include "engine/Draw.h"
 #include "engine/Ui.h"
 #include "game/Art.h"
+#include "game/Figure.h"
 #include "game/Iso.h"
 #include "game/Labels.h"
 #include "game/Scale.h"
@@ -307,6 +308,7 @@ static float darkness(double h) {
 // ---------------------------------------------------------------- main draw
 void WorldView::draw(Sim& s, Rectangle map, int selectedId, float realDt, float speed, Pick inspected) {
     draw::tone = WORLD_TONE;
+    updateFacings(s);
     if (gc.season != s.season() || gc.seed != s.seed) buildGround(s);
     bool liveGround = cam.zoom >= LIVE_GROUND_ZOOM;
     if (!liveGround && (bakedSeason != gc.season || bakedSeed != gc.seed)) bakeGround(s);
@@ -424,7 +426,10 @@ std::vector<Drawable> WorldView::collect(Sim& s, const art::Ctx& ctx, Rectangle 
         if (p.dead || p.hidden || !s.isExplored(p.x, p.y) || !inView(p.x, p.y)) continue;
         const Person* pp = &p;
         bool sel = p.id == selectedId;
-        add(Drawable::PERSON, p.id, around(p.x, p.y, .12f), [pp, sel](const art::Ctx& c) { art::person(c, *pp, sel); });
+        auto tr = tracks.find(p.id);
+        int facing = tr == tracks.end() ? figure::SE : tr->second.facing;
+        int detail = px(scale::PERSON) * cam.zoom >= figure::DETAIL_PX ? 1 : 0;
+        add(Drawable::PERSON, p.id, around(p.x, p.y, .12f), [pp, sel, facing, detail](const art::Ctx& c) { art::person(c, *pp, sel, facing, detail); });
     }
     if (s.wolf && s.isExplored(s.wolf->x, s.wolf->y) && inView(s.wolf->x, s.wolf->y)) {
         const Wolf* w = &*s.wolf;
@@ -545,6 +550,28 @@ Pick WorldView::pickAt(Sim& s, Vector2 screen) const {
     int id = const_cast<WorldView*>(this)->pick(s, screen);
     if (id >= 0) return {Drawable::PERSON, id, true};
     return {};
+}
+
+// ---------------------------------------------------------------- facing
+void WorldView::updateFacings(Sim& s) {
+    for (auto& p : s.people) {
+        if (p.dead) continue;
+        auto [it, fresh] = tracks.try_emplace(p.id, Track{p.x, p.y, figure::SE});
+        Track& t = it->second;
+        int f = t.facing;
+        if (p.moving) {
+            f = figure::facingToward(p.x - t.x, p.y - t.y, figure::Facing(f));
+        } else if (p.anim == "fish") {
+            // face the water beside them
+            const int D[4][2] = {{1, 0}, {0, 1}, {0, -1}, {-1, 0}};
+            for (auto& d : D) if (s.isWater(int(p.x) + d[0], int(p.y) + d[1])) { f = figure::facingToward(float(d[0]), float(d[1]), figure::Facing(f)); break; }
+        } else if (!p.anim.empty()) {
+            // at work, turn toward what they are working on
+            FocusTarget ft = focusTarget(s, p.focus);
+            if (ft.ok && std::hypot(ft.x - p.x, ft.y - p.y) > .3f) f = figure::facingToward(ft.x - p.x, ft.y - p.y, figure::Facing(f));
+        }
+        t = {p.x, p.y, f};
+    }
 }
 
 // ---------------------------------------------------------------- links between people and their work

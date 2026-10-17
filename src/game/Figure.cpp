@@ -38,7 +38,21 @@ struct Box {
 struct Rig {
     V3 at;            // the figure's feet, in metres
     V3 fwd, side;     // unit vectors in the ground plane
+    bool lying = false;
+    float len = .85f, thick = .13f;   // half the body's length and depth, for lying down
     V3 world(float f, float s, float u) const { return at + fwd * f + side * s + V3{0, 0, u}; }
+    // Lying turns the standing figure onto its back: up becomes backward along
+    // the ground, forward becomes up, so the face looks at the sky.
+    V3 place(V3 p) const {
+        if (!lying) return p;
+        V3 d = p - at;
+        float f = dot(d, fwd), sd = dot(d, side), u = d.z;
+        return at + fwd * (len - u) + side * sd + V3{0, 0, f + thick};
+    }
+    V3 turn(V3 n) const {
+        if (!lying) return n;
+        return fwd * (-n.z) + side * dot(n, side) + V3{0, 0, dot(n, fwd)};
+    }
 };
 
 V2 project(V3 p) { return iso::P(p.x / scale::TILE_M, p.y / scale::TILE_M, p.z * scale::PX_PER_M); }
@@ -54,19 +68,22 @@ void drawBox(const Box& bx, const Rig& rig) {
     Face faces[6] = {{ax, sd, dp, hw, hd, hl}, {ax * -1, sd, dp, hw, hd, hl}, {sd, ax, dp, hl, hd, hw},
                      {sd * -1, ax, dp, hl, hd, hw}, {dp, ax, sd, hl, hw, hd}, {dp * -1, ax, sd, hl, hw, hd}};
     for (auto& f : faces) {
-        if (dot(f.n, VIEW) <= 0) continue;
+        V3 n = rig.turn(f.n);
+        if (dot(n, VIEW) <= 0) continue;
         V3 o = c + f.n * f.hn;
-        V2 q[4] = {project(o + f.u * f.hu + f.v * f.hv), project(o - f.u * f.hu + f.v * f.hv), project(o - f.u * f.hu - f.v * f.hv), project(o + f.u * f.hu - f.v * f.hv)};
-        float k = .72f + .34f * std::max(0.f, dot(f.n, LIGHT));
+        auto P = [&](V3 p) { return project(rig.place(p)); };
+        V2 q[4] = {P(o + f.u * f.hu + f.v * f.hv), P(o - f.u * f.hu + f.v * f.hv), P(o - f.u * f.hu - f.v * f.hv), P(o + f.u * f.hu - f.v * f.hv)};
+        float k = .72f + .34f * std::max(0.f, dot(n, LIGHT));
         draw::poly(q, 4, tone(bx.c, k));
     }
 }
 
 // A flat patch on a box face, for eyes, brows and the mouth: offsets in metres
 // across (s) and up (u) from a point on the face, pushed out along its normal.
-void decal(V3 centre, V3 normal, V3 across, V3 up, float s, float u, float w, float h, Color c) {
+void decal(const Rig& rig, V3 centre, V3 normal, V3 across, V3 up, float s, float u, float w, float h, Color c) {
     V3 o = centre + normal * .004f + across * s + up * u;
-    V2 q[4] = {project(o - across * (w / 2) + up * (h / 2)), project(o + across * (w / 2) + up * (h / 2)), project(o + across * (w / 2) - up * (h / 2)), project(o - across * (w / 2) - up * (h / 2))};
+    auto P = [&](V3 p) { return project(rig.place(p)); };
+    V2 q[4] = {P(o - across * (w / 2) + up * (h / 2)), P(o + across * (w / 2) + up * (h / 2)), P(o + across * (w / 2) - up * (h / 2)), P(o - across * (w / 2) - up * (h / 2))};
     draw::poly(q, 4, c);
 }
 
@@ -125,21 +142,162 @@ Pose walk(float ph) {
     return p;
 }
 
+// Tools and loads, as boxes placed from the hands.
+void props(std::vector<Box>& out, const Rig& rig, const Pose& P, const V3 hands[2], const V3 wrists[2], float k) {
+    V3 hand = hands[1], along = unit(hands[1] - wrists[1]);
+    V3 mid = (hands[0] + hands[1]) * .5f;
+    const Color wood = draw::hex(0x7a5634), iron = draw::hex(0x8e939a), dark = draw::hex(0x4a3a2c);
+    switch (P.prop) {
+    case AXE: case PICK: {
+        // a long handle through both hands, the head at the far end
+        V3 a2 = unit(mid - (wrists[0] + wrists[1]) * .5f);
+        V3 end = mid + a2 * (.55f * k), start = mid - a2 * (.12f * k);
+        out.push_back({start, end, .035f * k, .035f * k, wood});
+        if (P.prop == AXE) out.push_back({end - a2 * (.1f * k), end, .03f * k, .16f * k, iron});
+        else out.push_back({end - a2 * (.04f * k) - rig.fwd * (.18f * k), end - a2 * (.04f * k) + rig.fwd * (.18f * k), .035f * k, .04f * k, iron});
+        break;
+    }
+    case HAMMER: {
+        V3 end = hand + along * (.25f * k);
+        out.push_back({hand - along * (.04f * k), end, .03f * k, .03f * k, wood});
+        out.push_back({end - rig.fwd * (.06f * k), end + rig.fwd * (.06f * k), .06f * k, .06f * k, iron});
+        break;
+    }
+    case ROD: {
+        V3 tip = mid + rig.fwd * (1.3f * k) + V3{0, 0, .9f * k};
+        out.push_back({mid - rig.fwd * (.1f * k), tip, .025f * k, .025f * k, wood});
+        // the line hangs from the tip to the water below
+        out.push_back({tip, tip + V3{0, 0, -(tip.z - .02f)}, .006f, .006f, draw::hex(0xe8e8e0)});
+        break;
+    }
+    case FLUTE: out.push_back({hands[0] + rig.side * (-.06f * k), hands[1] + rig.side * (.22f * k), .03f * k, .03f * k, draw::hex(0xc9a46a)}); break;
+    case BOWL: out.push_back({mid + V3{0, 0, -.02f * k}, mid + V3{0, 0, .06f * k}, .16f * k, .16f * k, draw::hex(0xa0754a)}); break;
+    case LOGS:
+        for (int i = 0; i < 3; i++) {
+            V3 c = mid + V3{0, 0, (.03f + .07f * i) * k} + rig.fwd * (.02f * k);
+            out.push_back({c - rig.side * (.3f * k), c + rig.side * (.3f * k), .07f * k, .07f * k, i % 2 ? wood : draw::hex(0x8a6440)});
+        }
+        break;
+    case STONE: out.push_back({mid - V3{0, 0, .04f * k}, mid + V3{0, 0, .12f * k}, .2f * k, .16f * k, draw::hex(0x9a9d96)}); break;
+    case FISH: out.push_back({hand - V3{0, 0, .3f * k}, hand, .05f * k, .1f * k, draw::hex(0x8fb4c2)}); break;
+    case BASKET:
+        out.push_back({hand - V3{0, 0, .26f * k}, hand - V3{0, 0, .08f * k}, .22f * k, .18f * k, draw::hex(0xb38a4e)});
+        out.push_back({hand - V3{0, 0, .1f * k}, hand - V3{0, 0, .06f * k}, .14f * k, .1f * k, draw::hex(0xc0303f)});
+        break;
+    case NONE: break;
+    }
+    (void)dark;
+}
+
+Pose activity(const std::string& a, float t, int seed) {
+    Pose p;
+    float w = std::sin(t * 1.2f + seed), up01 = (w + 1) / 2;   // a working rhythm, 0..1
+    auto sitDown = [&](Pose& q) { q.drop = .66f; q.hip[0] = q.hip[1] = 1.45f; q.knee[0] = q.knee[1] = .35f; };
+    if (a == "chop" || a == "mine") {
+        // feet apart, both hands on the handle: up over the head, then down
+        p.hip[0] = .22f; p.hip[1] = -.14f; p.knee[0] = .18f; p.knee[1] = .08f;
+        float arc = a == "mine" ? 2.7f : 2.4f;
+        p.shoulder[0] = p.shoulder[1] = arc - 2.f * up01;
+        p.elbow[0] = p.elbow[1] = .2f;
+        p.spread[0] = p.spread[1] = -.2f;
+        p.lean = .08f + .2f * up01;
+        p.prop = a == "mine" ? PICK : AXE;
+        p.strike = std::max(0.f, (w - .9f) * 10);
+    } else if (a == "build") {
+        // down on one knee, hammering with the right hand
+        p.drop = .37f; p.hip[0] = 1.45f; p.knee[0] = 1.5f; p.hip[1] = -.15f; p.knee[1] = 1.7f;
+        p.lean = .22f;
+        p.shoulder[1] = 1.2f + .7f * w; p.elbow[1] = 1.f - .5f * w;
+        p.shoulder[0] = .9f; p.elbow[0] = .5f;
+        p.prop = HAMMER;
+        p.strike = std::max(0.f, (-w - .9f) * 10);
+    } else if (a == "fish") {
+        p.shoulder[0] = p.shoulder[1] = .75f + .03f * std::sin(t * .2f + seed);
+        p.elbow[0] = p.elbow[1] = .3f;
+        p.spread[0] = p.spread[1] = -.12f;
+        p.prop = ROD;
+    } else if (a == "forage" || a == "farm") {
+        // squatting, reaching down with the right hand
+        p.drop = .44f; p.hip[0] = p.hip[1] = 1.25f; p.knee[0] = p.knee[1] = 2.25f;
+        p.lean = .4f;
+        p.shoulder[1] = 1.f + .3f * w; p.elbow[1] = .2f;
+        p.shoulder[0] = .6f; p.elbow[0] = .9f;
+    } else if (a == "drink") {
+        // on both knees, cupping water to the mouth
+        p.drop = .4f; p.hip[0] = p.hip[1] = .05f; p.knee[0] = p.knee[1] = 1.6f;
+        p.lean = .4f + .12f * w;
+        p.shoulder[0] = p.shoulder[1] = 1.2f; p.elbow[0] = p.elbow[1] = 1.1f;
+        p.spread[0] = p.spread[1] = -.15f;
+    } else if (a == "eat") {
+        sitDown(p);
+        p.shoulder[1] = .6f + .5f * up01; p.elbow[1] = 1.5f + .5f * up01;
+        p.shoulder[0] = .6f; p.elbow[0] = 1.1f;
+        p.prop = BOWL;
+    } else if (a == "sit") {
+        sitDown(p);
+        p.shoulder[0] = p.shoulder[1] = .85f; p.elbow[0] = .45f;
+        p.elbow[1] = .45f + .35f * std::max(0.f, std::sin(t * .7f + seed));   // a hand moving while talking
+        p.head = .05f * std::sin(t * .3f + seed);
+    } else if (a == "music") {
+        sitDown(p);
+        p.shoulder[0] = p.shoulder[1] = 1.1f; p.elbow[0] = p.elbow[1] = 1.9f; p.spread[0] = p.spread[1] = .05f;
+        p.head = .05f * std::sin(t * .9f);
+        p.prop = FLUTE;
+    } else if (a == "take") {
+        // bending to pick something up or put it down
+        p.lean = .9f; p.hip[0] = p.hip[1] = .2f; p.knee[0] = p.knee[1] = .4f;
+        p.shoulder[0] = p.shoulder[1] = 1.f; p.elbow[0] = p.elbow[1] = .1f;
+    } else if (a == "sleep") {
+        p.lying = true;
+        p.shoulder[0] = p.shoulder[1] = .1f; p.elbow[0] = p.elbow[1] = .1f;
+    } else {
+        return idle(t + seed);
+    }
+    return p;
+}
+
+bool hasPose(const std::string& a) {
+    static const char* known[] = {"chop", "mine", "build", "fish", "forage", "farm", "drink", "eat", "sit", "music", "take", "sleep", "idle", ""};
+    for (auto k : known) if (a == k) return true;
+    return false;
+}
+
+void carrying(Pose& p, const std::string& what) {
+    if (what == "wood" || what == "stone" || what == "meal") {
+        // held in front with both arms
+        p.shoulder[0] = p.shoulder[1] = .55f;
+        p.elbow[0] = p.elbow[1] = 1.3f;
+        p.spread[0] = p.spread[1] = -.05f;
+        p.prop = what == "wood" ? LOGS : what == "stone" ? STONE : BOWL;
+    } else if (what == "fish" || what == "food") {
+        p.shoulder[1] = .05f; p.elbow[1] = .05f;
+        p.prop = what == "fish" ? FISH : BASKET;
+    }
+}
+
+void unwell(Pose& p) {
+    p.lean += .22f; p.head += .35f;
+    p.shoulder[0] = p.shoulder[1] = 0; p.elbow[0] = p.elbow[1] = .08f;
+}
+
 void draw(float x, float y, Facing f, const Look& L, const Pose& P, int detail) {
     static const V3 FWD[4] = {{1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {-1, 0, 0}};
     Rig rig;
     rig.at = {x * scale::TILE_M, y * scale::TILE_M, 0};
     rig.fwd = FWD[f];
     rig.side = {-rig.fwd.y, rig.fwd.x, 0};   // the figure's right hand
+    rig.lying = P.lying;
     // proportions: an adult is 1.7 m with a slightly large head; a child's
     // body shrinks more than its head
     float target = L.child ? scale::CHILD : scale::PERSON;
     const float bodyM = 1.36f, headM = .34f;
     float headK = L.child ? 1.22f : 1.f;
     float k = target / (bodyM + headM * headK), hk = k * headK;
+    rig.len = target / 2;
+    rig.thick = .12f * k;
 
     std::vector<Box> boxes;
-    float lift = P.bob - P.drop;
+    float lift = P.bob - P.drop * k;
     // legs
     for (int i = 0; i < 2; i++) {
         float s = (i ? 1 : -1) * .085f * k;
@@ -175,6 +333,7 @@ void draw(float x, float y, Facing f, const Look& L, const Pose& P, int detail) 
         boxes.push_back({chest - up * (.03f * k), chest + up * (.035f * k), .24f * k, .2f * k, L.shirt});   // collar
     }
     // arms
+    V3 hands[2], wrists[2];
     for (int i = 0; i < 2; i++) {
         float side = i ? 1.f : -1.f;
         V3 sh = chest - up * (.05f * k) + rig.side * (side * .2f * k);
@@ -188,7 +347,10 @@ void draw(float x, float y, Facing f, const Look& L, const Pose& P, int detail) 
         boxes.push_back({elbow, wrist, .11f * k, .11f * k, L.jacket});
         V3 hand = wrist + limb(P.shoulder[i] + P.elbow[i], .07f * k);
         boxes.push_back({wrist, hand, .085f * k, .08f * k, L.skin});
+        hands[i] = hand;
+        wrists[i] = wrist;
     }
+    props(boxes, rig, P, hands, wrists, k);
     // neck and head
     V3 neckTop = chest + up * (.05f * k);
     boxes.push_back({chest - up * (.01f * k), neckTop, .09f * k, .09f * k, L.skin});
@@ -219,25 +381,33 @@ void draw(float x, float y, Facing f, const Look& L, const Pose& P, int detail) 
         V3 fr = headTop + rig.fwd * (hd / 2 + .008f * hk);
         boxes.push_back({fr - hup * (.06f * hk), fr + hup * (.02f * hk), hw - .05f * hk, .025f * hk, L.hair});
     }
+    if (L.beard) {
+        V3 chin = headBase + hup * (.02f * hk) + rig.fwd * (hd / 2 + .02f * hk);
+        boxes.push_back({chin - hup * (.04f * hk), chin + hup * (.1f * hk), hw - .04f * hk, .05f * hk, draw::hex(0xd8d6d0)});
+    }
+    if (P.lying && detail) {
+        // a blanket over the body up to the chest
+        boxes.push_back({rig.world(0, 0, .02f * k), rig.world(0, 0, 1.25f * k), .42f * k, .26f * k, draw::hex(0x8a6a4a)});
+    }
 
     // no ink lines on figures: the facets' three tones carry the shape
     draw::Ink inkWas = draw::ink;
     draw::ink.width = 0;
     // far parts first: sort by how close each box's middle is to the camera
-    std::stable_sort(boxes.begin(), boxes.end(), [](const Box& a, const Box& b) { return dot((a.a + a.b) * .5f, VIEW) < dot((b.a + b.b) * .5f, VIEW); });
+    std::stable_sort(boxes.begin(), boxes.end(), [&](const Box& a, const Box& b) { return dot(rig.place((a.a + a.b) * .5f), VIEW) < dot(rig.place((b.a + b.b) * .5f), VIEW); });
     for (auto& b : boxes) {
         drawBox(b, rig);
-        if (b.decal == 0 && detail && dot(rig.fwd, VIEW) > 0) {
+        if (b.decal == 0 && detail && dot(rig.turn(rig.fwd), VIEW) > 0) {
             // the face, on the front of the head
             V3 c = (b.a + b.b) * .5f + rig.fwd * (hd / 2);
             float ink = .95f;
             for (float s : {-1.f, 1.f}) {
-                decal(c, rig.fwd, rig.side, hup, s * .068f * hk, -.005f * hk, .066f * hk, .07f * hk, draw::hex(0xf7f4ee));
-                decal(c, rig.fwd, rig.side, hup, s * .068f * hk + .008f * hk, -.01f * hk, .04f * hk, .058f * hk, draw::hex(0x6a3e22));
-                decal(c, rig.fwd, rig.side, hup, s * .068f * hk + .01f * hk, -.006f * hk, .018f * hk, .026f * hk, draw::hex(0x24180f));
-                decal(c, rig.fwd, rig.side, hup, s * .066f * hk, .05f * hk, .07f * hk, .016f * hk, tone(L.hair, ink));
+                decal(rig, c, rig.fwd, rig.side, hup, s * .068f * hk, -.005f * hk, .066f * hk, .07f * hk, draw::hex(0xf7f4ee));
+                decal(rig, c, rig.fwd, rig.side, hup, s * .068f * hk + .008f * hk, -.01f * hk, .04f * hk, .058f * hk, draw::hex(0x6a3e22));
+                decal(rig, c, rig.fwd, rig.side, hup, s * .068f * hk + .01f * hk, -.006f * hk, .018f * hk, .026f * hk, draw::hex(0x24180f));
+                decal(rig, c, rig.fwd, rig.side, hup, s * .066f * hk, .05f * hk, .07f * hk, .016f * hk, tone(L.hair, ink));
             }
-            decal(c, rig.fwd, rig.side, hup, 0, -.085f * hk, .055f * hk, .013f * hk, tone(L.skin, .6f));
+            decal(rig, c, rig.fwd, rig.side, hup, 0, -.085f * hk, .055f * hk, .013f * hk, tone(L.skin, .6f));
         }
     }
     draw::ink = inkWas;

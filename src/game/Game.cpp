@@ -119,6 +119,8 @@ void Game::drawGallery() {
 // game's default zoom.
 void Game::drawPeopleGallery() {
     ClearBackground(Color{233, 230, 218, 255});
+    // laid out for a 1350-pixel-tall window, scaled to whatever window it gets
+    const float fit = GetScreenHeight() / 1350.f;
     rlDisableBackfaceCulling();
     const uint32_t skins[4] = {0xf1c8a0, 0xd9a273, 0xa86e45, 0x6e4430}, hairs[4] = {0x2a2420, 0x6a4428, 0xc89850, 0x8a8a88};
     const uint32_t jackets[6] = {0xc8553d, 0x3d7ec8, 0xe0b13a, 0x5a9a5b, 0x8d5bb5, 0x2fa39b};
@@ -143,12 +145,12 @@ void Game::drawPeopleGallery() {
     };
     // a figure whose feet land on a given screen point
     auto at = [&](const Camera2D& cam, float sx, float sy, figure::Facing f, const figure::Look& l, const figure::Pose& p, int detail) {
-        Vector2 t = iso::toTile(sx / cam.zoom, sy / cam.zoom);
+        Vector2 t = iso::toTile(sx * fit / cam.zoom, sy * fit / cam.zoom);
         Vector2 g = iso::wp(t.x, t.y);
         draw::ellipse(g.x, g.y, 9, 4, Color{70, 76, 56, 40});
         figure::draw(t.x, t.y, f, l, p, detail);
     };
-    const float Z = 4.2f;
+    const float Z = 4.2f * fit;
     stage(Z, [&](const Camera2D& cam) {
         const figure::Facing fs[4] = {figure::SE, figure::SW, figure::NE, figure::NW};
         for (int i = 0; i < 4; i++) at(cam, 90 + i * 110, 210, fs[i], look(0), figure::idle(0), 1);
@@ -158,17 +160,31 @@ void Game::drawPeopleGallery() {
         for (int i = 0; i < 8; i++) at(cam, 90 + i * 120, 440, figure::SE, look(1), figure::walk(i * 6.283f / 8), 1);
         for (int i = 0; i < 4; i++) at(cam, 90 + i * 120, 670, figure::NW, look(3), figure::walk(i * 6.283f / 4), 1);
         for (int i = 0; i < 4; i++) at(cam, 600 + i * 120, 670, figure::SW, look(4), figure::walk(i * 6.283f / 4), 1);
+        // every activity, and carrying
+        const char* acts[] = {"chop", "mine", "build", "fish", "forage", "farm", "drink", "eat", "sit", "music", "take"};
+        for (int i = 0; i < 11; i++) at(cam, 70 + i * 112, 920, figure::SE, look(i), figure::activity(acts[i], 1.3f, 0), 1);
+        const char* loads[] = {"wood", "stone", "fish", "food", "meal"};
+        for (int i = 0; i < 5; i++) { auto p = figure::walk(.8f); figure::carrying(p, loads[i]); at(cam, 70 + i * 112, 1150, figure::SW, look(i + 2), p, 1); }
+        auto sick = figure::idle(0);
+        figure::unwell(sick);
+        at(cam, 650, 1150, figure::SE, look(3), sick, 1);
+        at(cam, 790, 1150, figure::SE, look(4), figure::activity("sleep", 0, 0), 1);
+        auto hermit = look(1);
+        hermit.beard = true;
+        at(cam, 960, 1150, figure::SW, hermit, figure::idle(0), 1);
     });
     // at the game's default zoom: simple and full versions side by side
     stage(1.15f, [&](const Camera2D& cam) {
-        for (int i = 0; i < 6; i++) at(cam, 120 + i * 40, 860, figure::SE, look(i), figure::idle(i), 0);
-        for (int i = 0; i < 6; i++) at(cam, 480 + i * 40, 860, figure::SE, look(i), figure::idle(i), 1);
+        for (int i = 0; i < 6; i++) at(cam, 120 + i * 40, 1290, figure::SE, look(i), figure::idle(i), 0);
+        for (int i = 0; i < 6; i++) at(cam, 480 + i * 40, 1290, figure::SE, look(i), figure::idle(i), 1);
     });
-    ui::text(ui::F.bold, "four facings, one settler", 30, 70, 14, ui::T.muted);
-    ui::text(ui::F.bold, "other settlers, and two children", 520, 70, 14, ui::T.muted);
-    ui::text(ui::F.bold, "walking, facing the camera", 30, 300, 14, ui::T.muted);
-    ui::text(ui::F.bold, "walking away, and across", 30, 530, 14, ui::T.muted);
-    ui::text(ui::F.bold, "at the default zoom: simple far-away version, then full", 30, 770, 14, ui::T.muted);
+    ui::text(ui::F.bold, "four facings, one settler", 30 * fit, 70 * fit, 14, ui::T.muted);
+    ui::text(ui::F.bold, "other settlers, and two children", 520 * fit, 70 * fit, 14, ui::T.muted);
+    ui::text(ui::F.bold, "walking, facing the camera", 30 * fit, 300 * fit, 14, ui::T.muted);
+    ui::text(ui::F.bold, "walking away, and across", 30 * fit, 530 * fit, 14, ui::T.muted);
+    ui::text(ui::F.bold, "work and daily life: chop, mine, build, fish, forage, farm, drink, eat, sit, music, take", 30 * fit, 760 * fit, 14, ui::T.muted);
+    ui::text(ui::F.bold, "carrying wood, stone, a fish, a basket, a meal; sick; asleep; the hermit", 30 * fit, 990 * fit, 14, ui::T.muted);
+    ui::text(ui::F.bold, "at the default zoom: simple far-away version, then full", 30 * fit, 1210 * fit, 14, ui::T.muted);
 }
 
 int Game::run() {

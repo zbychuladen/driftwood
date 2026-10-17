@@ -24,7 +24,8 @@ void stockpile(const Ctx& c);
 void building(const Ctx& c, dw::Project& b);
 bool isFlat(const std::string& key);   // drawn under everything else
 void poi(const Ctx& c, const dw::Poi& p);
-void person(const Ctx& c, const dw::Person& p, bool selected);
+// A settler as a box figure. facing is a figure::Facing; detail 0 is the far-away version.
+void person(const Ctx& c, const dw::Person& p, bool selected, int facing, int detail);
 void wolf(const Ctx& c, const dw::Wolf& w);
 float doorHeight(float wallPx);       // doorway height drawn in a wall of this height (world px)
 
