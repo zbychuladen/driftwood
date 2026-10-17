@@ -4,6 +4,7 @@
 #include <cstdio>
 #include "engine/Draw.h"
 #include "game/Art.h"
+#include "game/Figure.h"
 #include "game/Iso.h"
 #include "raylib.h"
 #include "rlgl.h"
@@ -113,6 +114,63 @@ void Game::drawGallery() {
     for (size_t r = 0; r < rows.size(); r++) ui::text(ui::F.bold, rows[r].label, 8, y0 + r * rowH + 8, 12, ui::T.muted);
 }
 
+// A sheet of settler figures for judging the art: facings, looks, a child, the
+// walk cycle, and the simple far-away version beside the full one at the
+// game's default zoom.
+void Game::drawPeopleGallery() {
+    ClearBackground(Color{233, 230, 218, 255});
+    rlDisableBackfaceCulling();
+    const uint32_t skins[4] = {0xf1c8a0, 0xd9a273, 0xa86e45, 0x6e4430}, hairs[4] = {0x2a2420, 0x6a4428, 0xc89850, 0x8a8a88};
+    const uint32_t jackets[6] = {0xc8553d, 0x3d7ec8, 0xe0b13a, 0x5a9a5b, 0x8d5bb5, 0x2fa39b};
+    auto look = [&](int i, bool child = false) {
+        figure::Look l;
+        l.jacket = draw::hex(jackets[i % 6]); l.shirt = draw::hex(i % 2 ? 0xece6da : 0xd9d4c8);
+        l.legs = draw::hex(i % 3 == 0 ? 0x5a6f8e : i % 3 == 1 ? 0x8a7a58 : 0x4e5a4a);
+        l.shoes = draw::hex(i % 2 ? 0xb5523c : 0x6e5440); l.skin = draw::hex(skins[i % 4]); l.hair = draw::hex(hairs[(i + 1) % 4]);
+        l.hairStyle = i % 3; l.shorts = i % 2 == 0; l.child = child;
+        return l;
+    };
+    auto stage = [&](float zoom, auto body) {
+        Camera2D cam{};
+        cam.zoom = zoom;
+        draw::tone = {.32f, .2f, {236, 233, 220, 255}};
+        draw::ink = {std::max(.55f, 1.05f / zoom), {52, 62, 52, 255}};
+        BeginMode2D(cam);
+        body(cam);
+        EndMode2D();
+        draw::tone = {};
+        draw::ink.width = 0;
+    };
+    // a figure whose feet land on a given screen point
+    auto at = [&](const Camera2D& cam, float sx, float sy, figure::Facing f, const figure::Look& l, const figure::Pose& p, int detail) {
+        Vector2 t = iso::toTile(sx / cam.zoom, sy / cam.zoom);
+        Vector2 g = iso::wp(t.x, t.y);
+        draw::ellipse(g.x, g.y, 9, 4, Color{70, 76, 56, 40});
+        figure::draw(t.x, t.y, f, l, p, detail);
+    };
+    const float Z = 4.2f;
+    stage(Z, [&](const Camera2D& cam) {
+        const figure::Facing fs[4] = {figure::SE, figure::SW, figure::NE, figure::NW};
+        for (int i = 0; i < 4; i++) at(cam, 90 + i * 110, 210, fs[i], look(0), figure::idle(0), 1);
+        for (int i = 1; i < 5; i++) at(cam, 520 + (i - 1) * 110, 210, figure::SE, look(i), figure::idle(i), 1);
+        at(cam, 960, 210, figure::SE, look(5, true), figure::idle(0), 1);
+        at(cam, 1060, 210, figure::SW, look(2, true), figure::idle(0), 1);
+        for (int i = 0; i < 8; i++) at(cam, 90 + i * 120, 440, figure::SE, look(1), figure::walk(i * 6.283f / 8), 1);
+        for (int i = 0; i < 4; i++) at(cam, 90 + i * 120, 670, figure::NW, look(3), figure::walk(i * 6.283f / 4), 1);
+        for (int i = 0; i < 4; i++) at(cam, 600 + i * 120, 670, figure::SW, look(4), figure::walk(i * 6.283f / 4), 1);
+    });
+    // at the game's default zoom: simple and full versions side by side
+    stage(1.15f, [&](const Camera2D& cam) {
+        for (int i = 0; i < 6; i++) at(cam, 120 + i * 40, 860, figure::SE, look(i), figure::idle(i), 0);
+        for (int i = 0; i < 6; i++) at(cam, 480 + i * 40, 860, figure::SE, look(i), figure::idle(i), 1);
+    });
+    ui::text(ui::F.bold, "four facings, one settler", 30, 70, 14, ui::T.muted);
+    ui::text(ui::F.bold, "other settlers, and two children", 520, 70, 14, ui::T.muted);
+    ui::text(ui::F.bold, "walking, facing the camera", 30, 300, 14, ui::T.muted);
+    ui::text(ui::F.bold, "walking away, and across", 30, 530, 14, ui::T.muted);
+    ui::text(ui::F.bold, "at the default zoom: simple far-away version, then full", 30, 770, 14, ui::T.muted);
+}
+
 int Game::run() {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
     InitWindow(opt.width, opt.height, "Driftwood");
@@ -147,7 +205,7 @@ int Game::run() {
         if (opt.showJournal) journalOpen = true;
         view.showAllLinks = opt.allLinks;
         speed = 1;
-        if (opt.gallery) for (int i = 0; i < 3; i++) { BeginDrawing(); drawGallery(); EndDrawing(); }
+        if (opt.gallery || opt.people) for (int i = 0; i < 3; i++) { BeginDrawing(); if (opt.people) drawPeopleGallery(); else drawGallery(); EndDrawing(); }
         else for (int i = 0; i < 4; i++) frame(1.f / 60);
         if (opt.bench > 0) {
             // whole frames, sim and drawing, as the player gets them (vsync off so they are not capped)
