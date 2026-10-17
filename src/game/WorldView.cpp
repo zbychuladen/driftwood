@@ -245,7 +245,7 @@ static float darkness(double h) {
 }
 
 // ---------------------------------------------------------------- main draw
-void WorldView::draw(Sim& s, Rectangle map, int selectedId, float realDt, float speed) {
+void WorldView::draw(Sim& s, Rectangle map, int selectedId, float realDt, float speed, Pick inspected) {
     if (groundSeason != s.season() || groundSeed != s.seed) renderGround(s);
     lighting.resize(GetScreenWidth(), GetScreenHeight());
     ClearBackground(FOG);
@@ -276,6 +276,7 @@ void WorldView::draw(Sim& s, Rectangle map, int selectedId, float realDt, float 
     for (auto& b : s.plan) if (b.placed && !b.skip && art::isFlat(b.key) && visible(wp(b.x + b.w / 2.f, b.y + b.h / 2.f), 160)) art::building(ctx, b);
 
     drawFog(s);   // under everything standing, so tall art at the edge of the known island is not cut off
+    drawHighlight(s, inspected);
     Rectangle viewR{tl.x - 90, tl.y - 90, br.x - tl.x + 180, br.y - tl.y + 250};
     for (auto& d : sorted(collect(s, ctx, viewR, selectedId))) d.draw(ctx);
     EndMode2D();
@@ -426,6 +427,46 @@ void WorldView::drawLabels(Sim& s, int selectedId) {
             ui::text(ui::F.bold, L.text, r.x + 6, r.y + 1.5f, size, sel ? Color{30, 42, 35, 255} : Color{244, 241, 232, 255});
         }
     }
+}
+
+Pick WorldView::pickAt(Sim& s, Vector2 screen) const {
+    V2 w = GetScreenToWorld2D(screen, cam);
+    art::Ctx ctx{&s, s.tMin, s.season(), s.hour()};
+    ctx.effects = false;
+    // things whose ground point lies below the click (tall art rises far above it) or a little above
+    Rectangle nearby{w.x - 260, w.y - 120, 520, 520};
+    auto items = sorted(collect(s, ctx, nearby, -1));
+    for (auto it = items.rbegin(); it != items.rend(); ++it) {
+        const auto& a = it->at;
+        if (w.x < a.sx0 || w.x > a.sx1 || w.y < a.sy0 || w.y > a.sy1) continue;
+        draw::Box box;
+        draw::Probe pr{w};
+        draw::record(&box);
+        draw::probe(&pr);
+        it->draw(ctx);
+        draw::probe(nullptr);
+        draw::record(nullptr);
+        if (pr.hit) return {it->kind, it->id, true};
+    }
+    // settlers are small; a click just beside one still counts
+    int id = const_cast<WorldView*>(this)->pick(s, screen);
+    if (id >= 0) return {Drawable::PERSON, id, true};
+    return {};
+}
+
+// A gold outline on the ground around what the card is describing.
+void WorldView::drawHighlight(Sim& s, Pick p) {
+    if (!p.ok || p.kind == Drawable::PERSON) return;
+    float x = 0, y = 0, w = 1, h = 1;
+    if (p.kind == Drawable::BUILDING) { auto* b = s.projectById(p.id); if (!b) return; x = b->x; y = b->y; w = b->w; h = b->h; }
+    else if (p.kind == Drawable::OBJECT) { if (p.id < 0 || p.id >= int(s.objs.size())) return; x = s.objs[p.id].x; y = s.objs[p.id].y; }
+    else if (p.kind == Drawable::POI) { if (p.id < 0 || p.id >= int(s.pois.size())) return; x = s.pois[p.id].x; y = s.pois[p.id].y; }
+    else if (p.kind == Drawable::STOCKPILE) { x = s.stockX; y = s.stockY; w = 2; }
+    else if (p.kind == Drawable::BOAT) { x = s.boatX; y = s.boatY; }
+    else if (p.kind == Drawable::WOLF && s.wolf) { x = std::floor(s.wolf->x); y = std::floor(s.wolf->y); }
+    V2 c[4] = {wp(x, y), wp(x + w, y), wp(x + w, y + h), wp(x, y + h)};
+    draw::quad(c[0], c[1], c[2], c[3], draw::rgba(255, 210, 122, .18f), draw::rgba(255, 210, 122, .18f), draw::rgba(255, 210, 122, .18f), draw::rgba(255, 210, 122, .18f));
+    for (int i = 0; i < 4; i++) draw::line(c[i].x, c[i].y, c[(i + 1) % 4].x, c[(i + 1) % 4].y, 2.2f / cam.zoom + 1, draw::hex(0xffd27a));
 }
 
 float WorldView::bodyHeight(const Person& p) { return px(p.child ? scale::CHILD : scale::PERSON) * .55f; }

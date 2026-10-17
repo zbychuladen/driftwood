@@ -56,7 +56,34 @@ void Game::drawHud() {
     drawTopBar();
     drawSidebar();
     drawJournal();
+    drawInspect();
     if (!sim.pendingFate.empty()) drawFate();
+}
+
+// The info card for a clicked building, tree, rock or place, top left of the map.
+void Game::drawInspect() {
+    if (!inspected.ok) { inspectH = 0; return; }
+    Info in = describe(sim, inspected);
+    float x = 16, y = rTop.height + 16, w = 340, pad = 16, tw = w - pad * 2;
+    // measure first, then draw at that height
+    float h = pad + 16 + wrapped(F.head, in.title, 0, 0, tw - 30, 22, WHITE, false, 1.1f) + 4;
+    if (!in.desc.empty()) h += wrapped(F.body, in.desc, 0, 0, tw, 14.5f, WHITE, false) + 10;
+    for (auto& [k, v] : in.rows) h += std::max(20.f, wrapped(F.body, v, 0, 0, tw - 104, 14, WHITE, false) + 6);
+    h += pad - 4;
+    inspectH = h;
+    Rectangle r{x, y, w, h};
+    DrawRectangleRounded(r, .05f, 8, Color{20, 27, 24, 236});
+    DrawRectangleRoundedLinesEx(r, .05f, 8, 1, T.line);
+    text(F.bold, in.kind, x + pad, y + pad, 12, T.accent);
+    if (button({x + w - 40, y + 10, 28, 26}, "x", true, false, 14)) inspected = {};
+    float yy = y + pad + 16;
+    yy += wrapped(F.head, in.title, x + pad, yy, tw - 30, 22, T.text, true, 1.1f) + 4;
+    if (!in.desc.empty()) yy += wrapped(F.body, in.desc, x + pad, yy, tw, 14.5f, T.muted) + 10;
+    for (auto& [k, v] : in.rows) {
+        text(F.bold, k, x + pad, yy, 13, T.muted);
+        float vh = wrapped(F.body, v, x + pad + 104, yy - 1, tw - 104, 14, T.text);
+        yy += std::max(20.f, vh + 6);
+    }
 }
 
 void Game::drawTopBar() {

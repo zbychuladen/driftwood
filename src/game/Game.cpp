@@ -39,6 +39,7 @@ void Game::frame(float dt) {
     ui::block(rTop);
     ui::block(rSide);
     ui::block(rJournal);
+    if (inspected.ok) ui::block({16, rTop.height + 16, 340, inspectH});
     bool fate = !sim.pendingFate.empty();
     if (fate) ui::block(rMap);
     view.handleInput(dt, rMap, !ui::mouseOverUi() && !fate);
@@ -48,13 +49,20 @@ void Game::frame(float dt) {
         if (IsKeyPressed(KEY_TWO)) speed = 2;
         if (IsKeyPressed(KEY_THREE)) speed = 5;
         if (IsKeyPressed(KEY_J)) journalOpen = !journalOpen;
+        if (IsKeyPressed(KEY_ESCAPE)) inspected = {};
     }
     if (!fate && speed > 0) sim.step(dt * speed * MIN_PER_SEC);
-    if (view.clickedMap()) select(view.pick(sim, view.clickPos()), false);
+    if (view.clickedMap()) {
+        // a settler opens their card in the sidebar; anything else gets the info card
+        Pick p = view.pickAt(sim, view.clickPos());
+        select(p.ok && p.kind == Drawable::PERSON ? p.id : -1, false);
+        inspected = p.ok && p.kind != Drawable::PERSON ? p : Pick{};
+    }
+    if (inspected.ok && describe(sim, inspected).title.empty()) inspected = {};   // it is gone
 
     BeginDrawing();
     rlDisableBackfaceCulling();   // 2D shapes come in both windings
-    view.draw(sim, rMap, selected, dt, sim.pendingFate.empty() ? speed : 0);
+    view.draw(sim, rMap, selected, dt, sim.pendingFate.empty() ? speed : 0, inspected);
     drawHud();
     EndDrawing();
 }
@@ -95,9 +103,15 @@ int Game::run() {
         for (int i = 0; i < 4; i++) frame(1.f / 60);
         if (opt.hasPick) {
             // Report what a click at this screen point would select (for scripted checks).
-            int id = view.pick(sim, {opt.pickX, opt.pickY});
-            if (auto* p = sim.person(id)) std::printf("pick: person %d %s | %s\n", p->id, p->name.c_str(), p->doing.c_str());
-            else {
+            Pick p = view.pickAt(sim, {opt.pickX, opt.pickY});
+            Info in = describe(sim, p);
+            if (p.ok) {
+                std::printf("pick: %s | %s", in.kind.c_str(), in.title.c_str());
+                for (auto& [k, v] : in.rows) std::printf(" | %s: %s", k.c_str(), v.c_str());
+                std::printf("\n");
+                if (p.kind != Drawable::PERSON) inspected = p; else select(p.id, false);
+                for (int i = 0; i < 2; i++) frame(1.f / 60);   // the capture reads the frame before last
+            } else {
                 // say where the closest settler was, so a script can aim better
                 const dw::Person* near = nullptr;
                 Vector2 at{};
@@ -110,7 +124,7 @@ int Game::run() {
                     float d = std::hypot(sc.x - opt.pickX, sc.y - opt.pickY);
                     if (d < bd) { bd = d; near = &q; at = sc; }
                 }
-                if (near) std::printf("pick: none (nearest %s at %.0f,%.0f)\n", near->name.c_str(), at.x, at.y);
+                if (near) std::printf("pick: none (nearest settler %s at %.0f,%.0f)\n", near->name.c_str(), at.x, at.y);
                 else std::printf("pick: none\n");
             }
         }

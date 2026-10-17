@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include "engine/Ui.h"
+#include "game/Inspect.h"
 #include "game/WorldView.h"
 #include "sim/Sim.h"
 
@@ -40,6 +41,7 @@ private:
     void drawCamp(Rectangle area);
     void drawJournal();
     void drawFate();
+    void drawInspect();
     float settlerCard(dw::Person& p, float x, float y, float w, bool drawIt);
     void select(int id, bool center);
 
@@ -47,6 +49,8 @@ private:
     dw::Sim sim;
     WorldView view;
     int selected = -1;
+    Pick inspected;             // a non-settler the info card describes
+    float inspectH = 0;         // the card's height last frame, so it can block map clicks
     float speed = 1, prevSpeed = 1;
     int tab = 0;
     bool journalOpen = false, sandFocus = false;   // collapsed to a one-line strip so the map stays clear

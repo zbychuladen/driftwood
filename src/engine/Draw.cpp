@@ -19,11 +19,22 @@ Color apply(Color c) { if (alpha < 1) c.a = u8(c.a * alpha); return c; }
 struct Xf { V2 at, from; float k; };
 static std::vector<Xf> stack;
 static Box* rec = nullptr;
+static Probe* prb = nullptr;
+static V2 tri3[3];
+static int triN = 0;
 
 void push(V2 pivot, float k) { stack.push_back({pivot, pivot, k}); }
 void push(V2 at, float k, V2 from) { stack.push_back({at, from, k}); }
 void pop() { if (!stack.empty()) stack.pop_back(); }
-void record(Box* box) { rec = box; }
+void record(Box* box) { rec = box; triN = 0; }
+void probe(Probe* p) { prb = p; triN = 0; }
+
+static bool inside(V2 p, V2 a, V2 b, V2 c) {
+    auto s = [](V2 p1, V2 p2, V2 p3) { return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y); };
+    float d1 = s(p, a, b), d2 = s(p, b, c), d3 = s(p, c, a);
+    bool neg = d1 < 0 || d2 < 0 || d3 < 0, pos = d1 > 0 || d2 > 0 || d3 > 0;
+    return !(neg && pos);
+}
 
 static V2 xf(V2 p) {
     for (auto it = stack.rbegin(); it != stack.rend(); ++it) p = {it->at.x + (p.x - it->from.x) * it->k, it->at.y + (p.y - it->from.y) * it->k};
@@ -35,7 +46,15 @@ static void begin(int verts) { if (rec) return; rlCheckRenderBatchLimit(verts); 
 static void end() { if (!rec) rlEnd(); }
 static void vtx(V2 p, Color c) {
     p = xf(p);
-    if (rec) { rec->x0 = std::min(rec->x0, p.x); rec->y0 = std::min(rec->y0, p.y); rec->x1 = std::max(rec->x1, p.x); rec->y1 = std::max(rec->y1, p.y); return; }
+    if (rec) {
+        rec->x0 = std::min(rec->x0, p.x); rec->y0 = std::min(rec->y0, p.y); rec->x1 = std::max(rec->x1, p.x); rec->y1 = std::max(rec->y1, p.y);
+        if (prb) {
+            // primitives emit whole triangles, three vertices at a time
+            tri3[triN++] = p;
+            if (triN == 3) { triN = 0; if (c.a >= 90 * alpha && !prb->hit && inside(prb->at, tri3[0], tri3[1], tri3[2])) prb->hit = true; }
+        }
+        return;
+    }
     rlColor4ub(c.r, c.g, c.b, c.a);
     rlVertex2f(p.x, p.y);
 }

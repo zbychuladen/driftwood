@@ -17,15 +17,26 @@ struct Drawable {
     std::function<void(const art::Ctx&)> draw;
 };
 
+// What a click landed on. ok is false for empty ground or sea.
+struct Pick {
+    Drawable::Kind kind = Drawable::PERSON;
+    int id = -1;
+    bool ok = false;
+    bool is(Drawable::Kind k, int i) const { return ok && kind == k && id == i; }
+};
+
 class WorldView {
 public:
     void init(dw::Sim& sim);
     void unload();
     // Camera input. mapRect is the visible map area (excludes the sidebar).
     void handleInput(float dt, Rectangle mapRect, bool pointerFree);
-    void draw(dw::Sim& sim, Rectangle mapRect, int selectedId, float realDt, float speed);
+    void draw(dw::Sim& sim, Rectangle mapRect, int selectedId, float realDt, float speed, Pick inspected = {});
     // Returns a person id under the screen point, or -1.
     int pick(dw::Sim& sim, Vector2 screen);
+    // Whatever is drawn front-most under the screen point: its visible shape
+    // counts, not a box around it. Settlers also answer to a near miss.
+    Pick pickAt(dw::Sim& sim, Vector2 screen) const;
     // Height above the feet (world px) of the point a click on a person aims for.
     static float bodyHeight(const dw::Person& p);
     // Everything standing in the world inside the given world-pixel rectangle
@@ -45,6 +56,7 @@ private:
     void drawFog(dw::Sim& sim);
     void drawWeather(dw::Sim& sim, float dt, float speed);
     void drawLabels(dw::Sim& sim, int selectedId);
+    void drawHighlight(dw::Sim& sim, Pick p);
     void clampCam();
 
     RenderTexture2D ground{};
