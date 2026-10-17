@@ -12,6 +12,16 @@ using V2 = Vector2;
 
 extern float alpha;                     // multiplies every color's alpha
 
+// World tone: every color is pulled toward its own grey by desat and then
+// toward paper by wash, for the soft illustrated look. Off when both are 0.
+struct Tone { float desat = 0, wash = 0; Color paper{236, 233, 220, 255}; };
+extern Tone tone;
+
+// Ink outlines: while width > 0, solid filled shapes (polygons, ellipses)
+// also get a thin outline in this color. Faint and tiny shapes are skipped.
+struct Ink { float width = 0; Color color{52, 62, 52, 255}; };
+extern Ink ink;
+
 // Scale everything drawn until pop() about a pivot: p' = pivot + (p - pivot) * k.
 // Lets art written in absolute coordinates be resized as a whole. Nests.
 // push(at, k, from) also moves: p' = at + (p - from) * k, for art drawn around (0,0).

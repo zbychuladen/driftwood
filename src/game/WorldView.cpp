@@ -17,7 +17,10 @@ using iso::P;
 using iso::wp;
 using scale::px;
 
-static const Color FOG = {22, 32, 43, 255};
+// Unexplored land and the world's edge are blank paper, as on an illustrated map.
+static const Color FOG = {233, 230, 218, 255};
+// The soft illustrated look: colors pulled toward grey and paper (see draw::Tone).
+static const draw::Tone WORLD_TONE{.32f, .2f, {236, 233, 220, 255}};
 
 void WorldView::init(Sim& sim) {
     if (!ground.id) {
@@ -103,10 +106,11 @@ void WorldView::renderGround(Sim& s) {
         const int D[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
         for (auto& d : D) { int nx = x + d[0], ny = y + d[1]; if (!Sim::inb(nx, ny)) continue; int j = Sim::idx(nx, ny); if (distLand[j] > distLand[i] + 1) { distLand[j] = distLand[i] + 1; q.push_back(j); } }
     }
-    const uint32_t grass[4] = {0x689e50, 0x709640, 0x9c8e48, 0xe4e9ec};
-    const uint32_t forest[4] = {0x4a7c40, 0x507434, 0x846836, 0xd6dde2};
-    const uint32_t sand[4] = {0xe2ce9a, 0xe8d49e, 0xdec694, 0xe8e6e0};
-    const uint32_t hill[4] = {0x7c8c60, 0x808658, 0x968054, 0xccd2d6};
+    // pale sage and cream, the seasons only nudging the hue
+    const uint32_t grass[4] = {0xb4c496, 0xadbd8a, 0xc4bc8e, 0xeceee9};
+    const uint32_t forest[4] = {0x9cae80, 0x96a878, 0xae9f76, 0xdfe3df};
+    const uint32_t sand[4] = {0xeee3c4, 0xf0e4c2, 0xeadcbc, 0xeeece5};
+    const uint32_t hill[4] = {0xb0b592, 0xabb08a, 0xbcae88, 0xd9dcdc};
     Mulberry r(s.seed + 7);
     std::vector<Color> col(N);
     waterTiles.clear();
@@ -116,7 +120,7 @@ void WorldView::renderGround(Sim& s) {
         if (t < 2) {
             waterTiles.push_back(i);
             float dd = s.fresh[i] ? (t == DEEP ? 1.2f : .4f) : std::clamp(distLand[i] / 4.f, 0.f, 1.4f);
-            c = s.fresh[i] ? draw::rgba(int(66 - dd * 14), int(128 - dd * 24), int(130 - dd * 12)) : draw::rgba(int(78 - dd * 34), int(156 - dd * 52), int(176 - dd * 40));
+            c = s.fresh[i] ? draw::rgba(int(118 - dd * 14), int(160 - dd * 20), int(150 - dd * 12)) : draw::rgba(int(132 - dd * 30), int(174 - dd * 36), int(184 - dd * 30));
             if (season == 3) c = s.fresh[i] ? draw::rgba(186, 210, 220) : draw::shade(c, .92f);
         } else {
             uint32_t base = t == SAND ? sand[season] : t == FOREST ? forest[season] : t == HILL ? hill[season] : grass[season];
@@ -147,13 +151,13 @@ void WorldView::renderGround(Sim& s) {
         draw::quad(m, d, a, m, c, cd, ca, c);
     }
     // grass blades, flowers, sand speckles, snow
-    for (int k = 0; k < 26000; k++) {
+    for (int k = 0; k < 12000; k++) {
         float tx = r() * GW, ty = r() * GH;
         int t = s.tt[Sim::idx(int(tx), int(ty))];
         V2 p = wp(tx, ty);
         if (t >= 3) {
             if (season == 3) { draw::rect(p.x, p.y, 1.6f, 1.2f, draw::rgba(255, 255, 255, .3f + r() * .4f)); continue; }
-            Color bl = r() < .5f ? draw::rgba(30, 60, 20, .2f + r() * .15f) : draw::rgba(220, 240, 160, .14f + r() * .12f);
+            Color bl = r() < .5f ? draw::rgba(60, 80, 50, .1f + r() * .08f) : draw::rgba(250, 250, 230, .12f + r() * .1f);
             draw::line(p.x, p.y, p.x + (r() - .5f) * 2, p.y - 2 - r() * 3, 1, bl);
             if (t == GRASS && r() < .04f && season <= 1) { const uint32_t fl[4] = {0xfff7d6, 0xf6d24a, 0xe98ab3, 0xc9b6f2}; draw::circle(p.x, p.y, 1.3f, draw::hex(fl[int(r() * 4) % 4])); }
             if (season == 2 && r() < .05f) { const uint32_t lv[3] = {0xc8642c, 0xe0a83a, 0xa9442a}; draw::rect(p.x, p.y, 2.4f, 1.4f, draw::hex(lv[int(r() * 3) % 3])); }
@@ -246,6 +250,7 @@ static float darkness(double h) {
 
 // ---------------------------------------------------------------- main draw
 void WorldView::draw(Sim& s, Rectangle map, int selectedId, float realDt, float speed, Pick inspected) {
+    draw::tone = WORLD_TONE;
     if (groundSeason != s.season() || groundSeed != s.seed) renderGround(s);
     lighting.resize(GetScreenWidth(), GetScreenHeight());
     ClearBackground(FOG);
@@ -270,7 +275,7 @@ void WorldView::draw(Sim& s, Rectangle map, int selectedId, float realDt, float 
     // worn ground around camp
     {
         V2 c = wp(s.campX + .5f, s.campY + .5f);
-        float wear = std::min(.45f, s.day() * .03f + .08f);
+        float wear = std::min(.28f, s.day() * .02f + .06f);
         draw::radial(c.x, c.y, 5 * iso::HW, 5 * iso::HH, draw::rgba(140, 110, 70, wear), draw::rgba(140, 110, 70, 0), 40);
     }
     for (auto& b : s.plan) if (b.placed && !b.skip && art::isFlat(b.key) && visible(wp(b.x + b.w / 2.f, b.y + b.h / 2.f), 160)) art::building(ctx, b);
@@ -278,16 +283,19 @@ void WorldView::draw(Sim& s, Rectangle map, int selectedId, float realDt, float 
     drawFog(s);   // under everything standing, so tall art at the edge of the known island is not cut off
     drawHighlight(s, inspected);
     Rectangle viewR{tl.x - 90, tl.y - 90, br.x - tl.x + 180, br.y - tl.y + 250};
+    draw::ink = {std::max(.55f, 1.05f / cam.zoom), {52, 62, 52, 255}};
     for (auto& d : sorted(collect(s, ctx, viewR, selectedId))) d.draw(ctx);
+    draw::ink.width = 0;
     drawLinks(s, selectedId, inspected);
     EndMode2D();
 
+    draw::tone = {};
     // screen-space atmosphere
     drawWeather(s, realDt, speed);
     double h = s.hour();
     float sw = float(GetScreenWidth()), shh = float(GetScreenHeight());
     if ((h >= 17 && h < 20) || (h >= 5.5 && h < 7.5)) draw::rect(0, 0, sw, shh, draw::rgba(255, 140, 60, .1f));
-    if (s.weather == "storm" || s.weather == "rain") draw::rect(0, 0, sw, shh, draw::rgba(40, 50, 70, s.weather == "storm" ? .22f : .12f));
+    if (s.weather == "storm" || s.weather == "rain") draw::rect(0, 0, sw, shh, draw::rgba(60, 70, 90, s.weather == "storm" ? .14f : .06f));
     float dk = darkness(h);
     if (dk > 0) {
         std::vector<Light> lights;
@@ -427,13 +435,18 @@ void WorldView::drawLabels(Sim& s, int selectedId) {
         if (L.bubble) {
             V2 head = GetWorldToScreen2D(wp(L.p->x, L.p->y), cam);
             DrawRectangleRounded(r, .8f, 8, Color{255, 255, 255, 240});
+            DrawRectangleRoundedLinesEx(r, .8f, 8, 1, Color{52, 62, 52, 140});
             // the tail points at the speaker even when the bubble had to move
             float tx = std::clamp(head.x, r.x + 8, r.x + r.width - 8);
             DrawTriangle({tx - 4, r.y + r.height - 1}, {tx, r.y + r.height + 5}, {tx + 4, r.y + r.height - 1}, Color{255, 255, 255, 240});
             ui::text(ui::F.body, L.text, r.x + 8, r.y + 3, 14, Color{30, 42, 35, 255});
         } else {
-            DrawRectangleRounded(r, 1, 8, sel ? Color{255, 210, 122, 245} : L.p->status != "member" ? Color{80, 60, 40, 160} : Color{18, 26, 22, 160});
-            ui::text(ui::F.bold, L.text, r.x + 6, r.y + 1.5f, size, sel ? Color{30, 42, 35, 255} : Color{244, 241, 232, 255});
+            // light tags with an ink edge, like map labels; the selected one in the accent green
+            Color bg = sel ? Color{79, 107, 69, 250} : L.p->status != "member" ? Color{122, 96, 64, 235} : Color{250, 249, 244, 235};
+            Color fg = sel || L.p->status != "member" ? Color{255, 255, 255, 255} : Color{38, 52, 40, 255};
+            DrawRectangleRounded(r, .45f, 6, bg);
+            DrawRectangleRoundedLinesEx(r, .45f, 6, 1, Color{52, 62, 52, 170});
+            ui::text(ui::F.bold, L.text, r.x + 6, r.y + 1.5f, size, fg);
         }
     }
 }
@@ -502,8 +515,8 @@ static void dashed(V2 a, V2 b, float w, Color c, double t, float zoom) {
 
 void WorldView::drawLinks(Sim& s, int selectedId, Pick inspected) {
     captions.clear();
-    float z = cam.zoom, w = 2.2f / z + .6f;
-    const Color work = draw::hex(0xe0a33a), haul = draw::rgba(196, 128, 62, .85f), social = draw::hex(0xb99ae6);
+    float z = cam.zoom, w = 2.6f / z + .7f;
+    const Color work = draw::hex(0xa8701e), haul = draw::rgba(132, 84, 44, .9f), social = draw::hex(0x7a58aa);
     V2 stock = wp(s.stockX + 1.f, s.stockY + .5f);
     for (auto& p : s.people) {
         if (p.dead || p.hidden || !s.isExplored(p.x, p.y)) continue;

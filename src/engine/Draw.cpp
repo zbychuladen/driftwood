@@ -6,6 +6,8 @@
 namespace draw {
 
 float alpha = 1.f;
+Tone tone;
+Ink ink;
 
 static unsigned char u8(float v) { return (unsigned char)std::clamp(int(std::lround(v)), 0, 255); }
 
@@ -14,7 +16,15 @@ Color rgba(int r, int g, int b, float a) { return Color{u8(r), u8(g), u8(b), u8(
 Color shade(Color c, float f) { return Color{u8(c.r * f), u8(c.g * f), u8(c.b * f), c.a}; }
 Color mix(Color a, Color b, float t) { return Color{u8(a.r + (b.r - a.r) * t), u8(a.g + (b.g - a.g) * t), u8(a.b + (b.b - a.b) * t), u8(a.a + (b.a - a.a) * t)}; }
 Color withA(Color c, float a) { c.a = u8(a * 255); return c; }
-Color apply(Color c) { if (alpha < 1) c.a = u8(c.a * alpha); return c; }
+Color apply(Color c) {
+    if (tone.desat > 0 || tone.wash > 0) {
+        float g = c.r * .3f + c.g * .59f + c.b * .11f;
+        auto ch = [&](float v, float paper) { v += (g - v) * tone.desat; return v + (paper - v) * tone.wash; };
+        c = Color{u8(ch(c.r, tone.paper.r)), u8(ch(c.g, tone.paper.g)), u8(ch(c.b, tone.paper.b)), c.a};
+    }
+    if (alpha < 1) c.a = u8(c.a * alpha);
+    return c;
+}
 
 struct Xf { V2 at, from; float k; };
 static std::vector<Xf> stack;
@@ -35,6 +45,9 @@ static bool inside(V2 p, V2 a, V2 b, V2 c) {
     bool neg = d1 < 0 || d2 < 0 || d3 < 0, pos = d1 > 0 || d2 > 0 || d3 > 0;
     return !(neg && pos);
 }
+
+// Combined scale of the transform stack, so outlines keep one width.
+static float scaleNow() { float k = 1; for (auto& x : stack) k *= x.k; return k; }
 
 static V2 xf(V2 p) {
     for (auto it = stack.rbegin(); it != stack.rend(); ++it) p = {it->at.x + (p.x - it->from.x) * it->k, it->at.y + (p.y - it->from.y) * it->k};
@@ -59,6 +72,28 @@ static void vtx(V2 p, Color c) {
     rlVertex2f(p.x, p.y);
 }
 
+// Outline a closed shape in ink when the fill is solid and big enough to read.
+static void outline(const V2* pts, int n, Color fill) {
+    if (ink.width <= 0 || rec || fill.a < 200 || n < 3) return;
+    // fans often start with a point in the middle; trace only the rim then
+    if (n > 3) {
+        bool in = false;
+        for (int i = 1, j = n - 1; i < n; j = i++)
+            if ((pts[i].y > pts[0].y) != (pts[j].y > pts[0].y) && pts[0].x < (pts[j].x - pts[i].x) * (pts[0].y - pts[i].y) / (pts[j].y - pts[i].y) + pts[i].x) in = !in;
+        if (in) { pts++; n--; }
+    }
+    float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
+    for (int i = 0; i < n; i++) { V2 p = xf(pts[i]); x0 = std::min(x0, p.x); y0 = std::min(y0, p.y); x1 = std::max(x1, p.x); y1 = std::max(y1, p.y); }
+    if (x1 - x0 < 3.5f && y1 - y0 < 3.5f) return;
+    Color c = ink.color;
+    c.a = u8(c.a * alpha);
+    float w = ink.width;
+    Ink saved = ink;
+    ink.width = 0;   // the outline's own lines are not outlined
+    for (int i = 0; i < n; i++) { V2 a = pts[i], b = pts[(i + 1) % n]; line(a.x, a.y, b.x, b.y, w / (stack.empty() ? 1 : scaleNow()), c); }
+    ink = saved;
+}
+
 void poly(const V2* pts, int n, Color c) {
     if (n < 3) return;
     c = apply(c);
@@ -66,6 +101,7 @@ void poly(const V2* pts, int n, Color c) {
     begin((n - 2) * 3);
     for (int i = 1; i + 1 < n; i++) { vtx(pts[0], c); vtx(pts[i], c); vtx(pts[i + 1], c); }
     end();
+    outline(pts, n, c);
 }
 void poly(std::initializer_list<V2> pts, Color c) { poly(pts.begin(), int(pts.size()), c); }
 void polyV(const std::vector<V2>& pts, Color c) { poly(pts.data(), int(pts.size()), c); }
@@ -93,6 +129,11 @@ void ellipse(float cx, float cy, float rx, float ry, Color c, int seg) {
         vtx({cx + std::cos(a1) * rx, cy + std::sin(a1) * ry}, c);
     }
     end();
+    if (ink.width > 0 && !rec && c.a >= 200 && rx > 1.8f && ry > 1.8f) {
+        std::vector<V2> rim;
+        for (int i = 0; i < seg; i++) { float a = 6.2831853f * i / seg; rim.push_back({cx + std::cos(a) * rx, cy + std::sin(a) * ry}); }
+        outline(rim.data(), int(rim.size()), c);
+    }
 }
 void circle(float cx, float cy, float r, Color c) { ellipse(cx, cy, r, r, c); }
 
@@ -144,6 +185,7 @@ void polyGradX(const std::vector<V2>& p, float x0, float x1, Color l, Color r) {
     begin(int(p.size()) * 3);
     for (size_t i = 1; i + 1 < p.size(); i++) { vtx(p[0], col(p[0])); vtx(p[i], col(p[i])); vtx(p[i + 1], col(p[i + 1])); }
     end();
+    outline(p.data(), int(p.size()), col(p[0]));
 }
 
 std::vector<V2> arc(float cx, float cy, float rx, float ry, float a0, float a1, int seg) {

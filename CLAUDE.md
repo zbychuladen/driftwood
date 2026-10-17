@@ -37,6 +37,11 @@ tools/shots.sh after         # on yours, then open .shots/index.html (git-ignore
 - `src/sim` must not include raylib or anything graphical. It is deterministic for a given seed (behavior RNG is `Sim::gen`); keep it that way so tests stay meaningful.
 - New player actions go through public `Sim` methods; the HUD only reads state and calls them.
 - Art lives in `src/game/Art.cpp`, one function per object type, drawn in world pixels via `iso::wp` / `iso::P`. Keep objects independent so they can be swapped for sprites one at a time.
+- Sizes come from `src/game/Scale.h` (metres; a tile is 2 m, a person 1.7 m). `game_tests` measures the drawn art against it, so a new object gets a row there and in the `scale` test.
+- Draw order is not a depth number: `WorldView::collect` gives each drawable a ground footprint and its measured screen box, and `src/game/Depth` sorts them. New kinds of things go through `collect` with an honest footprint.
+- Clicks hit the drawn shape (`draw::Probe`), and `src/game/Inspect` builds each card from sim state. A new object type needs a card there; the test checks every drawable has one.
+- What a settler is doing for the map comes from `Person::focus`, set where the job is handed out (`setQ`'s last argument). A new job sets one; `sim_tests` checks everyone at work has a focus.
+- The look: world colors pass through `draw::tone` and solid shapes get `draw::ink` outlines (both set in `WorldView::draw`), so pick ordinary colors and let the tone soften them. UI colors are the light `ui::T` theme; `game_tests` checks text contrast (WCAG AA).
 - 2D shapes are drawn with backface culling disabled (both windings occur); see `Game::frame`.
 - People live in a `std::deque` and projects in a `std::deque` so pointers stay valid when new ones are added. Objects are a `std::vector`; refer to them by index in lambdas.
 - Journal text: plain, warm sentences. No em dashes.

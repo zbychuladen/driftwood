@@ -1,6 +1,7 @@
 #include "game/Art.h"
 #include <algorithm>
 #include <cmath>
+#include <set>
 #include "engine/Draw.h"
 #include "game/Iso.h"
 #include "game/Scale.h"
@@ -9,6 +10,9 @@ using namespace draw;
 using iso::P;
 using iso::wp;
 using scale::px;
+
+// Soft ground shadows under everything that stands.
+static const Color SHADOW = {70, 76, 56, 40};
 
 namespace art {
 
@@ -91,7 +95,7 @@ float doorHeight(float wallPx) { return std::min(px(scale::DOOR), wallPx - px(.2
 static V2 roundHut(float x, float y, float w, float h, float wh, float rh, bool snow) {
     V2 c = P(x + w / 2, y + h / 2);
     float rx = w * iso::HW * .62f, ry = rx * .5f;
-    ellipse(c.x + 6, c.y + 3, rx * 1.15f, ry * 1.1f, rgba(30, 30, 20, .28f));
+    ellipse(c.x + 6, c.y + 3, rx * 1.15f, ry * 1.1f, SHADOW);
     std::vector<V2> wall = {{c.x - rx, c.y - wh}, {c.x + rx, c.y - wh}};
     auto bottom = arc(c.x, c.y, rx, ry, 0, 3.14159f, 16);
     wall.insert(wall.end(), bottom.begin(), bottom.end());
@@ -117,10 +121,10 @@ void tree(const Ctx& c, const dw::Obj& o) {
     // the art below is drawn k units tall per unit of its natural height
     bool bare = !o.palm && !o.conifer && s == 3;
     float H = o.palm ? scale::PALM : o.conifer ? scale::CONIFER : scale::BROADLEAF;
-    float natural = o.palm ? 33.f : o.conifer ? 40.f : bare ? 29.f : 36.f;
+    float natural = o.palm ? 33.f : o.conifer ? 40.f : bare ? 26.f : 36.f;
     float x = p.x, y = p.y, k = px(H) / natural * o.size * (o.sapling ? .35f + o.grow * .6f : 1);
     float sway = std::sin(float(c.t * .02 + o.i)) * 1.2f * k * (c.sim->weather == "storm" ? 3 : 1);
-    ellipse(x + 6 * k, y + 1, 12 * k, 5 * k, rgba(20, 40, 20, .25f));
+    ellipse(x + 6 * k, y + 1, 12 * k, 5 * k, SHADOW);
     if (o.palm) {
         V2 top{x + 2 * k + sway, y - 26 * k};
         curve({x, y}, {x + 4 * k, y - 14 * k}, top, 3 * k, hex(0x8a6a43));
@@ -152,7 +156,6 @@ void tree(const Ctx& c, const dw::Obj& o) {
             float an = -1.5708f + (b - 2) * .45f;
             line(x, y - 11 * k, x + std::cos(an) * 13 * k + sway, y - 11 * k + std::sin(an) * 15 * k, 1.6f * k, hex(0x5b4330));
         }
-        circle(x + sway, y - 24 * k, 5 * k, rgba(255, 255, 255, .7f));
         return;
     }
     uint32_t pal[3];
@@ -179,7 +182,7 @@ void rock(const Ctx& c, const dw::Obj& o) {
     V2 p = wp(o.x + .5f, o.y + .6f);
     float x = p.x, y = p.y, k = px(scale::ROCK) / 12.f * o.size;
     bool sn = c.season == 3;
-    ellipse(x + 3, y + 1, 11 * k, 4.5f * k, rgba(20, 30, 20, .25f));
+    ellipse(x + 3, y + 1, 11 * k, 4.5f * k, SHADOW);
     poly({{x - 9 * k, y}, {x - 7 * k, y - 8 * k}, {x - 1 * k, y - 12 * k}, {x + 6 * k, y - 9 * k}, {x + 9 * k, y - 2 * k}, {x + 5 * k, y + 1 * k}}, sn ? hex(0x9aa1a5) : hex(0x8a8d86));
     poly({{x - 1 * k, y - 12 * k}, {x + 6 * k, y - 9 * k}, {x + 9 * k, y - 2 * k}, {x + 5 * k, y + 1 * k}, {x + 1 * k, y - 5 * k}}, sn ? hex(0xb6bcc0) : hex(0xa2a59e));
     if (sn) ellipse(x - 1 * k, y - 10 * k, 5 * k, 2 * k, rgba(255, 255, 255, .9f));
@@ -190,7 +193,7 @@ void bush(const Ctx& c, const dw::Obj& o) {
     float x = p.x, y = p.y;
     int s = c.season;
     push(p, px(scale::BUSH) / 17.f);
-    ellipse(x + 3, y + 1, 10, 4, rgba(20, 40, 20, .25f));
+    ellipse(x + 3, y + 1, 10, 4, SHADOW);
     uint32_t c0 = s == 3 ? 0x5f6b5c : s == 2 ? 0x6e7a34 : 0x3f7a3a, c1 = s == 3 ? 0x76826f : s == 2 ? 0x8a9440 : 0x55964a;
     circle(x - 5, y - 5, 7, hex(c0));
     circle(x + 5, y - 5, 7, hex(c0));
@@ -204,7 +207,7 @@ void bush(const Ctx& c, const dw::Obj& o) {
 void totem(const Ctx& c, const dw::Obj& o) {
     V2 p = wp(o.x + .5f, o.y + .6f);
     float x = p.x, y = p.y, hgt = px(scale::TOTEM) + o.v * px(.3f);
-    ellipse(x + 4, y + 1, 8, 3.5f, rgba(20, 30, 20, .28f));
+    ellipse(x + 4, y + 1, 8, 3.5f, SHADOW);
     const uint32_t cols[4][2] = {{0x8a5e38, 0xb07a48}, {0x7a5434, 0xa8703f}, {0x946640, 0xc08a55}, {0x6e4b2e, 0x9a6a3e}};
     rect(x - 4, y - hgt, 8, hgt, hex(cols[o.v][0]));
     rect(x, y - hgt, 4, hgt, hex(cols[o.v][1]));
@@ -224,7 +227,7 @@ void boat(const Ctx& c) {
     V2 p = wp(c.sim->boatX + .5f, c.sim->boatY + .5f);
     float x = p.x, y = p.y;
     push(p, scale::BOAT_LENGTH * scale::GROUND_PX_PER_M / 38.f);
-    ellipse(x, y + 3, 20, 6, rgba(20, 30, 20, .25f));
+    ellipse(x, y + 3, 20, 6, SHADOW);
     poly({{x - 20, y - 3}, {x + 18, y - 8}, {x + 14, y + 2}, {x - 14, y + 6}}, hex(0x7a5434));
     poly({{x - 20, y - 3}, {x + 18, y - 8}, {x + 16, y - 11}, {x - 17, y - 6}}, hex(0x5a3c22));
     line(x - 5, y - 6, x - 3, y + 3, 1, hex(0x3e2a18));
@@ -255,6 +258,15 @@ void stockpile(const Ctx& c) {
     }
 }
 
+// A low stone slab under a building, the way the reference sets each one on a plinth.
+static void plinth(float x, float y, float w, float h, bool snow) {
+    const float up = 4;
+    Color top = snow ? hex(0xeef1f2) : hex(0xd9d3c0), side = hex(0xb9b19a), front = hex(0xa79f88);
+    poly4(P(x, y + h), P(x + w, y + h), P(x + w, y + h, up), P(x, y + h, up), front);
+    poly4(P(x + w, y + h), P(x + w, y), P(x + w, y, up), P(x + w, y + h, up), side);
+    foot(x, y, w, h, top, up);
+}
+
 bool isFlat(const std::string& k) { return k == "garden" || k == "dock" || k == "herbs" || k == "bath" || k == "fields"; }
 
 void building(const Ctx& c, dw::Project& b) {
@@ -280,6 +292,8 @@ void building(const Ctx& c, dw::Project& b) {
         draw::alpha = savedA * (.22f + prog * .78f);
     }
     const std::string& k = b.key;
+    static const std::set<std::string> onPlinth = {"hut", "store", "smoke", "longhouse", "school", "forge", "loomhouse", "infirmary", "pottery", "well", "shrine"};
+    if (b.done && onPlinth.count(k)) plinth(x + .02f, y + .02f, w - .04f, h - .04f, sn);
     if (k == "fire") {
         V2 q = P(x + .5f, y + .5f);
         for (int a = 0; a < 9; a++) circle(q.x + std::cos(a / 9.f * 6.283f) * 10, q.y + std::sin(a / 9.f * 6.283f) * 5, 3, hex(0x7d7a72));
@@ -337,7 +351,7 @@ void building(const Ctx& c, dw::Project& b) {
     } else if (k == "well") {
         V2 q = P(x + .5f, y + .5f);
         float cu = px(scale::WELL_CURB), top = px(scale::WELL_ROOF), r = 16;
-        ellipse(q.x + 3, q.y + 3, r + 2, r / 2 + 1, rgba(30, 30, 20, .25f));
+        ellipse(q.x + 3, q.y + 3, r + 2, r / 2 + 1, SHADOW);
         ellipse(q.x, q.y, r, r / 2, hex(0x8a8d86));
         rect(q.x - r, q.y - cu, r * 2, cu, hex(0x8a8d86));
         ellipse(q.x, q.y - cu, r, r / 2, hex(0xa3a69f));
@@ -393,7 +407,7 @@ void building(const Ctx& c, dw::Project& b) {
     } else if (k == "pottery") {
         foot(x + .1f, y + .1f, w - .2f, h - .2f, rgba(150, 110, 70, .35f));
         V2 q = P(x + .9f, y + .9f);
-        ellipse(q.x + 4, q.y + 3, 20, 8, rgba(30, 30, 20, .25f));
+        ellipse(q.x + 4, q.y + 3, 20, 8, SHADOW);
         auto dome = bezier({q.x - 18, q.y}, {q.x - 18, q.y - 34}, {q.x, q.y - 34}, 10);
         auto d2 = bezier({q.x, q.y - 34}, {q.x + 18, q.y - 34}, {q.x + 18, q.y}, 10);
         dome.insert(dome.end(), d2.begin() + 1, d2.end());
@@ -425,7 +439,7 @@ void building(const Ctx& c, dw::Project& b) {
         V2 q = P(x + .5f, y + .5f);
         Color wd = hex(0x6b4a2e);
         push(q, px(scale::TOWER) / 92.f);
-        ellipse(q.x + 4, q.y + 2, 12, 5, rgba(30, 30, 20, .28f));
+        ellipse(q.x + 4, q.y + 2, 12, 5, SHADOW);
         line(q.x - 10, q.y, q.x - 7, q.y - 64, 2.6f, wd); line(q.x + 10, q.y, q.x + 7, q.y - 64, 2.6f, wd); line(q.x, q.y + 5, q.x, q.y - 62, 2.6f, wd);
         for (int i = 0; i < 5; i++) line(q.x - 10 + i * .6f, q.y - i * 12, q.x + 9 - i * .6f, q.y - i * 12 - 12, 1.2f, wd);
         poly({{q.x - 14, q.y - 64}, {q.x, q.y - 70}, {q.x + 14, q.y - 64}, {q.x, q.y - 58}}, hex(0x8a5e38));
@@ -436,14 +450,14 @@ void building(const Ctx& c, dw::Project& b) {
     } else if (k == "signal") {
         V2 q = P(x + .5f, y + .5f);
         push(q, px(scale::SIGNAL) / 26.f);
-        ellipse(q.x + 3, q.y + 2, 14, 6, rgba(30, 30, 20, .28f));
+        ellipse(q.x + 3, q.y + 2, 14, 6, SHADOW);
         for (int l = 0; l < 5; l++) { float ww = 14 - l * 2.4f; poly({{q.x - ww, q.y - l * 5}, {q.x + ww, q.y - l * 5 - 3}, {q.x + ww, q.y - l * 5 - 6}, {q.x - ww, q.y - l * 5 - 3}}, l % 2 ? hex(0x6b4a2e) : hex(0x8a5e38)); }
         if (b.done) { flame(c, q.x, q.y - 24, 1.3f); smoke(c, q.x, q.y - 36, 5, 1.6f); }
         pop();
     } else if (k == "lighthouse") {
         V2 q = P(x + .5f, y + .5f);
         push(q, px(scale::LIGHTHOUSE) / 103.f);
-        ellipse(q.x + 4, q.y + 2, 14, 6, rgba(30, 30, 20, .28f));
+        ellipse(q.x + 4, q.y + 2, 14, 6, SHADOW);
         poly({{q.x - 11, q.y}, {q.x - 7, q.y - 80}, {q.x + 7, q.y - 80}, {q.x + 11, q.y}}, hex(0xe9e6dc));
         rect(q.x - 9.5f, q.y - 30, 19, 8, hex(0xb8434a));
         rect(q.x - 8.2f, q.y - 58, 16.4f, 8, hex(0xb8434a));
@@ -492,7 +506,7 @@ void poi(const Ctx& c, const dw::Poi& p) {
     float x = q.x, y = q.y;
     int s = c.season;
     if (p.type == "hermit" && !p.joined) {
-        ellipse(x + 4, y + 2, 16, 6, rgba(30, 30, 20, .28f));
+        ellipse(x + 4, y + 2, 16, 6, SHADOW);
         PrismOpt o; o.door = true;
         prism(p.x + .15f, p.y + .2f, .7f, .6f, px(scale::HERMIT_WALL), hex(0x7a6546), s == 3 ? hex(0xdfe5e8) : hex(0x5a7a40), px(scale::HERMIT_ROOF), o);
         V2 sm = P(p.x + .5f, p.y + .5f, px(scale::HERMIT_WALL + scale::HERMIT_ROOF));
@@ -538,7 +552,7 @@ void person(const Ctx& c, const dw::Person& p, bool selected) {
     Color tunic = hex(p.tunic), skin = hex(p.skin), hair = hex(p.hair);
     if (selected) ring(0, 0, 12, 6, 1.8f, hex(0xffd27a));
     if (p.sleeping) {
-        ellipse(0, 1, 11, 4, rgba(20, 30, 20, .25f));
+        ellipse(0, 1, 11, 4, SHADOW);
         ellipse(1, -2, 9, 4.5f, tunic);
         ellipse(3, -3, 6, 4, hex(0x8a6a4a));
         circle(-7, 1, 3.8f, skin);
@@ -548,7 +562,7 @@ void person(const Ctx& c, const dw::Person& p, bool selected) {
         pop();
         return;
     }
-    ellipse(0, 0, 7, 3, rgba(20, 30, 20, .3f));
+    ellipse(0, 0, 7, 3, SHADOW);
     bool walking = p.moving;
     float ph = p.phase, swing = walking ? std::sin(ph) * 3 : 0, bob = walking ? std::abs(std::sin(ph)) * 1.2f : 0;
     const std::string& an = p.anim;
@@ -626,7 +640,7 @@ void wolf(const Ctx&, const dw::Wolf& w) {
     // drawn around the paws at (0,0); the back is 12.5 units up
     push(o, px(scale::WOLF) / 12.5f, {0, 0});
     Color fur = hex(0x6b6b73), dark = hex(0x4f4f55);
-    ellipse(0, 0, 11, 3.5f, rgba(10, 10, 10, .3f));
+    ellipse(0, 0, 11, 3.5f, SHADOW);
     line(-6, -6, -6 + l, 0, 2, dark); line(6, -6, 6 - l, 0, 2, dark);
     ellipse(0, -8, 9, 4.5f, fur);
     ellipse(f * 10, -11, 4.5f, 3.5f, fur);
