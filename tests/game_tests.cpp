@@ -525,6 +525,33 @@ static void testTags() {
     } else CHECK(false, "a settler with a bed to test with");
 }
 
+// ---------------------------------------------------------------- live ground
+// Zoomed in, only the visible tiles are painted; none that shows may be missed.
+static void testVisibleTiles() {
+    std::printf("live ground\n");
+    WorldView v;
+    Rectangle screen{0, 0, 1600, 900};
+    v.cam.offset = {590, 479};
+    int missed = 0, cams = 0;
+    for (float z : {WorldView::LIVE_GROUND_ZOOM, 1.15f, 2.5f, WorldView::MAX_ZOOM})
+        for (int k = 0; k < 12; k++) {
+            v.cam.zoom = z;
+            v.centerOnTile(10 + k * 9.5f, 120 - k * 9.f);
+            auto r = v.visibleTiles(screen);
+            cams++;
+            for (int y = 0; y < GH; y++) for (int x = 0; x < GW; x++) {
+                // any tile with a corner on screen must be painted
+                bool shows = false;
+                for (Vector2 c : {iso::wp(x, y), iso::wp(x + 1, y), iso::wp(x + 1, y + 1), iso::wp(x, y + 1)}) {
+                    Vector2 sc = GetWorldToScreen2D(c, v.cam);
+                    if (CheckCollisionPointRec(sc, screen)) shows = true;
+                }
+                if (shows && (x < r.x0 || x > r.x1 || y < r.y0 || y > r.y1)) missed++;
+            }
+        }
+    CHECK(missed == 0, cat("every tile on screen is painted, ", cams, " camera positions from the live-ground zoom to the closest").c_str());
+}
+
 int main() {
     testProjection();
     testPickPeople(20261017);
@@ -540,6 +567,7 @@ int main() {
     testLinks(777, 40);
     testContrast();
     testTags();
+    testVisibleTiles();
     std::printf(failures ? "\n%d check(s) failed\n" : "\nall checks passed\n", failures);
     return failures;
 }
