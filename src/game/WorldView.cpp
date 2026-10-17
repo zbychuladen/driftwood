@@ -7,12 +7,14 @@
 #include "engine/Ui.h"
 #include "game/Art.h"
 #include "game/Iso.h"
+#include "game/Scale.h"
 #include "rlgl.h"
 
 using namespace dw;
 using draw::V2;
 using iso::P;
 using iso::wp;
+using scale::px;
 
 static const Color FOG = {22, 32, 43, 255};
 
@@ -316,7 +318,7 @@ void WorldView::draw(Sim& s, Rectangle map, int selectedId, float realDt, float 
         for (auto& b : s.plan) if (b.done && (b.key == "hut" || b.key == "longhouse" || b.key == "school" || b.key == "infirmary"))
             lights.push_back({toS(wp(b.x + b.w / 2.f, b.y + b.h / 2.f)), 55 * cam.zoom, Color{255, 170, 80, 40}});
         for (auto key : {"tower", "signal", "lighthouse", "forge"}) if (auto* b = s.built(key)) {
-            float up = std::string(key) == "lighthouse" ? 85.f : std::string(key) == "tower" ? 70.f : 25.f;
+            float up = std::string(key) == "lighthouse" ? px(scale::LIGHTHOUSE - .9f) : std::string(key) == "tower" ? px(scale::TOWER - 1.8f) : px(1.5f);
             V2 w = wp(b->x + .5f, b->y + .5f); w.y -= up;
             lights.push_back({toS(w), (std::string(key) == "lighthouse" ? 170.f : 85.f) * cam.zoom, Color{255, 160, 70, 60}});
         }
@@ -338,7 +340,7 @@ void WorldView::drawLabels(Sim& s, int selectedId) {
             auto* b = s.projectById(p.bed);
             if (!b) continue;
             w = wp(b->x + b->w / 2.f, b->y + b->h / 2.f);
-            w.y -= 60 + stackAtBed[b->id]++ * 16;
+            w.y -= px(5.5f) + stackAtBed[b->id]++ * 16;
         } else { w = wp(p.x, p.y); w.y += 10; }
         V2 sc = GetWorldToScreen2D(w, cam);
         if (sc.x < -60 || sc.y < -60 || sc.x > GetScreenWidth() + 60 || sc.y > GetScreenHeight() + 60) continue;
@@ -350,7 +352,7 @@ void WorldView::drawLabels(Sim& s, int selectedId) {
         ui::text(ui::F.bold, lab, r.x + 6, r.y + 1.5f, size, sel ? Color{30, 42, 35, 255} : Color{244, 241, 232, 255});
         if (p.bubble && s.tMin < p.bubble->until && !p.hidden) {
             V2 head = GetWorldToScreen2D(wp(p.x, p.y), cam);
-            float by = head.y - (p.child ? 26 : 42) * cam.zoom;
+            float by = head.y - (px(p.child ? scale::CHILD : scale::PERSON) + 14) * cam.zoom;
             V2 bm = ui::measure(ui::F.body, p.bubble->text, 14);
             Rectangle br{head.x - bm.x / 2 - 8, by - 11, bm.x + 16, 22};
             DrawRectangleRounded(br, .8f, 8, Color{255, 255, 255, 240});
@@ -360,6 +362,8 @@ void WorldView::drawLabels(Sim& s, int selectedId) {
     }
 }
 
+float WorldView::bodyHeight(const Person& p) { return px(p.child ? scale::CHILD : scale::PERSON) * .55f; }
+
 int WorldView::pick(Sim& s, Vector2 screen) {
     V2 w = GetScreenToWorld2D(screen, cam);
     int best = -1;
@@ -367,7 +371,7 @@ int WorldView::pick(Sim& s, Vector2 screen) {
     for (auto& p : s.people) {
         if (p.dead || p.hidden || !s.isExplored(p.x, p.y)) continue;
         V2 pw = wp(p.x, p.y);
-        float d = std::hypot(pw.x - w.x, pw.y - 14 - w.y);
+        float d = std::hypot(pw.x - w.x, pw.y - bodyHeight(p) - w.y);
         if (d < bd) { bd = d; best = p.id; }
     }
     return best;

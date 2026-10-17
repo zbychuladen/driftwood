@@ -15,6 +15,8 @@ public:
     void draw(dw::Sim& sim, Rectangle mapRect, int selectedId, float realDt, float speed);
     // Returns a person id under the screen point, or -1.
     int pick(dw::Sim& sim, Vector2 screen);
+    // Height above the feet (world px) of the point a click on a person aims for.
+    static float bodyHeight(const dw::Person& p);
     void centerOnTile(float tx, float ty);
     void zoomBy(float f, Vector2 screenPivot);
     bool clickedMap() const { return clicked; }   // left click without drag this frame
