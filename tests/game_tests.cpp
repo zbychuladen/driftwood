@@ -499,6 +499,32 @@ static void testContrast() {
     CHECK(bad.empty(), ("every text color reads against its background (WCAG AA)" + bad).c_str());
 }
 
+// ---------------------------------------------------------------- name tags
+static void testTags() {
+    std::printf("name tags\n");
+    Sim s;
+    s.newWorld(20261017);
+    runDays(s, 30);
+    auto m = s.members();
+    Person* a = m[0];
+    Person* b = m[1];
+    Pick none{};
+    Pick overA{Drawable::PERSON, a->id, true};
+    int shownIdle = 0;
+    for (auto* p : m) shownIdle += WorldView::showTag(s, *p, none, -1);
+    CHECK(shownIdle == 0, "with the pointer over nothing, no settler shows a name");
+    CHECK(WorldView::showTag(s, *a, overA, -1) && !WorldView::showTag(s, *b, overA, -1), "hovering a settler shows their name and nobody else's");
+    CHECK(WorldView::showTag(s, *b, none, b->id), "the selected settler keeps their name");
+    // someone asleep inside their hut answers to the pointer over the hut
+    Person* sleeper = nullptr;
+    for (auto* p : m) if (s.projectById(p->bed)) { sleeper = p; break; }
+    if (sleeper) {
+        sleeper->hidden = true;
+        Pick overHut{Drawable::BUILDING, sleeper->bed, true}, overOther{Drawable::BUILDING, sleeper->bed + 1000, true};
+        CHECK(WorldView::showTag(s, *sleeper, overHut, -1) && !WorldView::showTag(s, *sleeper, overOther, -1), "hovering a hut shows who sleeps inside");
+    } else CHECK(false, "a settler with a bed to test with");
+}
+
 int main() {
     testProjection();
     testPickPeople(20261017);
@@ -513,6 +539,7 @@ int main() {
     testLinks(20261017, 40);
     testLinks(777, 40);
     testContrast();
+    testTags();
     std::printf(failures ? "\n%d check(s) failed\n" : "\nall checks passed\n", failures);
     return failures;
 }
