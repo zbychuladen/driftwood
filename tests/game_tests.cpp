@@ -13,6 +13,7 @@
 #include "engine/Ui.h"
 #include "game/Art.h"
 #include "game/Depth.h"
+#include "game/Figure.h"
 #include "game/Inspect.h"
 #include "game/Iso.h"
 #include "game/Labels.h"
@@ -552,6 +553,40 @@ static void testVisibleTiles() {
     CHECK(missed == 0, cat("every tile on screen is painted, ", cams, " camera positions from the live-ground zoom to the closest").c_str());
 }
 
+// ---------------------------------------------------------------- box figures
+static void testFigures() {
+    std::printf("box figures\n");
+    figure::Look adult;
+    adult.jacket = adult.shirt = adult.legs = adult.skin = adult.hair = adult.shoes = WHITE;
+    figure::Look child = adult;
+    child.child = true;
+    std::vector<Measured> rows;
+    const char* names[4] = {"SE", "SW", "NE", "NW"};
+    // measured above the ground under the back corner of the hair, the point the
+    // top of the head appears above at its true height (about 0.16 m back and
+    // to the side of the feet, along both tile axes)
+    Vector2 g = iso::wp(20 - .16f / scale::TILE_M, 20 - .16f / scale::TILE_M);
+    for (int f = 0; f < 4; f++)
+        for (int style = 0; style < 3; style++) {
+            adult.hairStyle = child.hairStyle = style;
+            float ha = heightM(g, [&] { figure::draw(20, 20, figure::Facing(f), adult, figure::idle(0), 1); });
+            float hc = heightM(g, [&] { figure::draw(20, 20, figure::Facing(f), child, figure::idle(0), 1); });
+            rows.push_back({cat("adult facing ", names[f], ", hair ", style), ha, scale::PERSON * .94f, scale::PERSON * 1.04f});
+            rows.push_back({cat("child facing ", names[f], ", hair ", style), hc, scale::CHILD * .94f, scale::CHILD * 1.04f});
+        }
+    checkAll(rows, "figures stand at their real height in every facing and hair style");
+    // walking never lifts the figure off the ground or stretches it
+    float lowest = 1e9f, highest = 0;
+    for (int i = 0; i < 16; i++) {
+        float h = heightM(g, [&] { figure::draw(20, 20, figure::SE, adult, figure::walk(i * 6.283f / 16), 1); });
+        lowest = std::min(lowest, h); highest = std::max(highest, h);
+    }
+    CHECK(lowest > scale::PERSON * .9f && highest < scale::PERSON * 1.05f, cat("through a stride the figure stays 1.5 to 1.8 m tall (", int(lowest * 100), " to ", int(highest * 100), " cm)").c_str());
+    CHECK(figure::facingToward(1, .2f, figure::NE) == figure::SE && figure::facingToward(-.1f, 1, figure::NE) == figure::SW
+          && figure::facingToward(0, -2, figure::SE) == figure::NE && figure::facingToward(-3, 1, figure::SE) == figure::NW
+          && figure::facingToward(0, 0, figure::NW) == figure::NW, "a figure faces the way it moves, and keeps its facing when still");
+}
+
 int main() {
     testProjection();
     testPickPeople(20261017);
@@ -568,6 +603,7 @@ int main() {
     testContrast();
     testTags();
     testVisibleTiles();
+    testFigures();
     std::printf(failures ? "\n%d check(s) failed\n" : "\nall checks passed\n", failures);
     return failures;
 }
