@@ -1,6 +1,8 @@
-// All screen UI: top bar, sidebar tabs (settlers, narrator, camp), journal and fate cards.
+// All screen UI: top bar, sidebar tabs (settlers, narrator, camp), journal, the
+// pending decisions and fate cards.
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include "engine/Draw.h"
 #include "game/Game.h"
 
@@ -56,6 +58,7 @@ void Game::drawHud() {
     drawSidebar();
     drawJournal();
     drawInspect();
+    drawDecisions();
     if (!sim.pendingFate.empty()) drawFate();
 }
 
@@ -153,7 +156,7 @@ float Game::settlerCard(Person& p, float x, float y, float w, bool d) {
         text(F.bold, nm, x + pad + 54, cy, 17, T.text);
         std::string mood = p.inspired ? "inspired" : moodWord(p.mood);
         text(F.body, mood, x + w - pad - measure(F.body, mood, 13).x, cy + 3, 13, p.inspired ? T.narrator : T.muted);
-        std::string doing = std::string(p.sick > 0 ? "Sick - " : "") + (p.whisper && p.whisper->until > sim.tMin ? "* " : "") + p.doing;
+        std::string doing = std::string(p.sick > 0 ? "Sick - " : "") + (p.told && p.told->until > sim.tMin ? "* " : "") + p.doing;
         text(F.body, truncate(F.body, doing, 13.5f, inner - 44), x + pad + 44, cy + 21, 13.5f, T.muted);
         float sx = x + pad + 44, sy = cy + 39;
         std::string gifts;
@@ -225,24 +228,23 @@ void Game::drawNarrator(Rectangle a) {
     if (!p || p->status != "member" || p->child) {
         y += wrapped(F.body, "Select an adult settler on the map or in the Settlers tab, then narrate what they do next. Lines land more often with those you get on with.", x, y, w, 14, T.muted) + 16;
     } else {
-        y += wrapped(F.body, cat(p->name, ", rapport ", int(p->rapport), ". ", sim.contrary(*p) ? "Contrary right now: they will do the opposite." : p->lastWhisper == sim.day() ? "Already narrated today. Push too often and they turn contrary." : "Once a day is welcome."), x, y, w, 14, T.text) + 8;
-        struct W { std::string label, job; Person* target = nullptr; };
-        std::vector<W> opts = {{"Explore beyond the trees", "explore"}, {"Gather food", "food"}, {"Fetch wood", "wood"}, {"Help build", "build"}, {"Rest a while", "rest"}};
-        if (!p->calling.empty()) opts.push_back({"Follow your calling", "calling"});
-        for (auto& hp : sim.pois) if (hp.type == "hermit" && hp.found && !hp.joined) opts.push_back({"Visit the hermit", "hermit"});
-        Person* low = nullptr;
-        for (auto* q : sim.members()) if (q != p && !q->child && (!low || affOf(*p, q->id) < affOf(*p, low->id))) low = q;
-        if (low) opts.push_back({"Make peace with " + low->name, "peace", low});
-        float bx = x, rowY = y;
-        for (auto& o : opts) {
-            float bw = measure(F.bold, o.label, 13).x + 24;
-            if (bx + bw > x + w) { bx = x; rowY += 36; }
-            if (button({bx, rowY, bw, 30}, o.label, true, false, 13)) sim.whisper(*p, o.job, o.target);
-            bx += bw + 6;
+        y += wrapped(F.body, cat(p->name, ", rapport ", int(p->rapport), ". ", sim.contrary(*p) ? "Contrary right now: they will do the opposite." : p->lastTold == sim.day() ? "Already narrated today. Push too often and they turn contrary." : "Once a day is welcome."), x, y, w, 14, T.text) + 8;
+        y += wrapped(F.body, "Choose what happens next:", x, y, w, 14, T.muted) + 6;
+        for (auto& l : sim.linesFor(*p)) {
+            float th = wrapped(F.hand, l.text, 0, 0, w - 28, 19, T.text, false);
+            Rectangle r{x, y, w, th + 16};
+            bool hot = hovered(r);
+            DrawRectangleRounded(r, .14f, 6, hot ? T.hover : T.panel2);
+            DrawRectangle(int(x), int(y + 6), 3, int(th + 4), T.narrator);
+            wrapped(F.hand, l.text, x + 14, y + 6, w - 28, 19, T.text);
+            if (clicked(r)) sim.narrate(*p, l);
+            y += r.height + 6;
         }
-        y = rowY + 40;
-        if (sim.lastWhisperName == p->name && !sim.lastWhisperResult.empty()) {
-            std::string r = sim.lastWhisperResult == "ok" ? p->name + " went along with it." : sim.lastWhisperResult == "ignored" ? p->name + " thought about it and carried on." : sim.lastWhisperResult == "pushed" ? "Twice in a day. " + p->name + " rolled their eyes." : p->name + " has had enough narrating and is doing the opposite.";
+        y += 4;
+        if (sim.lastToldName == p->name && !sim.lastReply.empty()) {
+            std::string r = sim.lastReply == "agreed" ? p->name + " went along with it." : sim.lastReply == "haggled" ? p->name + " will, in their own time." : sim.lastReply == "refused" ? p->name + " would rather not."
+                          : sim.lastReply == "pushed" ? "Twice in a day. " + p->name + " rolled their eyes." : p->name + " has had enough narrating and is doing the opposite.";
+            if (!sim.lastSaid.empty()) r += " \"" + sim.lastSaid + "\"";
             y += wrapped(F.body, r, x, y, w, 14, T.narrator) + 6;
         }
         y += 10;
@@ -434,4 +436,70 @@ void Game::drawFate() {
         if (clicked(r)) chosen = i;
     }
     if (chosen >= 0) { auto f = sim.pendingFate[chosen]; sim.pendingFate.clear(); sim.applyFate(f); }
+}
+
+// What is waiting on the narrator, top right of the map: settlers' questions
+// (one opens to show its replies) and a building waiting for its spot.
+void Game::drawDecisions() {
+    float w = 340, pad = 14, x = rMap.x + rMap.width - w - 14, y = rTop.height + 14;
+    decisionsR = {x, y, w, 0};
+    if (sim.questions.empty() && !sim.pendingPlacement) return;
+    if (openQuestion >= 0 && std::none_of(sim.questions.begin(), sim.questions.end(), [&](const Question& q) { return q.id == openQuestion; })) openQuestion = -1;
+    // measure and draw in one pass: draw the panel behind once the height is known
+    float yy = y + pad;
+    struct Row { Rectangle r; int id; };
+    std::vector<Row> rows;
+    std::vector<std::function<void()>> paint;
+    paint.push_back([=] { text(F.bold, "Waiting on you", x + pad, y + pad, 13, T.muted); });
+    yy += 22;
+    if (sim.pendingPlacement)
+        if (Project* b = sim.projectById(sim.pendingPlacement->project)) {
+            std::string s = "The " + lower(b->name) + " needs a spot";
+            paint.push_back([=] { DrawCircle(int(x + pad + 4), int(yy + 9), 4, T.ember); text(F.body, s, x + pad + 16, yy, 14, T.text); });
+            yy += 24;
+        }
+    for (auto& q : sim.questions) {
+        Person* p = sim.person(q.pid);
+        if (!p) continue;
+        int left = std::max(1, int((q.expires - sim.tMin) / 60));
+        bool open = openQuestion == q.id;
+        std::string head = p->name + " has a question", hours = cat(left, "h");
+        Rectangle hr{x + 6, yy - 4, w - 12, 26};
+        rows.push_back({hr, q.id});
+        paint.push_back([=] {
+            if (hovered(hr) || open) DrawRectangleRounded(hr, .3f, 6, T.panel2);
+            DrawCircle(int(x + pad + 4), int(yy + 9), 4, T.narrator);
+            text(F.bold, head, x + pad + 16, yy, 14, T.text);
+            text(F.body, hours, x + w - pad - measure(F.body, hours, 13).x, yy + 1, 13, T.muted);
+        });
+        yy += 26;
+        if (!open) continue;
+        std::string ask = "\"" + q.text + "\"";
+        float th = wrapped(F.hand, ask, 0, 0, w - pad * 2, 21, T.text, false);
+        paint.push_back([=] { wrapped(F.hand, ask, x + pad, yy, w - pad * 2, 21, T.text); });
+        yy += th + 8;
+        static const std::map<std::string, std::string> tag = {{"honest", "Honest"}, {"teasing", "Tease"}, {"misleading", "Mislead"}};
+        for (int i = 0; i < int(q.replies.size()); i++) {
+            const Reply& r = q.replies[i];
+            std::string t = tag.count(r.kind) ? tag.at(r.kind) : r.kind;
+            float rh = wrapped(F.body, r.text, 0, 0, w - pad * 2 - 74, 14, T.text, false) + 14;
+            Rectangle rr{x + pad, yy, w - pad * 2, rh};
+            int qid = q.id;
+            paint.push_back([=, this] {
+                bool hot = hovered(rr);
+                DrawRectangleRounded(rr, .2f, 6, hot ? T.hover : T.panel2);
+                text(F.bold, t, rr.x + 10, rr.y + 7, 13, r.kind == "misleading" ? T.berry : r.kind == "teasing" ? T.ember : T.ok);
+                wrapped(F.body, r.text, rr.x + 74, rr.y + 7, rr.width - 84, 14, T.text);
+                if (clicked(rr)) { sim.answer(qid, i); openQuestion = -1; }
+            });
+            yy += rh + 5;
+        }
+        yy += 6;
+    }
+    float h = yy - y + pad - 6;
+    decisionsR.height = h;
+    DrawRectangleRounded({x + 2, y + 4, w, h}, .06f, 8, Color{40, 50, 40, 36});
+    panel({x, y, w, h}, draw::withA(T.panel, .97f), T.line, .06f);
+    for (auto& f : paint) f();
+    for (auto& r : rows) if (clicked(r.r)) openQuestion = openQuestion == r.id ? -1 : r.id;
 }

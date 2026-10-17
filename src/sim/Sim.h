@@ -41,7 +41,9 @@ struct Action {
 struct Needs { float hunger = 20, thirst = 30, fatigue = 30, cold = 0, social = 20; };
 struct Carry { std::string t; int n = 0; };
 struct Bubble { std::string text; double until = 0; };
-struct Whisper { std::string job; double until = 0; bool contrary = false; };
+// What the narrator last said a settler would do: the job holds from `from`
+// (later when they haggled) until `until`. Contrary: they are doing the opposite.
+struct Narration { std::string job; double until = 0; bool contrary = false; double from = 0; };
 
 // What a person is busy with, so front ends can show the link between them
 // and the thing they are working on. fromStock: they fetch materials from the
@@ -85,10 +87,10 @@ struct Person {
     std::string anim;
     std::optional<Carry> carry;
     std::optional<Bubble> bubble;
-    std::optional<Whisper> whisper;
+    std::optional<Narration> told;
     bool dead = false, gone = false;
     std::vector<int> parents;
-    int lastWhisper = -9;
+    int lastTold = -9, lastAsked = -9;        // days they were last narrated, and last asked the narrator something
     std::array<float, 5> tiers{70, 40, 35, 30, 10};
     std::array<float, 5> gates{1, 1, .4f, .1f, 0};
     int seeking = SAFETY;                     // lowest unmet tier, -1 when fulfilled
@@ -149,6 +151,16 @@ struct PendingPlacement { int project = -1, sx = 0, sy = 0; };
 struct Poi { std::string type; int x = 0, y = 0; bool found = false, joined = false, mentioned = false; int who = -1; };
 struct Entry { int d; std::string season, text, cls; };
 struct Fate { std::string id, title, desc; };
+// A line the narrator can say about a settler: what they do next. job is what
+// it sets them doing (rest, food, wood, build, calling, explore, hermit, peace,
+// talk); target is the other person in a peace or talk line.
+struct Line { std::string job, text; int target = -1; };
+// A settler's question to the narrator, with three replies in a fixed order:
+// honest, teasing, misleading. truth is what an honest reply says.
+struct Reply { std::string kind, text; };
+struct Question { int id = 0, pid = -1, about = -1; std::string topic, text; std::vector<Reply> replies; double asked = 0, expires = 0; bool truth = false; };
+// A misleading reply that may yet come out.
+struct Fib { int pid = -1; double due = 0; std::string reveal; };
 struct VoteRow { int pid; bool yes; std::string why; };
 struct Vote { std::string name; std::vector<VoteRow> rows; bool pass = false; int y = 0, n = 0; };
 struct Wolf { float x, y, sx, sy; std::string state; int face = 1; float ph = 0; };
@@ -207,7 +219,7 @@ public:
     // The whole game as bytes, and back. Settlers' half-done actions are not
     // kept: after a load everyone picks their next task. load() leaves the sim
     // as it was and returns false, with a reason, for anything it cannot read.
-    static constexpr int SAVE_VERSION = 3;   // 2: site quality and pending placement; 3: rapport, contrariness, the story circle
+    static constexpr int SAVE_VERSION = 4;   // 2: site quality and pending placement; 3: rapport, contrariness, the story circle; 4: lines, questions
     struct SaveInfo { std::string village; int day = 0, year = 0, season = 0, people = 0; uint32_t seed = 0; };
     std::string save() const;
     bool load(const std::string& data, std::string* error = nullptr);
@@ -251,7 +263,22 @@ public:
     float needOf(const std::string& key);
 
     // narrator (called by the player)
-    std::string whisper(Person& p, const std::string& job, Person* target = nullptr);
+    // Two or three lines that fit a settler right now. Reading them never
+    // changes the game.
+    std::vector<Line> linesFor(const Person& p);
+    // Says a line. The settler goes along ("agreed"), haggles ("haggled": later),
+    // refuses ("refused"), is irritated at a second line in a day ("pushed") or is
+    // contrary and does the opposite ("contrary"). lastReply holds the result and
+    // lastSaid what they said back.
+    std::string narrate(Person& p, const Line& line);
+    std::string narrate(Person& p, const std::string& job, Person* target = nullptr);
+    // Questions settlers ask the narrator. They wait a day, then lapse.
+    std::vector<Question> questions;
+    std::vector<Fib> fibs;
+    int nextQuestion = 1;
+    bool answer(int questionId, int reply);      // false if the question or reply is gone
+    void ask(Person& p, const std::string& topic, int about = -1);   // tests and captures: put a question now
+    std::string lastSaid;
     std::string writeSand(const std::string& text);
     std::vector<const ProjectDef*> proposalList();
     void propose(const std::string& key);
@@ -261,7 +288,7 @@ public:
     // settlers put up with more, obstinate ones with less.
     static float tolerance(const Person& p);
     bool contrary(const Person& p) const { return p.contraryUntil > tMin; }
-    std::string lastWhisperName, lastWhisperResult;
+    std::string lastToldName, lastReply;
 
     // building sites
     static bool specialist(const ProjectDef& d) { return !d.gift.empty(); }
@@ -279,6 +306,9 @@ public:
 
     // rng (behavior)
     std::mt19937 gen{12345};
+    // when and who asks the narrator things: its own stream, so questions never
+    // move the behaviour generator; only the answers change the story
+    std::mt19937 talkGen{4321};
     float rnd() { return std::uniform_real_distribution<float>(0.f, 1.f)(gen); }
     int ri(int n) { return n <= 0 ? 0 : int(rnd() * n) % n; }
     template <class T> const T& pick(const std::vector<T>& v) { return v[ri(int(v.size()))]; }
@@ -290,6 +320,7 @@ private:
     bool siteLegal(const ProjectDef& d, int x, int y) const;
     void startProject(Project& b);
     void siteJudged(Project& b, bool finished);
+    void talkHourly();                        // new questions, lapsed ones, fibs coming out
 
     // world gen
     void placePOI(const std::string& type, std::function<bool(int)> ok, float minD);

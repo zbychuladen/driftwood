@@ -1,7 +1,7 @@
 // Driftwood: an isometric island colony sim where you are the unseen narrator.
 //
 // Usage: driftwood [--seed N] [--size WxH] [--fullscreen]
-// Capture mode (for docs/CI): --screenshot file.png [--days N] [--hour H] [--zoom Z] [--select K] [--narrate N] [--tab T]
+// Capture mode (for docs/CI): --screenshot file.png [--days N] [--hour H] [--zoom Z] [--select K] [--narrate N] [--question] [--tab T]
 //                             [--center X,Y] (tile) [--pick X,Y] (screen point) [--show-journal] [--links] [--gallery] [--people] [--buildings] [--structures] [--title] [--menu] [--placement] [--save-dir DIR] [--bench N]
 #include <cstdlib>
 #include <cstring>
@@ -22,6 +22,7 @@ int main(int argc, char** argv) {
         else if (a == "--zoom") o.zoom = float(std::atof(next()));
         else if (a == "--select") o.selectFirst = std::atoi(next());
         else if (a == "--narrate") o.narrate = std::atoi(next());
+        else if (a == "--question") o.question = true;
         else if (a == "--tab") o.tab = std::atoi(next());
         else if (a == "--show-journal") o.showJournal = true;
         else if (a == "--links") o.allLinks = true;
