@@ -39,6 +39,14 @@ static std::string purpose(const Project& b) {
     return it != d.end() ? it->second : "Something the camp built together.";
 }
 
+// Settlers whose current work points at this thing, with what they are doing.
+static std::string workingOn(Sim& s, Focus::Kind kind, int id) {
+    std::string out;
+    for (auto* m : s.members())
+        if (m->focus.kind == kind && m->focus.id == id && !m->q.empty()) out += (out.empty() ? "" : "; ") + m->name + ", " + lower(m->doing);
+    return out;
+}
+
 static Info building(Sim& s, Project& b) {
     Info in{b.name, "Building", purpose(b), {}};
     float pct = b.work > 0 ? b.progress / b.work : 0;
@@ -57,6 +65,7 @@ static Info building(Sim& s, Project& b) {
         std::string sl = names(s, sleepers);
         in.rows.push_back({"Beds", cat(int(sleepers.size()), " of ", b.beds, " taken", sl.empty() ? "" : ": " + sl)});
     }
+    if (std::string now = workingOn(s, Focus::PROJECT, b.id); !now.empty()) in.rows.push_back({"Here now", now});
     if (b.key == "fire" && b.done) in.rows.push_back({"Fire", b.fuel > 0 ? cat("Burning, ", int(std::ceil(b.fuel)), " logs left") : "Gone out"});
     if ((b.key == "garden" || b.key == "fields" || b.key == "herbs") && b.done) {
         std::string st = b.state == "ripe" ? "Ripe, ready to harvest" : b.state == "growing" ? cat("Growing, ", int(b.growth * 100), "%") : "Waiting to be sown";
@@ -76,12 +85,15 @@ static Info object(Sim& s, const Obj& o) {
         in.rows.push_back({"Height", cat("about ", metres(h))});
         if (o.sapling) in.rows.push_back({"Age", cat("A sapling, ", int(std::min(1.f, o.grow) * 100), "% grown")});
         if (by) in.rows.push_back({"Felling", by->name + " has picked this one"});
+        if (std::string now = workingOn(s, Focus::OBJECT, o.i); !now.empty() && !by) in.rows.push_back({"Here now", now});
     } else if (o.type == "rock") {
         in = {"Boulder", "Stone", "A boulder. Masons split it for building stone.", {}};
         in.rows.push_back({"Stone left", cat(o.stone, o.stone == 1 ? " load" : " loads")});
         if (by) in.rows.push_back({"Quarrying", by->name + " is working it"});
+        if (std::string now = workingOn(s, Focus::OBJECT, o.i); !now.empty() && !by) in.rows.push_back({"Here now", now});
     } else if (o.type == "bush") {
         in = {"Berry bush", "Bush", "Wild berries. Anyone can pick them, in season.", {}};
+        if (std::string now = workingOn(s, Focus::OBJECT, o.i); !now.empty()) in.rows.push_back({"Here now", now});
         in.rows.push_back({"Berries", s.season() == 3 ? "None until spring" : int(o.berries) > 0 ? cat(int(o.berries), " handfuls") : "Picked clean for now"});
     } else if (o.type == "stump") {
         in = {"Stump", "Felled tree", "What is left of a tree the camp cut down. A sapling will come up here.", {}};
@@ -94,7 +106,7 @@ static Info object(Sim& s, const Obj& o) {
     return in;
 }
 
-static Info place(const Poi& p) {
+static Info place(Sim& s, const Poi& p, int index) {
     static const std::map<std::string, std::pair<std::string, std::string>> d = {
         {"hermit", {"Hermit's hut", "Someone lives here alone, and not by accident."}},
         {"cave", {"Cave", "A cool, dark way into the hill. Things live in places like this."}},
@@ -104,6 +116,7 @@ static Info place(const Poi& p) {
     Info in{it != d.end() ? it->second.first : p.type, "Place", it != d.end() ? it->second.second : "", {}};
     in.rows.push_back({"Visited", p.found ? "Yes" : "Not yet"});
     if (p.type == "hermit" && p.joined) in.rows.push_back({"Hermit", "Joined the village"});
+    if (std::string now = workingOn(s, Focus::POI, index); !now.empty()) in.rows.push_back({"Here now", now});
     return in;
 }
 
@@ -120,7 +133,7 @@ Info describe(Sim& s, const Pick& p) {
         if (auto* b = s.projectById(p.id)) return building(s, *b);
         return {};
     case Drawable::POI:
-        if (p.id >= 0 && p.id < int(s.pois.size())) return place(s.pois[p.id]);
+        if (p.id >= 0 && p.id < int(s.pois.size())) return place(s, s.pois[p.id], p.id);
         return {};
     case Drawable::STOCKPILE: {
         Info in{"Stockpile", "Camp stores", "Everything the camp has gathered and not yet used.", {}};

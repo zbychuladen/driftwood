@@ -41,6 +41,16 @@ struct Carry { std::string t; int n = 0; };
 struct Bubble { std::string text; double until = 0; };
 struct Whisper { std::string job; double until = 0; };
 
+// What a person is busy with, so front ends can show the link between them
+// and the thing they are working on. fromStock: they fetch materials from the
+// stockpile first. toStock: what they gather goes to the stockpile after.
+struct Focus {
+    enum Kind { NONE, PROJECT, OBJECT, POI, PERSON, STOCK, SPOT } kind = NONE;
+    int id = -1;                              // project id, object index, poi index or person id
+    float x = 0, y = 0;                       // SPOT only (tiles)
+    bool fromStock = false, toStock = false;
+};
+
 struct Person {
     int id = 0;
     std::string name;
@@ -49,6 +59,7 @@ struct Person {
     float x = 0, y = 0;
     std::deque<Action> q;
     std::string kind = "idle", doing = "Looking around", status = "member";
+    Focus focus;
     Needs needs;
     float mood = 55;
     std::vector<std::string> traits;
@@ -271,11 +282,11 @@ private:
     float skillF(Person& p, const std::string& k);
     void gain(Person& p, const std::string& k) { p.sk[k] = std::min(10.f, p.sk[k] + .04f); }
     void clearQ(Person& p);
-    void setQ(Person& p, const std::string& kind, const std::string& doing, std::deque<Action> q);
+    void setQ(Person& p, const std::string& kind, const std::string& doing, std::deque<Action> q, Focus f = {});
     bool boosted(const std::string& k) { auto it = boost.find(k); return it != boost.end() && it->second > tMin; }
     void plan_(Person& p);
     void workQ(Person& p);
-    std::deque<Action> drinkQ(Person& p);
+    std::deque<Action> drinkQ(Person& p, Focus* where = nullptr);
     std::deque<Action> eatQ(Person& p);
     std::deque<Action> sleepQ(Person& p, bool sick);
     std::deque<Action> warmQ(Person& p);

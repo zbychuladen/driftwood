@@ -279,6 +279,7 @@ void WorldView::draw(Sim& s, Rectangle map, int selectedId, float realDt, float 
     drawHighlight(s, inspected);
     Rectangle viewR{tl.x - 90, tl.y - 90, br.x - tl.x + 180, br.y - tl.y + 250};
     for (auto& d : sorted(collect(s, ctx, viewR, selectedId))) d.draw(ctx);
+    drawLinks(s, selectedId, inspected);
     EndMode2D();
 
     // screen-space atmosphere
@@ -305,6 +306,14 @@ void WorldView::draw(Sim& s, Rectangle map, int selectedId, float realDt, float 
     }
     if (s.flash > 0) { draw::rect(0, 0, sw, shh, draw::rgba(230, 235, 255, s.flash * .5f)); s.flash = std::max(0.f, s.flash - realDt * 4); }
     drawLabels(s, selectedId);
+    for (auto& c : captions) {
+        V2 sc = GetWorldToScreen2D(c.world, cam);
+        V2 m = ui::measure(ui::F.bold, c.text, 13);
+        Rectangle r{sc.x - m.x / 2 - 8, sc.y - 10, m.x + 16, 20};
+        DrawRectangleRounded(r, 1, 8, Color{255, 246, 224, 240});
+        DrawRectangleRoundedLinesEx(r, 1, 8, 1, Color{176, 140, 70, 255});
+        ui::text(ui::F.bold, c.text, r.x + 8, r.y + 3, 13, Color{60, 46, 24, 255});
+    }
 }
 
 // ---------------------------------------------------------------- what to draw, in what order
@@ -452,6 +461,75 @@ Pick WorldView::pickAt(Sim& s, Vector2 screen) const {
     int id = const_cast<WorldView*>(this)->pick(s, screen);
     if (id >= 0) return {Drawable::PERSON, id, true};
     return {};
+}
+
+// ---------------------------------------------------------------- links between people and their work
+FocusTarget focusTarget(Sim& s, const Focus& f) {
+    FocusTarget t;
+    switch (f.kind) {
+    case Focus::PROJECT:
+        if (auto* b = s.projectById(f.id)) t = {true, b->x + b->w / 2.f, b->y + b->h / 2.f, {Drawable::BUILDING, b->id, true}};
+        break;
+    case Focus::OBJECT:
+        if (f.id >= 0 && f.id < int(s.objs.size()) && !s.objs[f.id].dead) t = {true, s.objs[f.id].x + .5f, s.objs[f.id].y + .6f, {Drawable::OBJECT, f.id, true}};
+        break;
+    case Focus::POI:
+        if (f.id >= 0 && f.id < int(s.pois.size())) t = {true, s.pois[f.id].x + .5f, s.pois[f.id].y + .5f, {Drawable::POI, f.id, true}};
+        break;
+    case Focus::PERSON:
+        if (auto* q = s.person(f.id); q && !q->dead) t = {true, q->x, q->y, {Drawable::PERSON, q->id, true}};
+        break;
+    case Focus::STOCK: t = {true, s.stockX + 1.f, s.stockY + .5f, {Drawable::STOCKPILE, 0, true}}; break;
+    case Focus::SPOT: t = {true, f.x, f.y, {}}; break;
+    case Focus::NONE: break;
+    }
+    return t;
+}
+
+// A dashed line along the ground whose dashes march toward b.
+static void dashed(V2 a, V2 b, float w, Color c, double t, float zoom) {
+    float dx = b.x - a.x, dy = b.y - a.y, len = std::hypot(dx, dy);
+    if (len < 1) return;
+    float dash = 9 / zoom + 3, gap = 6 / zoom + 2, period = dash + gap;
+    float off = std::fmod(float(t * .9), 1.f) * period;
+    for (float d = -period + off; d < len; d += period) {
+        float d0 = std::max(0.f, d), d1 = std::min(len, d + dash);
+        if (d1 <= d0) continue;
+        draw::line(a.x + dx * d0 / len, a.y + dy * d0 / len, a.x + dx * d1 / len, a.y + dy * d1 / len, w, c);
+    }
+    draw::circle(b.x, b.y, w * 1.6f, c);
+}
+
+void WorldView::drawLinks(Sim& s, int selectedId, Pick inspected) {
+    captions.clear();
+    float z = cam.zoom, w = 2.2f / z + .6f;
+    const Color work = draw::hex(0xe0a33a), haul = draw::rgba(196, 128, 62, .85f), social = draw::hex(0xb99ae6);
+    V2 stock = wp(s.stockX + 1.f, s.stockY + .5f);
+    for (auto& p : s.people) {
+        if (p.dead || p.hidden || !s.isExplored(p.x, p.y)) continue;
+        FocusTarget t = focusTarget(s, p.focus);
+        bool carrying = p.carry.has_value();
+        if (!t.ok && !(p.focus.toStock && carrying)) continue;   // a felled tree is gone, but its logs still go home
+        bool mine = p.id == selectedId;
+        bool toInspected = inspected.ok && t.what.ok && t.what.kind == inspected.kind && t.what.id == inspected.id;
+        if (!mine && !toInspected && !showAllLinks) continue;
+        V2 me = wp(p.x, p.y), to = t.ok ? wp(t.x, t.y) : stock;
+        Color c = p.focus.kind == Focus::PERSON ? social : work;
+        float a = mine || toInspected ? 1.f : .55f;
+        if (p.focus.fromStock && !carrying) {
+            // on the way to fetch materials: to the stockpile first, then on to the work
+            dashed(me, stock, w, draw::withA(haul, a * .85f), s.tMin, z);
+            dashed(stock, to, w * .8f, draw::withA(c, a * .45f), s.tMin, z);
+        } else if (p.focus.toStock && carrying) {
+            dashed(me, stock, w, draw::withA(haul, a), s.tMin, z);   // bringing the haul home
+        } else {
+            dashed(me, to, w, draw::withA(c, a), s.tMin, z);
+        }
+        if (mine) {
+            if (t.what.ok && t.what.kind != Drawable::PERSON) drawHighlight(s, t.what);
+            captions.push_back({{(me.x + to.x) / 2, (me.y + to.y) / 2 - 6}, p.doing});
+        }
+    }
 }
 
 // A gold outline on the ground around what the card is describing.

@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <functional>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 #include "engine/Draw.h"
@@ -420,6 +421,41 @@ static void testInspect(uint32_t seed, int days) {
     CHECK(shadowChecked && shadowIgnored, "clicking a tree's shadow does not select the tree");
 }
 
+// ---------------------------------------------------------------- links
+static void testLinks(uint32_t seed, int days) {
+    std::printf("links between settlers and their work, seed %u\n", seed);
+    Sim s;
+    s.newWorld(seed);
+    WorldView v;
+    art::Ctx ctx{&s, s.tMin, s.season(), 12};
+    Rectangle all{-200, -200, iso::WORLD_W + 400, iso::WORLD_H + 400};
+    const std::set<std::string> jobs = {"wood", "stone", "food", "build", "farm", "fuel", "eat", "drink", "warm", "visit", "friend", "craft"};
+    int checked = 0, linked = 0, drawn = 0, needDrawn = 0;
+    std::string firstBad;
+    for (int h = 0; h < days * 24; h += 7) {
+        s.step(7 * 60);
+        if (!s.pendingFate.empty()) { auto f = s.pendingFate[0]; s.pendingFate.clear(); s.applyFate(f); }
+        std::vector<Drawable> items;
+        bool listed = false;
+        for (auto* p : s.members()) {
+            if (!jobs.count(p->kind) || p->q.empty() || p->hidden) continue;
+            checked++;
+            FocusTarget t = focusTarget(s, p->focus);
+            if (t.ok || (p->focus.toStock && p->carry)) linked++;
+            else if (firstBad.empty()) firstBad = cat(" (first: ", p->name, ", '", p->doing, "')");
+            // what the line ends at is something the player can see and click
+            if (t.ok && t.what.ok && t.what.kind != Drawable::PERSON && s.isExplored(t.x, t.y)) {
+                if (!listed) { items = v.collect(s, ctx, all, -1); listed = true; }
+                needDrawn++;
+                for (auto& d : items) if (d.kind == t.what.kind && d.id == t.what.id) { drawn++; break; }
+                if (t.what.kind == Drawable::BUILDING && art::isFlat(s.projectById(t.what.id)->key)) drawn++;   // gardens and docks lie on the ground
+            }
+        }
+    }
+    CHECK(checked > 50 && linked == checked, (cat("every settler at work has a line to draw (", linked, " of ", checked, ")") + firstBad).c_str());
+    CHECK(needDrawn > 20 && drawn == needDrawn, cat("every line ends at something drawn on the map (", drawn, " of ", needDrawn, ")").c_str());
+}
+
 int main() {
     testProjection();
     testPickPeople(20261017);
@@ -431,6 +467,8 @@ int main() {
     testLabels();
     testInspect(20261017, 60);
     testInspect(7, 100);
+    testLinks(20261017, 40);
+    testLinks(777, 40);
     std::printf(failures ? "\n%d check(s) failed\n" : "\nall checks passed\n", failures);
     return failures;
 }

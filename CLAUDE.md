@@ -23,7 +23,7 @@ The game has a capture mode. On a headless Linux box use Xvfb (Mesa software GL 
 cd build && xvfb-run -s "-screen 0 1600x900x24" ./driftwood --screenshot shot.png --days 30 --hour 11 --zoom 1.3 --select 1 --tab 0
 ```
 
-Flags: `--days N` fast-forward, `--hour H` time of day, `--zoom Z`, `--select K` (K-th settler), `--tab 0|1|2`, `--seed N`, `--size WxH`, `--center X,Y` (tile to center on), `--show-journal`, and `--pick X,Y`, which prints what a click at that window point (logical pixels, not the HiDPI PNG's) would select; a miss names the nearest settler and where they are.
+Flags: `--days N` fast-forward, `--hour H` time of day, `--zoom Z`, `--select K` (K-th settler), `--tab 0|1|2`, `--seed N`, `--size WxH`, `--center X,Y` (tile to center on), `--show-journal`, `--links` (every settler's line to their work, as the C key toggles), and `--pick X,Y`, which prints what a click at that window point (logical pixels, not the HiDPI PNG's) would select; a miss names the nearest settler and where they are.
 
 For any rendering change, compare the fixed scenes in `tools/scenes.txt` before and after:
 
