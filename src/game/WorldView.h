@@ -38,6 +38,10 @@ public:
     void handleInput(float dt, Rectangle mapRect, bool pointerFree);
     void draw(dw::Sim& sim, Rectangle mapRect, int selectedId, float realDt, float speed, Pick inspected = {});
     bool showAllLinks = false;                // every settler's link to their work, not just the selected one
+    Pick hovered;                             // what is under the pointer this frame, set by the game
+    // Name tags appear only for the settler under the pointer, the selected
+    // one, and (hovering their hut) whoever sleeps inside.
+    static bool showTag(dw::Sim& sim, const dw::Person& p, Pick hovered, int selectedId);
     // Returns a person id under the screen point, or -1.
     int pick(dw::Sim& sim, Vector2 screen);
     // Whatever is drawn front-most under the screen point: its visible shape

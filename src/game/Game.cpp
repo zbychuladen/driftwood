@@ -55,6 +55,9 @@ void Game::frame(float dt) {
         if (IsKeyPressed(KEY_C)) view.showAllLinks = !view.showAllLinks;
     }
     if (!fate && speed > 0) sim.step(dt * speed * MIN_PER_SEC);
+    // what the pointer is over, for name tags
+    Vector2 mouse = GetMousePosition();
+    view.hovered = !fate && !ui::mouseOverUi() && CheckCollisionPointRec(mouse, rMap) ? view.pickAt(sim, mouse) : Pick{};
     if (view.clickedMap()) {
         // a settler opens their card in the sidebar; anything else gets the info card
         Pick p = view.pickAt(sim, view.clickPos());

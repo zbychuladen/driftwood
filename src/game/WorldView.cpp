@@ -393,6 +393,11 @@ std::vector<Drawable> WorldView::sorted(std::vector<Drawable> items) {
     return out;
 }
 
+bool WorldView::showTag(Sim& s, const Person& p, Pick hovered, int selectedId) {
+    if (p.id == selectedId || hovered.is(Drawable::PERSON, p.id)) return true;
+    return p.hidden && hovered.ok && hovered.kind == Drawable::BUILDING && hovered.id == p.bed && s.projectById(p.bed);
+}
+
 void WorldView::drawLabels(Sim& s, int selectedId) {
     if (cam.zoom < .55f) return;
     const float size = 13;
@@ -403,6 +408,9 @@ void WorldView::drawLabels(Sim& s, int selectedId) {
     std::map<int, int> stackAtBed;
     for (auto& p : s.people) {
         if (p.dead || !s.isExplored(p.x, p.y)) continue;
+        bool tag = showTag(s, p, hovered, selectedId);
+        bool talking = p.bubble && s.tMin < p.bubble->until && !p.hidden;
+        if (!tag && !talking) continue;   // speech bubbles still show; names wait for the pointer
         V2 w;
         if (p.hidden) {
             auto* b = s.projectById(p.bed);
@@ -415,8 +423,10 @@ void WorldView::drawLabels(Sim& s, int selectedId) {
         std::string lab = p.name + (p.sleeping ? "  zz" : p.status == "hermit" ? " (hermit)" : p.status == "arriving" ? " (stranger)" : "");
         V2 m = ui::measure(ui::F.bold, lab, size);
         bool sel = p.id == selectedId;
-        labs.push_back({&p, lab, false});
-        wants.push_back({{sc.x - m.x / 2 - 6, sc.y - 8, m.x + 12, 16}, sel});
+        if (tag) {
+            labs.push_back({&p, lab, false});
+            wants.push_back({{sc.x - m.x / 2 - 6, sc.y - 8, m.x + 12, 16}, sel || hovered.is(Drawable::PERSON, p.id)});
+        }
         if (p.bubble && s.tMin < p.bubble->until && !p.hidden) {
             V2 head = GetWorldToScreen2D(wp(p.x, p.y), cam);
             float by = head.y - (px(p.child ? scale::CHILD : scale::PERSON) + 14) * cam.zoom;
