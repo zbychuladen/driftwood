@@ -1,0 +1,9 @@
+# Fixed scenes for visual review. One per line: <name> <driftwood capture flags>
+# The same list is captured before and after a change and compared side by side.
+first-morning    --days 0 --hour 10 --zoom 1.8 --hide-journal
+camp-winter      --days 30 --hour 11 --zoom 1.3 --select 1 --tab 0
+village-close    --days 60 --hour 11 --zoom 2.2 --hide-journal
+village-wide     --days 60 --hour 14 --zoom 0.8 --hide-journal
+village-night    --days 45 --hour 22 --zoom 1.4 --hide-journal
+grown-village    --days 100 --hour 12 --zoom 1.8 --hide-journal
+other-island     --seed 7 --days 40 --hour 12 --zoom 1.5 --hide-journal

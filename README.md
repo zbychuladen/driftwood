@@ -44,7 +44,7 @@ Ready-to-run builds for Windows, macOS and Linux are produced by GitHub Actions 
 
 ### Tests
 
-The simulation runs headless, so it has its own test suite:
+The simulation runs headless, so it has its own test suite, and the renderer's geometry (projection, picking) has a second one that never opens a window:
 
 ```sh
 ctest --test-dir build -C Release --output-on-failure

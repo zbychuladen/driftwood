@@ -44,8 +44,8 @@ if(DRIFTWOOD_BUILD_GAME)
     GIT_SHALLOW TRUE)
   FetchContent_MakeAvailable(raylib)
 
-  add_executable(driftwood
-    src/main.cpp
+  # everything except main(), so tests can link the real renderer code
+  add_library(driftwood_game STATIC
     src/engine/Draw.cpp
     src/engine/Ui.cpp
     src/engine/Lighting.cpp
@@ -53,13 +53,26 @@ if(DRIFTWOOD_BUILD_GAME)
     src/game/WorldView.cpp
     src/game/Hud.cpp
     src/game/Game.cpp)
-  target_link_libraries(driftwood PRIVATE driftwood_sim raylib)
-  target_include_directories(driftwood PRIVATE src)
+  target_link_libraries(driftwood_game PUBLIC driftwood_sim raylib)
+  target_include_directories(driftwood_game PUBLIC src)
+  if(MSVC)
+    target_compile_options(driftwood_game PRIVATE /W3 /utf-8)
+  endif()
+  if(APPLE)
+    target_link_libraries(driftwood_game PUBLIC "-framework IOKit" "-framework Cocoa" "-framework OpenGL")
+  endif()
+
+  add_executable(driftwood src/main.cpp)
+  target_link_libraries(driftwood PRIVATE driftwood_game)
   if(MSVC)
     target_compile_options(driftwood PRIVATE /W3 /utf-8)
   endif()
-  if(APPLE)
-    target_link_libraries(driftwood PRIVATE "-framework IOKit" "-framework Cocoa" "-framework OpenGL")
+
+  # geometry checks on the renderer (projection, picking); never opens a window
+  if(DRIFTWOOD_BUILD_TESTS)
+    add_executable(game_tests tests/game_tests.cpp)
+    target_link_libraries(game_tests PRIVATE driftwood_game)
+    add_test(NAME game_tests COMMAND game_tests)
   endif()
   # copy assets next to the executable
   add_custom_command(TARGET driftwood POST_BUILD

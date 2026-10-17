@@ -1,6 +1,8 @@
 #include "game/Game.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include "game/Iso.h"
 #include "raylib.h"
 #include "rlgl.h"
 
@@ -86,9 +88,32 @@ int Game::run() {
         tab = opt.tab;
         if (opt.selectFirst) { auto m = sim.members(); if (!m.empty()) select(m[std::min<int>(opt.selectFirst - 1, int(m.size()) - 1)]->id, true); }
         else view.centerOnTile(sim.campX + 1.f, sim.campY + 1.f);
+        if (opt.hasCenter) view.centerOnTile(opt.centerX, opt.centerY);
         if (opt.zoom > 0) view.cam.zoom = opt.zoom;
+        if (opt.hideJournal) journalOpen = false;
         speed = 1;
         for (int i = 0; i < 4; i++) frame(1.f / 60);
+        if (opt.hasPick) {
+            // Report what a click at this screen point would select (for scripted checks).
+            int id = view.pick(sim, {opt.pickX, opt.pickY});
+            if (auto* p = sim.person(id)) std::printf("pick: person %d %s | %s\n", p->id, p->name.c_str(), p->doing.c_str());
+            else {
+                // say where the closest settler was, so a script can aim better
+                const dw::Person* near = nullptr;
+                Vector2 at{};
+                float bd = 1e9f;
+                for (auto& q : sim.people) {
+                    if (q.dead || q.hidden) continue;
+                    Vector2 w = iso::wp(q.x, q.y);
+                    w.y -= 14;
+                    Vector2 sc = GetWorldToScreen2D(w, view.cam);
+                    float d = std::hypot(sc.x - opt.pickX, sc.y - opt.pickY);
+                    if (d < bd) { bd = d; near = &q; at = sc; }
+                }
+                if (near) std::printf("pick: none (nearest %s at %.0f,%.0f)\n", near->name.c_str(), at.x, at.y);
+                else std::printf("pick: none\n");
+            }
+        }
         // Save with opaque alpha (blending leaves the framebuffer alpha < 1).
         Image img = LoadImageFromScreen();
         ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R8G8B8);
