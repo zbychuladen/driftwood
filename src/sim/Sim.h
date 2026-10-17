@@ -185,6 +185,17 @@ public:
 
     // ---- api ----
     void newWorld(uint32_t seed);
+
+    // ---- saving ----
+    // The whole game as bytes, and back. Settlers' half-done actions are not
+    // kept: after a load everyone picks their next task. load() leaves the sim
+    // as it was and returns false, with a reason, for anything it cannot read.
+    static constexpr int SAVE_VERSION = 1;
+    struct SaveInfo { std::string village; int day = 0, year = 0, season = 0, people = 0; uint32_t seed = 0; };
+    std::string save() const;
+    bool load(const std::string& data, std::string* error = nullptr);
+    // Just the summary at the top of a save, for a list of save slots.
+    static bool peek(const std::string& data, SaveInfo& out);
     void step(double minutes);                // advance simulation time (game minutes)
     std::vector<Person*> members();
     Person* person(int id);

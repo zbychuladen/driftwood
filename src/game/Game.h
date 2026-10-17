@@ -23,7 +23,10 @@ struct Options {
     bool gallery = false;
     bool people = false;
     bool buildings = false;
-    bool structures = false;          // capture a sheet of the assembled structures (well, tower, dock...)           // capture a sheet of assembled buildings and their construction              // capture a sheet of settler figures, poses and facings
+    bool structures = false;          // capture a sheet of the assembled structures (well, tower, dock...)
+    bool title = false;               // capture the title screen instead of the game
+    bool menu = false;                // capture the game paused with the save picker open
+    std::string saveDir;              // where saves go (default: the platform's place for app data)           // capture a sheet of assembled buildings and their construction              // capture a sheet of settler figures, poses and facings
     int bench = 0;                    // capture: time this many frames and print the average             // capture a sheet of every tree and plant instead of the world            // draw every settler's link to their work
     bool hasCenter = false, hasPick = false;
     float centerX = 0, centerY = 0;   // tile to center the camera on
@@ -51,6 +54,14 @@ private:
     void drawGallery();
     void drawPeopleGallery();
     void drawBuildingGallery(bool structures);
+    // title, pause menu and saves (Menus.cpp)
+    void drawTitle();
+    void drawMenu();
+    void drawPicker();
+    void drawToast();
+    void say(const std::string& text);
+    void saveTo(int slot);
+    void loadFrom(int slot);
     float settlerCard(dw::Person& p, float x, float y, float w, bool drawIt);
     void select(int id, bool center);
 
@@ -69,4 +80,12 @@ private:
     std::vector<float> journalHeights;
     int journalVersionCached = -1;
     float journalWidthCached = 0;
+    // which screen is up
+    enum class Screen { TITLE, PLAYING } screen = Screen::TITLE;
+    enum class Picker { NONE, SAVE, LOAD } picker = Picker::NONE;
+    bool menuOpen = false, quit = false;
+    int confirmSlot = -1;                 // a used slot clicked once in the save picker
+    std::string toast;
+    double toastUntil = 0;
+    float titleClock = 0;                 // the title backdrop's camera drift
 };

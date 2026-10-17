@@ -35,6 +35,14 @@ void WorldView::init(Sim& sim) {
     cam.zoom = 1.15f;
 }
 
+void WorldView::reset(Sim& sim) {
+    tracks.clear();
+    wasInside.clear();
+    lastPass.clear();
+    art::resetDoors();
+    init(sim);
+}
+
 void WorldView::unload() {
     if (ground.id) UnloadRenderTexture(ground);
     ground = {};

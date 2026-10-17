@@ -129,6 +129,50 @@ static void testDeterminism() {
     CHECK(a.stock.food == b.stock.food && a.members().size() == b.members().size() && a.journal.size() == b.journal.size(), "same seed, same history");
 }
 
+// Settle the people a save would reset, so two saves can be compared byte for byte.
+static std::string saveLoadSave(const std::string& data) { Sim s; s.load(data); return s.save(); }
+
+static void testSaving() {
+    std::printf("saving and loading\n");
+    Sim a;
+    a.newWorld(20261017);
+    runDays(a, 40);
+    std::string first = a.save();
+    Sim b;
+    std::string err;
+    CHECK(b.load(first, &err), ("a 40-day game loads" + (err.empty() ? std::string() : ": " + err)).c_str());
+    int built = 0, builtB = 0;
+    for (auto& p : a.plan) built += p.done;
+    for (auto& p : b.plan) builtB += p.done;
+    CHECK(b.members().size() == a.members().size() && b.day() == a.day() && b.villageName == a.villageName && b.journal.size() == a.journal.size()
+          && b.stock.food == a.stock.food && builtB == built && b.explored == a.explored && b.objs.size() == a.objs.size(), "the loaded game has the same people, day, village, journal, stores, buildings and map");
+    bool namesKept = true;
+    for (size_t i = 0; i < a.people.size(); i++) if (a.people[i].name != b.people[i].name || a.people[i].x != b.people[i].x || a.people[i].aff != b.people[i].aff) namesKept = false;
+    CHECK(namesKept, "every settler keeps their name, place and friendships");
+    std::string once = saveLoadSave(first), twice = saveLoadSave(once);
+    CHECK(once == twice, cat("saving a loaded game gives the same bytes again (", int(once.size() / 1024), " KB)").c_str());
+    // two copies of one save go on the same way
+    Sim c, d;
+    c.load(once); d.load(once);
+    runDays(c, 10); runDays(d, 10);
+    CHECK(c.save() == d.save(), "two loads of one save play out identically");
+    runDays(c, 30);
+    CHECK(!c.members().empty() && c.day() == a.day() + 40, "a loaded game keeps running for another 40 days");
+    Sim::SaveInfo info;
+    CHECK(Sim::peek(first, info) && info.day == a.day() && info.village == a.villageName && info.people == int(a.members().size()), "the save's summary can be read on its own");
+    // anything damaged is refused and leaves the running game alone
+    Sim e;
+    e.newWorld(7);
+    std::string before = e.save();
+    bool refused = !e.load("not a save at all") && !e.load(first.substr(0, first.size() / 2)) && !e.load(first + "x");
+    std::string future = first;
+    future[sizeof("DRIFTWOOD SAVE\n") - 1 + 4] = char(Sim::SAVE_VERSION + 1);   // the version number, after the magic and its length
+    std::string why;
+    bool newer = !e.load(future, &why) && why.find("newer") != std::string::npos;
+    CHECK(refused && e.save() == before, "garbage, a cut-off file or trailing data is refused, and the game is untouched");
+    CHECK(newer, "a save from a newer version is refused with a reason");
+}
+
 int main() {
     for (uint32_t seed : {20261017u, 777u, 4242u}) testSurvival(seed);
     testNoSmithNoForge();
@@ -137,6 +181,7 @@ int main() {
     testDeterminism();
     testFocus(20261017);
     testFocus(777);
+    testSaving();
     std::printf(failures ? "\n%d check(s) failed\n" : "\nall checks passed\n", failures);
     return failures;
 }

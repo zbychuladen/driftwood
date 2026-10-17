@@ -33,6 +33,7 @@ float doorHeight(float wallPx);
 const bld::Design* designFor(const dw::Sim& s, const dw::Project& b);
 // How far each building's door stands open (0..1), set by the world view.
 void setDoor(int id, float open);
-float doorOf(int id);       // doorway height drawn in a wall of this height (world px)
+float doorOf(int id);
+void resetDoors();       // doorway height drawn in a wall of this height (world px)
 
 } // namespace art

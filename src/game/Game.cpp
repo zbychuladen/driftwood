@@ -7,6 +7,7 @@
 #include "game/Building.h"
 #include "game/Figure.h"
 #include "game/Iso.h"
+#include "game/Saves.h"
 #include "raylib.h"
 #include "rlgl.h"
 
@@ -40,27 +41,50 @@ void Game::layout() {
 void Game::frame(float dt) {
     ui::beginFrame();
     layout();
-    ui::block(rTop);
-    ui::block(rSide);
-    ui::block(rJournal);
-    if (inspected.ok) ui::block({16, rTop.height + 16, 340, inspectH});
+    const bool title = screen == Screen::TITLE;
+    const bool overlay = title || menuOpen || picker != Picker::NONE;
     bool fate = !sim.pendingFate.empty();
-    if (fate) ui::block(rMap);
-    view.handleInput(dt, rMap, !ui::mouseOverUi() && !fate);
-    if (!sandFocus) {
+    if (overlay) ui::block({0, 0, float(GetScreenWidth()), float(GetScreenHeight())});
+    else {
+        ui::block(rTop);
+        ui::block(rSide);
+        ui::block(rJournal);
+        if (inspected.ok) ui::block({16, rTop.height + 16, 340, inspectH});
+        if (fate) ui::block(rMap);
+    }
+    if (!overlay) view.handleInput(dt, rMap, !ui::mouseOverUi() && !fate);
+    else view.handleInput(0, rMap, false);   // keeps the camera framed to the map, ignores the pointer
+    if (IsKeyPressed(KEY_ESCAPE) && !sandFocus) {
+        // Esc backs out one step: the picker, the info card, then the menu
+        if (picker != Picker::NONE) { picker = Picker::NONE; confirmSlot = -1; }
+        else if (!title && inspected.ok) inspected = {};
+        else if (!title) menuOpen = !menuOpen;
+    }
+    if (!title && !sandFocus && picker == Picker::NONE) {
+        if (IsKeyPressed(KEY_F5)) saveTo(saves::QUICK);
+        if (IsKeyPressed(KEY_F9)) loadFrom(saves::QUICK);
+    }
+    if (!overlay && !sandFocus) {
         if (IsKeyPressed(KEY_SPACE)) speed = speed > 0 ? (prevSpeed = speed, 0.f) : (prevSpeed > 0 ? prevSpeed : 1.f);
         if (IsKeyPressed(KEY_ONE)) speed = 1;
         if (IsKeyPressed(KEY_TWO)) speed = 2;
         if (IsKeyPressed(KEY_THREE)) speed = 5;
         if (IsKeyPressed(KEY_J)) journalOpen = !journalOpen;
-        if (IsKeyPressed(KEY_ESCAPE)) inspected = {};
         if (IsKeyPressed(KEY_C)) view.showAllLinks = !view.showAllLinks;
     }
-    if (!fate && speed > 0) sim.step(dt * speed * MIN_PER_SEC);
+    if (title) {
+        // the island goes on living behind the title, the camera drifting round camp
+        sim.step(dt * MIN_PER_SEC);
+        if (!sim.pendingFate.empty()) { auto f = sim.pendingFate[0]; sim.pendingFate.clear(); sim.applyFate(f); }
+        titleClock += dt;
+        float a = titleClock * .05f;
+        view.centerOnTile(sim.campX + .5f + std::cos(a) * 4, sim.campY + .5f + std::sin(a) * 4);
+        view.cam.zoom = 1.25f;
+    } else if (!overlay && !fate && speed > 0) sim.step(dt * speed * MIN_PER_SEC);
     // what the pointer is over, for name tags
     Vector2 mouse = GetMousePosition();
-    view.hovered = !fate && !ui::mouseOverUi() && CheckCollisionPointRec(mouse, rMap) ? view.pickAt(sim, mouse) : Pick{};
-    if (view.clickedMap()) {
+    view.hovered = !overlay && !fate && !ui::mouseOverUi() && CheckCollisionPointRec(mouse, rMap) ? view.pickAt(sim, mouse) : Pick{};
+    if (!overlay && view.clickedMap()) {
         // a settler opens their card in the sidebar; anything else gets the info card
         Pick p = view.pickAt(sim, view.clickPos());
         select(p.ok && p.kind == Drawable::PERSON ? p.id : -1, false);
@@ -70,8 +94,19 @@ void Game::frame(float dt) {
 
     BeginDrawing();
     rlDisableBackfaceCulling();   // 2D shapes come in both windings
-    view.draw(sim, rMap, selected, dt, sim.pendingFate.empty() ? speed : 0, inspected);
-    drawHud();
+    if (title) {
+        // the title shows the whole window of island, no sidebar
+        Rectangle all{0, 0, float(GetScreenWidth()), float(GetScreenHeight())};
+        view.cam.offset = {all.width / 2, all.height / 2};
+        view.draw(sim, all, -1, dt, 1, {});
+        drawTitle();
+    } else {
+        view.draw(sim, rMap, selected, dt, sim.pendingFate.empty() && !overlay ? speed : 0, inspected);
+        drawHud();
+        if (menuOpen) drawMenu();
+    }
+    if (picker != Picker::NONE) drawPicker();
+    drawToast();
     EndDrawing();
 }
 
@@ -257,8 +292,18 @@ int Game::run() {
     std::string assets = std::string(GetApplicationDirectory()) + "assets";
     if (!DirectoryExists(assets.c_str())) assets = "assets";
     ui::load(assets);
+    if (!opt.saveDir.empty()) saves::setDir(opt.saveDir);
     newGame(opt.seed);
     if (opt.fullscreen) ToggleFullscreen();
+    // the title's backdrop: the island a few weeks on, with a village to look at
+    if (opt.screenshot.empty() || opt.title) {
+        int target = sim.day() + 24;
+        while (sim.day() < target || sim.hour() < 10.5) {   // a few weeks on, mid-morning light
+            sim.step(30);
+            if (!sim.pendingFate.empty()) { auto f = sim.pendingFate[0]; sim.pendingFate.clear(); sim.applyFate(f); }
+        }
+        screen = Screen::TITLE;
+    } else screen = Screen::PLAYING;
 
     if (!opt.screenshot.empty()) {
         // Headless capture for docs and visual checks.
@@ -290,7 +335,10 @@ int Game::run() {
                 else drawGallery();
                 EndDrawing();
             }
-        else for (int i = 0; i < 4; i++) frame(1.f / 60);
+        else {
+            if (opt.menu) { menuOpen = true; picker = Picker::LOAD; }
+            for (int i = 0; i < 4; i++) frame(1.f / 60);
+        }
         if (opt.bench > 0) {
             // whole frames, sim and drawing, as the player gets them (vsync off so they are not capped)
             ClearWindowState(FLAG_VSYNC_HINT);
@@ -337,7 +385,7 @@ int Game::run() {
         return 0;
     }
 
-    while (!WindowShouldClose()) frame(std::min(GetFrameTime(), .1f));
+    while (!WindowShouldClose() && !quit) frame(std::min(GetFrameTime(), .1f));
     ui::unload();
     view.unload();
     CloseWindow();

@@ -2,6 +2,8 @@
 // camera math. Nothing here opens a window or touches the GPU.
 #include <algorithm>
 #include <chrono>
+#include <filesystem>
+#include <fstream>
 #include <cmath>
 #include <cstdio>
 #include <functional>
@@ -18,6 +20,7 @@
 #include "game/Inspect.h"
 #include "game/Iso.h"
 #include "game/Labels.h"
+#include "game/Saves.h"
 #include "game/Scale.h"
 #include "game/WorldView.h"
 #include "sim/Sim.h"
@@ -736,6 +739,36 @@ static void testDoors() {
     CHECK(checkedShut > 100 && shutAfter == checkedShut, "doors swing shut once nobody has passed for a while");
 }
 
+// ---------------------------------------------------------------- save slots
+static void testSaveSlots() {
+    std::printf("save slots\n");
+    namespace fs = std::filesystem;
+    fs::path tmp = fs::temp_directory_path() / ("driftwood-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    saves::setDir(tmp.string());
+    CHECK(!saves::any() && saves::list().size() == size_t(saves::SLOTS + 1), "a fresh install has a quick slot and five empty ones, nothing to load");
+    Sim s;
+    s.newWorld(20261017);
+    runDays(s, 15);
+    std::string err;
+    bool wrote = saves::write(2, s.save(), &err) && saves::write(saves::QUICK, s.save(), &err);
+    auto slots = saves::list();
+    CHECK(wrote && slots[2].used && !slots[2].damaged && slots[2].info.day == s.day() && slots[saves::QUICK].used && !slots[1].used,
+          ("saves land in their slots and the list reads their day back" + (err.empty() ? std::string() : ": " + err)).c_str());
+    bool leftovers = false;
+    for (auto& e : fs::directory_iterator(tmp)) if (e.path().extension() == ".tmp") leftovers = true;
+    CHECK(!leftovers, "nothing half-written is left in the save folder");
+    std::string data;
+    Sim back;
+    CHECK(saves::read(2, data, &err) && back.load(data, &err) && back.day() == s.day() && back.members().size() == s.members().size(), "a slot reads back into the same game");
+    // a damaged file shows as damaged, and loading it fails without crashing
+    { std::ofstream f(tmp / "slot4.dwsave", std::ios::binary); f << "this is not a save"; }
+    slots = saves::list();
+    CHECK(slots[4].used && slots[4].damaged && saves::read(4, data, &err) && !back.load(data, &err), "a damaged save is listed as damaged and refused");
+    CHECK(!saves::read(5, data, &err) && !err.empty(), "reading an empty slot says so");
+    fs::remove_all(tmp);
+    saves::setDir("");
+}
+
 int main() {
     testProjection();
     testPickPeople(20261017);
@@ -755,6 +788,7 @@ int main() {
     testFigures();
     testBuildings();
     testDoors();
+    testSaveSlots();
     std::printf(failures ? "\n%d check(s) failed\n" : "\nall checks passed\n", failures);
     return failures;
 }

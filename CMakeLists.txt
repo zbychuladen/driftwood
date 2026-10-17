@@ -18,7 +18,8 @@ add_library(driftwood_sim STATIC
   src/sim/SimProjects.cpp
   src/sim/SimJobs.cpp
   src/sim/SimNarrator.cpp
-  src/sim/SimTick.cpp)
+  src/sim/SimTick.cpp
+  src/sim/SimSave.cpp)
 target_include_directories(driftwood_sim PUBLIC src)
 if(MSVC)
   target_compile_options(driftwood_sim PRIVATE /W3 /utf-8)
@@ -57,7 +58,9 @@ if(DRIFTWOOD_BUILD_GAME)
     src/game/Labels.cpp
     src/game/WorldView.cpp
     src/game/Hud.cpp
+    src/game/Saves.cpp
     src/game/Inspect.cpp
+    src/game/Menus.cpp
     src/game/Game.cpp)
   target_link_libraries(driftwood_game PUBLIC driftwood_sim raylib)
   target_include_directories(driftwood_game PUBLIC src)

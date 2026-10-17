@@ -25,6 +25,8 @@ An isometric island colony sim. Five castaways wash ashore with a hatchet, a kni
 | Show all work | `C` draws every settler's line to their work |
 | Pause / speeds | `Space`, `1` `2` `3`, or the buttons at the top |
 | Toggle journal | `J` |
+| Menu (save, load, quit to title) | `Esc` |
+| Quick save / quick load | `F5` / `F9` |
 
 ## Building
 

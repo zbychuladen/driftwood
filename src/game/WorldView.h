@@ -41,6 +41,8 @@ public:
     // The tiles that can show inside a screen rectangle, with a margin.
     TileRange visibleTiles(Rectangle screen) const;
     void init(dw::Sim& sim);
+    // After loading a save: forget everything tracked about the last game.
+    void reset(dw::Sim& sim);
     void unload();
     // Camera input. mapRect is the visible map area (excludes the sidebar).
     void handleInput(float dt, Rectangle mapRect, bool pointerFree);

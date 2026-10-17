@@ -528,6 +528,7 @@ const bld::Design* designFor(const dw::Sim& s, const dw::Project& b) {
     return &it->second.d;
 }
 void setDoor(int id, float open) { doors[id] = open; }
+void resetDoors() { doors.clear(); designs.clear(); }
 float doorOf(int id) { auto it = doors.find(id); return it == doors.end() ? 0.f : it->second; }
 
 bool isFlat(const std::string& k) { return k == "garden" || k == "dock" || k == "herbs" || k == "bath" || k == "fields"; }
