@@ -2,12 +2,14 @@
 #include <algorithm>
 #include <cmath>
 #include "game/Scale.h"
+#include "sim/Sim.h"
 
 namespace bld {
 
 using solid::Solid;
 using solid::V3;
 using solid::upright;
+using dw::cat;
 
 namespace {
 
@@ -203,10 +205,14 @@ struct Builder {
 
 const char* DOOR_STYLES[3] = {"plank", "ledged", "double"};
 
+// Across a direction on the ground (a quarter turn).
+V3 cross2(V3 v) { return {-v.y, v.x, 0}; }
+
 } // namespace
 
 bool assembled(const std::string& k) {
-    static const char* keys[] = {"hut", "leanto", "longhouse", "store", "school", "forge", "smoke", "loomhouse", "infirmary"};
+    static const char* keys[] = {"hut", "leanto", "longhouse", "store", "school", "forge", "smoke", "loomhouse", "infirmary",
+                                 "well", "rack", "tower", "lighthouse", "signal", "mine", "dock", "shrine", "pottery", "boatyard"};
     for (auto s : keys) if (k == s) return true;
     return false;
 }
@@ -217,7 +223,7 @@ int sideToward(float cx, float cy, float tx, float ty) {
     return dy >= 0 ? 1 : 2;
 }
 
-Design make(const std::string& key, int id, int x, int y, int w, int h, int front, bool snow) {
+Design make(const std::string& key, int id, int x, int y, int w, int h, int front, bool snow, int dx, int dy) {
     Design d;
     d.key = key;
     d.front = front;
@@ -275,6 +281,285 @@ Design make(const std::string& key, int id, int x, int y, int w, int h, int fron
         d.roof = std::string(rm.name) + " lean-to";
         d.openSide = true;
         for (int i = 0; i < 2; i++) b.add(upright(solid::CYLINDER, b.centre + b.t(front) * (-.8f + i * 1.6f) + V3{0, 0, b.base}, .7f, .35f, .2f, 0, hex(0x8a7a5a)), EXTRA, DETAILS);
+    } else if (key == "well") {
+        // a round curb, water inside, two posts carrying a windlass, a little roof
+        bool stone = r.chance(.65f);
+        V3 c = b.centre;
+        float rad = .72f;
+        b.add(upright(solid::CYLINDER, c, rad * 2 + .3f, rad * 2 + .3f, .08f, 0, hex(0xb3ad9e), solid::STONE), BASE, FOUNDATION);
+        b.add(upright(solid::CYLINDER, c + V3{0, 0, .08f}, rad * 2, rad * 2, scale::WELL_CURB - .08f, 0, stone ? STONE.col : BOARDS.col, stone ? solid::STONE : solid::BOARDS), WALL, WALLS, true);
+        b.add(upright(solid::CYLINDER, c + V3{0, 0, scale::WELL_CURB - .02f}, rad * 1.6f, rad * 1.6f, .03f, 0, hex(0x3a5664)), EXTRA, WALLS);
+        float postH = scale::WELL_ROOF - .55f;
+        int axis = r.pick(2);
+        V3 along = axis ? V3{0, 1, 0} : V3{1, 0, 0};
+        for (float s : {-1.f, 1.f}) b.add(upright(solid::BOX, c + along * (s * (rad + .05f)), .14f, .14f, postH, 0, FRAMEWOOD), POST, FRAME, true);
+        b.add(solid::along(c - along * (rad + .1f) + V3{0, 0, postH - .45f}, c + along * (rad + .1f) + V3{0, 0, postH - .45f}, .1f, .1f, V3{0, 0, 1}, hex(0x7a5634)), EXTRA, DETAILS);
+        V3 bucketAt = c + V3{0, 0, scale::WELL_CURB + .35f};
+        b.add(solid::along(bucketAt + V3{0, 0, .2f}, c + V3{0, 0, postH - .45f}, .015f, .015f, along, hex(0xd8d0bc)), EXTRA, DETAILS);
+        b.add(upright(solid::CYLINDER, bucketAt - V3{0, 0, .1f}, .26f, .26f, .26f, 0, hex(0x8a6440), solid::BOARDS), EXTRA, DETAILS);
+        const Mat& rm = pickMat({&SHINGLE, &PLANKROOF, &THATCH});
+        Color rc = snow ? hex(0xeef1f2) : rm.col;
+        b.add(upright(solid::GABLE, c + V3{0, 0, postH - .05f}, rad * 2 + .7f, 1.2f, scale::WELL_ROOF - postH + .05f, axis ? 1.5708f : 0, rc, rm.tex), ROOF, ROOFING);
+        d.made = std::string(stone ? "a stone curb" : "a board curb") + ", a " + rm.name + " roof";
+        d.walls = stone ? "stone" : "boards";
+        d.roof = rm.name;
+        d.roof += axis ? " across" : " along";
+        d.features = {"curb", "water", "windlass", "bucket", "roof"};
+    } else if (key == "rack") {
+        // posts and a crossbar hung with drying fish, or an A-frame
+        V3 c = b.centre;
+        bool aframe = r.chance(.4f);
+        int axis = r.pick(2);
+        V3 along = axis ? V3{0, 1, 0} : V3{1, 0, 0};
+        float span = 1.5f, top = scale::RACK;
+        for (float s : {-1.f, 1.f}) {
+            V3 foot = c + along * (s * span / 2);
+            if (aframe)
+                for (float lean : {-1.f, 1.f}) b.add(solid::along(foot + V3{0, 0, 0} + cross2(along) * (lean * .45f), foot + V3{0, 0, top - .05f}, .09f, .09f, along, FRAMEWOOD), POST, FRAME);
+            else b.add(upright(solid::BOX, foot, .12f, .12f, top, 0, FRAMEWOOD), POST, FRAME, true);
+        }
+        b.add(solid::along(c - along * (span / 2 + .15f) + V3{0, 0, top - .08f}, c + along * (span / 2 + .15f) + V3{0, 0, top - .08f}, .09f, .09f, V3{0, 0, 1}, hex(0x7a5634)), WALL, WALLS);
+        int fish = 3 + r.pick(3);
+        for (int i = 0; i < fish; i++) {
+            V3 f = c + along * (-span / 2 + .25f + i * (span - .5f) / std::max(1, fish - 1)) + V3{0, 0, top - .45f};
+            b.add(upright(solid::BOX, f, .09f, .05f, .34f, axis ? 1.5708f : 0, i % 2 ? hex(0xc98a5a) : hex(0xb0704a)), EXTRA, DETAILS);
+        }
+        d.made = std::string(aframe ? "an A-frame" : "two posts and a crossbar") + cat(", ", fish, " fish drying");
+        d.walls = aframe ? "a-frame" : "posts";
+        d.roof = cat(fish, axis ? " across" : " along");
+        d.features = {"posts", "crossbar", "fish"};
+    } else if (key == "tower") {
+        // four log legs leaning in, braced, a platform with a railing, a roof on short posts, a ladder
+        V3 c = b.centre;
+        float deck = scale::TOWER - 3.f, foot = .95f, head = .7f;
+        for (int i = 0; i < 4; i++) {
+            V3 dir{i & 1 ? 1.f : -1.f, i & 2 ? 1.f : -1.f, 0};
+            b.add(solid::along(c + dir * foot, c + dir * head + V3{0, 0, deck}, .16f, .16f, V3{dir.y, -dir.x, 0}, hex(0x6e5238)), POST, FRAME);
+        }
+        int braces = r.chance(.5f) ? 2 : 1;
+        for (int side = 0; side < 4; side++) {
+            V3 n = SIDES[side], t{-n.y, n.x, 0};
+            for (int k = 0; k < braces; k++) {
+                float z0 = deck * (k / float(braces + 1)) + .4f, z1 = deck * ((k + 1) / float(braces + 1)) + .2f;
+                float w0 = foot - (foot - head) * z0 / deck, w1 = foot - (foot - head) * z1 / deck;
+                b.add(solid::along(c + n * w0 + t * (-w0) + V3{0, 0, z0}, c + n * w1 + t * w1 + V3{0, 0, z1}, .07f, .07f, n, FRAMEWOOD), BEAM, WALLS);
+            }
+        }
+        b.add(upright(solid::BOX, c + V3{0, 0, deck}, 2.0f, 2.0f, .16f, 0, PLANKS.col, solid::PLANKS), WALL, WALLS);
+        for (int side = 0; side < 4; side++) {
+            V3 n = SIDES[side];
+            b.add(upright(solid::BOX, c + n * .95f + V3{0, 0, deck + .16f + .75f}, 2.0f, .06f, .08f, std::atan2(n.x, -n.y), FRAMEWOOD), BEAM, DETAILS);
+        }
+        for (int i = 0; i < 4; i++) b.add(upright(solid::BOX, c + V3{i & 1 ? .9f : -.9f, i & 2 ? .9f : -.9f, deck + .16f}, .1f, .1f, 1.75f, 0, FRAMEWOOD), POST, ROOFING);
+        const Mat& rm = pickMat({&THATCH, &SHINGLE, &PLANKROOF});
+        bool cone = r.chance(.4f);
+        Color rc = snow ? hex(0xeef1f2) : rm.col;
+        float roofH = scale::TOWER - (deck + 1.9f);
+        b.add(upright(cone ? solid::CONE : solid::HIP, c + V3{0, 0, deck + 1.9f}, 2.5f, 2.5f, roofH, 0, rc, rm.tex), ROOF, ROOFING);
+        // a ladder up the front
+        V3 fn = SIDES[front], ft{-fn.y, fn.x, 0};
+        V3 l0 = c + fn * (foot + .35f), l1 = c + fn * (head + .08f) + V3{0, 0, deck + .1f};
+        for (float s : {-.22f, .22f}) b.add(solid::along(l0 + ft * s, l1 + ft * s, .05f, .05f, ft, hex(0x7a5634)), EXTRA, DETAILS);
+        for (int k = 1; k < 14; k++) { V3 p = l0 + (l1 - l0) * (k / 14.f); b.add(solid::along(p - ft * .22f, p + ft * .22f, .035f, .035f, fn, hex(0x7a5634)), EXTRA, DETAILS); }
+        d.made = std::string(braces == 2 ? "log legs braced twice" : "log legs braced once") + ", a " + rm.name + (cone ? " cone" : " hip") + " roof";
+        d.walls = braces == 2 ? "double braced" : "braced";
+        d.roof = std::string(rm.name) + (cone ? " cone" : " hip");
+        d.features = {"legs", "platform", "railing", "roof", "ladder"};
+    } else if (key == "lighthouse") {
+        // a tapering stone tower in three courses, a gallery, the lantern room and a cone roof
+        V3 c = b.centre;
+        bool banded = r.chance(.55f);
+        Color body = hex(0xe9e6dc), band = hex(r.chance(.5f) ? 0xb8434a : 0x3d5a7a);
+        b.add(upright(solid::CYLINDER, c, 1.95f, 1.95f, .3f, 0, hex(0xa29c8c), solid::STONE), BASE, FOUNDATION);
+        float z = .3f, rad = .9f;
+        const float courses[3] = {3.f, 2.8f, 2.4f};
+        for (int i = 0; i < 3; i++) {
+            Color col = banded && i == 1 ? band : body;
+            b.add(upright(solid::CYLINDER, c + V3{0, 0, z}, rad * 2, rad * 2, courses[i], 0, col, banded ? solid::PLAIN : solid::STONE), WALL, WALLS, true);
+            z += courses[i];
+            rad -= .12f;
+        }
+        b.add(upright(solid::CYLINDER, c + V3{0, 0, z}, rad * 2 + .6f, rad * 2 + .6f, .14f, 0, hex(0x4a4a4e)), WALL, ROOFING);
+        for (int i = 0; i < 10; i++) {
+            float a = 6.283f * i / 10;
+            b.add(upright(solid::BOX, c + V3{std::cos(a) * (rad + .26f), std::sin(a) * (rad + .26f), z + .14f}, .05f, .05f, .55f, 0, hex(0x3a3a3e)), BEAM, DETAILS);
+        }
+        b.add(upright(solid::CYLINDER, c + V3{0, 0, z + .14f}, rad * 1.5f, rad * 1.5f, 1.1f, 0, hex(0xe8d898)), WINDOW, ROOFING);
+        d.panes.push_back(int(d.pieces.size()) - 1);
+        d.flame = c + V3{0, 0, z + .7f};
+        d.flames = true;
+        const uint32_t caps[3] = {0x3a3a3e, 0x8a3a34, 0x3a5a4a};
+        int cap = r.pick(3);
+        b.add(upright(solid::CONE, c + V3{0, 0, z + 1.24f}, rad * 1.8f, rad * 1.8f, scale::LIGHTHOUSE - (z + 1.24f), 0, hex(caps[cap])), ROOF, ROOFING);
+        // a door at the foot, facing camp
+        V3 fn = SIDES[front], ft{-fn.y, fn.x, 0};
+        b.add(upright(solid::BOX, c + fn * .86f + V3{0, 0, .3f}, .8f, .1f, 1.95f, std::atan2(ft.y, ft.x), hex(0x5e4636), solid::BOARDS), DOOR, DETAILS);
+        d.doorPiece = int(d.pieces.size()) - 1;
+        d.hinge = c + fn * .86f + ft * -.4f;
+        d.doorYaw = std::atan2(ft.y, ft.x);
+        d.doorWidth = .8f;
+        d.doorStyle = "plank";
+        d.made = banded ? "whitewashed stone with a painted band" : "whitewashed stone";
+        d.walls = banded ? (band.r > 150 ? "red band" : "blue band") : "stone";
+        d.roof = cap == 0 ? "iron cone" : cap == 1 ? "red cone" : "green cone";
+        d.features = {"tower", "gallery", "lantern", "roof", "door"};
+    } else if (key == "signal") {
+        // a crib of logs, each layer across the one below, on a ring of stones
+        V3 c = b.centre;
+        b.add(upright(solid::CYLINDER, c, 1.8f, 1.8f, .14f, 0, hex(0x9a958a), solid::STONE), BASE, FOUNDATION);
+        int layers = 5 + r.pick(3);
+        bool steep = r.chance(.5f);
+        float lh = (scale::SIGNAL - .14f) / layers, w = 1.4f;
+        for (int i = 0; i < layers; i++) {
+            V3 along = i % 2 ? V3{0, 1, 0} : V3{1, 0, 0}, acr{along.y, along.x, 0};
+            float ww = w - i * (steep ? .1f : .05f);
+            for (float s : {-1.f, 1.f}) {
+                V3 m = c + acr * (s * ww * .38f) + V3{0, 0, .14f + lh * (i + .5f)};
+                Solid lg = solid::along(m - along * (ww / 2), m + along * (ww / 2), lh * .95f, lh * .95f, V3{0, 0, 1}, i % 2 ? hex(0x7a5634) : hex(0x8a6440));
+                lg.tex = solid::LOGS;
+                b.add(lg, WALL, i < layers / 2 ? WALLS : ROOFING);
+            }
+        }
+        d.flame = c + V3{0, 0, scale::SIGNAL};
+        d.flames = true;
+        d.made = cat("a crib of ", layers, " log layers on a ring of stones");
+        d.walls = cat(layers, " layers");
+        d.roof = steep ? "steep" : "straight";
+        d.features = {"ring", "crib"};
+    } else if (key == "mine") {
+        // a rocky mound with a timber frame round the dark way in, and a cart
+        V3 c = b.centre;
+        V3 fn = SIDES[front], ft{-fn.y, fn.x, 0};
+        int rocks = 4 + r.pick(3);
+        for (int i = 0; i < rocks; i++) {
+            float a = 6.283f * i / rocks + r() * .5f, dist = i == 0 ? 0 : .55f + r() * .2f;
+            V3 p = c + V3{std::cos(a) * dist, std::sin(a) * dist, 0} - fn * .25f;
+            if (i == 0) {
+                // the hill itself: three terraces of rock, each smaller and set back
+                const float tier[3][3] = {{2.f, 1.8f, 1.4f}, {1.5f, 1.3f, 1.2f}, {.95f, .85f, .9f}};
+                float z = 0;
+                for (int k = 0; k < 3; k++) {
+                    V3 q = p - fn * (.12f * k) + V3{0, 0, z};
+                    b.add(upright(solid::HIP, q, tier[k][0], tier[k][1], tier[k][2] + .25f, r() * .5f, hex(k % 2 ? 0x8d8f88 : 0x7d7f78), solid::STONE), WALL, WALLS, true);
+                    z += tier[k][2];
+                }
+            }
+            else b.add(upright(r.chance(.5f) ? solid::HIP : solid::BOX, p, .6f + r() * .3f, .5f + r() * .3f, .4f + r() * .7f, r() * 3, hex(i % 2 ? 0x8d8f88 : 0x7d7f78), solid::STONE), WALL, WALLS, true);
+        }
+        V3 mouth = c + fn * .55f;
+        b.add(upright(solid::BOX, mouth, 1.0f, .5f, scale::MINE_ENTRANCE - .1f, std::atan2(ft.y, ft.x), DARK), OPENING, WALLS);
+        for (float s : {-1.f, 1.f}) b.add(upright(solid::BOX, mouth + fn * .27f + ft * (s * .55f), .16f, .16f, scale::MINE_ENTRANCE, 0, hex(0x6e5238)), POST, FRAME);
+        b.add(upright(solid::BOX, mouth + fn * .27f + V3{0, 0, scale::MINE_ENTRANCE - .1f}, 1.4f, .18f, .2f, std::atan2(ft.y, ft.x), hex(0x6e5238)), BEAM, FRAME);
+        float side = r.chance(.5f) ? 1.f : -1.f;
+        V3 cart = c + fn * 1.25f + ft * (side * .65f);
+        b.add(upright(solid::BOX, cart + V3{0, 0, .18f}, .7f, .5f, .38f, std::atan2(fn.y, fn.x), hex(0x6a4a30), solid::PLANKS), EXTRA, DETAILS);
+        for (float s : {-1.f, 1.f}) b.add(solid::along(cart + ft * (s * .3f) + V3{0, 0, .12f} - fn * .2f, cart + ft * (s * .3f) + V3{0, 0, .12f} + fn * .2f, .26f, .05f, ft, hex(0x2a2a2a)), EXTRA, DETAILS);
+        b.add(upright(solid::BOX, cart + V3{0, 0, .56f}, .5f, .35f, .14f, 0, hex(0x9a9d96), solid::STONE), EXTRA, DETAILS);
+        d.made = cat("a mound of ", rocks, " boulders round a timber-framed shaft");
+        d.walls = cat(rocks, " rocks");
+        d.roof = side > 0 ? "cart right" : "cart left";
+        d.features = {"mound", "entrance", "cart"};
+    } else if (key == "dock") {
+        // planks out over the water on posts, three tiles long
+        V3 run{float(dx), float(dy), 0};
+        if (dx == 0 && dy == 0) run = {0, 1, 0};
+        V3 acr{-run.y, run.x, 0};
+        V3 start{x * scale::TILE_M + 1, y * scale::TILE_M + 1, 0};
+        float deck = .45f;
+        bool rail = r.chance(.4f), coil = r.chance(.5f), pale = r.chance(.5f);
+        for (int i = 0; i < 3; i++) {
+            V3 m = start + run * (i * scale::TILE_M);
+            for (float a : {-.75f, .75f}) for (float f : {-.75f, .75f}) b.add(upright(solid::CYLINDER, m + acr * a + run * f - V3{0, 0, .3f}, .2f, .2f, deck + .25f, 0, hex(0x5e4636)), POST, FRAME);
+            b.add(upright(solid::BOX, m + V3{0, 0, deck}, 1.8f, 1.8f, .12f, std::atan2(run.y, run.x), hex(pale ? 0xa8875c : 0x8a6440), solid::BOARDS), WALL, WALLS);
+            if (rail) b.add(upright(solid::BOX, m + acr * .85f + V3{0, 0, deck + .12f + .45f}, 1.8f, .06f, .06f, std::atan2(run.y, run.x), FRAMEWOOD), BEAM, DETAILS);
+        }
+        V3 end = start + run * (2 * scale::TILE_M + .7f);
+        b.add(upright(solid::CYLINDER, end + acr * .6f + V3{0, 0, deck + .12f}, .22f, .22f, .35f, 0, hex(0x4a3a2c)), EXTRA, DETAILS);
+        if (coil) b.add(upright(solid::CYLINDER, start + acr * -.4f + V3{0, 0, deck + .12f}, .5f, .5f, .14f, 0, hex(0xc8b890)), EXTRA, DETAILS);
+        d.made = std::string(pale ? "pale" : "dark") + " planks on posts" + (rail ? ", with a rail" : "") + (coil ? ", a coil of rope" : "");
+        d.walls = std::string(rail ? "railed " : "open ") + (pale ? "pale" : "dark");
+        d.roof = coil ? "rope" : "bare";
+        d.features = {"deck", "posts", "bollard"};
+    } else if (key == "shrine") {
+        // a ring of standing stones round a low altar
+        V3 c = b.centre;
+        b.add(upright(solid::CYLINDER, c, 3.0f, 3.0f, .06f, 0, snow ? hex(0xeef1f2) : hex(0x9aa88a)), BASE, FOUNDATION);
+        int stones = 6 + r.pick(4);
+        bool lintel = r.chance(.4f);
+        for (int i = 0; i < stones; i++) {
+            float a = 6.283f * i / stones + .2f;
+            float hgt = i == 0 ? scale::SHRINE_STONE : scale::SHRINE_STONE * (.7f + r() * .35f);
+            b.add(upright(solid::BOX, c + V3{std::cos(a) * 1.3f, std::sin(a) * 1.3f, 0}, .5f, .3f, hgt, a + 1.5708f, hex(i % 2 ? 0x8d918a : 0xa7aba3), solid::STONE), WALL, WALLS, true);
+        }
+        if (lintel) {
+            float a0 = .2f, a1 = .2f + 6.283f / stones;
+            V3 p0{std::cos(a0) * 1.3f, std::sin(a0) * 1.3f, scale::SHRINE_STONE + .1f}, p1{std::cos(a1) * 1.3f, std::sin(a1) * 1.3f, scale::SHRINE_STONE + .1f};
+            b.add(solid::along(c + p0, c + p1, .32f, .22f, V3{0, 0, 1}, hex(0x969a92)), ROOF, ROOFING);
+        }
+        b.add(upright(solid::BOX, c, .9f, .6f, .55f, r() * 3, hex(0xb8b4a8), solid::STONE), EXTRA, DETAILS);
+        d.made = cat(stones, " standing stones", lintel ? ", two joined by a lintel" : "", ", round an altar");
+        d.walls = cat(stones, " stones");
+        d.roof = lintel ? "lintel" : "open";
+        d.features = {"stones", "altar"};
+    } else if (key == "pottery") {
+        // a beehive kiln of clay with a glowing mouth, pots drying, a stack of wood
+        V3 c = b.centre + V3{-.2f, -.2f, 0};
+        V3 fn = SIDES[front], ft{-fn.y, fn.x, 0};
+        b.add(upright(solid::BOX, b.centre, b.W - .3f, b.D - .3f, .1f, 0, hex(0xb8a68a)), BASE, FOUNDATION);
+        bool tall = r.chance(.5f);
+        float baseH = tall ? .9f : .6f;
+        Color clay = hex(r.chance(.5f) ? 0xa85a34 : 0x9a6a44);
+        b.add(upright(solid::CYLINDER, c + V3{0, 0, .1f}, 1.8f, 1.8f, baseH, 0, clay), WALL, WALLS, true);
+        b.add(upright(solid::CONE, c + V3{0, 0, .1f + baseH}, 1.8f, 1.8f, scale::KILN - baseH - .1f, 0, draw::shade(clay, 1.08f)), ROOF, ROOFING);
+        b.add(upright(solid::CYLINDER, c + V3{.3f, .2f, scale::KILN - .3f}, .25f, .25f, .45f, 0, draw::shade(clay, .9f)), CHIMNEY, ROOFING);
+        d.smoke = c + V3{.3f, .2f, scale::KILN + .2f};
+        d.smokes = true;
+        b.add(upright(solid::BOX, c + fn * .88f + V3{0, 0, .1f}, .5f, .08f, .45f, std::atan2(ft.y, ft.x), DARK), OPENING, WALLS);
+        d.flame = c + fn * .95f + V3{0, 0, .3f};
+        d.flames = true;
+        int pots = 3 + r.pick(4);
+        for (int i = 0; i < pots; i++) {
+            V3 p = b.centre + fn * 1.2f + ft * (-.9f + i * .32f);
+            b.add(upright(solid::CYLINDER, p, .24f, .24f, .28f + .08f * (i % 2), 0, hex(i % 3 == 0 ? 0xb8683e : i % 3 == 1 ? 0xa85a34 : 0xc98a5a)), EXTRA, DETAILS);
+        }
+        // the wood stack stands beside the kiln, measured from the plot's edges
+        b.wc = b.centre; b.wx = b.W / 2 - .5f; b.wy = b.D / 2 - .5f;
+        b.extra(2, (front + 1) % 4 == 3 - front ? front : (front + 1) % 4, 0, -.2f);
+        d.made = cat(tall ? "a tall" : "a squat", " clay beehive kiln, ", pots, " pots drying");
+        d.walls = tall ? "tall" : "squat";
+        d.roof = cat(pots, " pots");
+        d.features = {"kiln", "mouth", "flue", "pots"};
+    } else if (key == "boatyard") {
+        // a slipway of planks, a hull on trestles, a mast and sail once it is done
+        V3 c = b.centre;
+        V3 fn = SIDES[front], ft{-fn.y, fn.x, 0};
+        float yaw = std::atan2(fn.y, fn.x);
+        b.add(upright(solid::BOX, c, 3.6f, 2.0f, .1f, yaw, hex(0x8a6a48), solid::PLANKS), BASE, FOUNDATION);
+        for (float s : {-1.1f, 0.f, 1.1f}) {
+            V3 p = c + fn * s;
+            for (float k : {-.5f, .5f}) b.add(upright(solid::BOX, p + ft * k, .1f, .1f, .55f, 0, FRAMEWOOD), POST, FRAME);
+            b.add(solid::along(p + ft * -.6f + V3{0, 0, .55f}, p + ft * .6f + V3{0, 0, .55f}, .1f, .1f, fn, FRAMEWOOD), POST, FRAME);
+        }
+        // the hull: a keel, two sides that lean out, a pointed bow
+        Color hull = hex(r.chance(.5f) ? 0x7a5434 : 0x6a4a30), paint = hex(SHUTTERS[r.pick(5)]);
+        V3 keel = c + V3{0, 0, .65f};
+        b.add(solid::along(keel - fn * 1.6f, keel + fn * 1.6f, .14f, .16f, V3{0, 0, 1}, hull), WALL, WALLS);
+        for (float s : {-1.f, 1.f}) {
+            Solid side = solid::along(keel - fn * 1.4f + ft * (s * .32f) + V3{0, 0, .25f}, keel + fn * 1.2f + ft * (s * .32f) + V3{0, 0, .25f}, .07f, .5f, ft, hull);
+            side.tex = solid::PLANKS;
+            b.add(side, WALL, WALLS, true);
+            b.add(solid::along(keel - fn * 1.4f + ft * (s * .36f) + V3{0, 0, .48f}, keel + fn * 1.2f + ft * (s * .36f) + V3{0, 0, .48f}, .07f, .05f, ft, paint), BEAM, DETAILS);
+        }
+        b.add(solid::along(keel + fn * 1.2f + V3{0, 0, .25f}, keel + fn * 1.75f + V3{0, 0, .5f}, .5f, .5f, ft, hull), WALL, WALLS);
+        V3 mastFoot = keel + fn * .2f;
+        b.add(solid::along(mastFoot, c + fn * .2f + V3{0, 0, scale::MAST}, .1f, .1f, ft, hex(0x5a3c22)), POST, ROOFING);
+        Solid sail = solid::along(mastFoot + V3{0, 0, 1.4f} - fn * .05f, c + fn * .2f + V3{0, 0, scale::MAST - .3f} - fn * .05f, .03f, 1.3f, ft, hex(0xefe8d6));
+        sail.c = sail.c - fn * .65f;
+        b.add(sail, EXTRA, DETAILS);
+        d.made = std::string(hull.r > 0x70 ? "a light" : "a dark") + " plank hull on trestles, with a mast and sail";
+        d.walls = hull.r > 0x70 ? "light hull" : "dark hull";
+        d.roof = cat("trim ", int(paint.r));
+        d.features = {"slip", "trestles", "hull", "mast", "sail"};
     } else {
         // rectangular buildings: the recipe picks materials and how many of each part
         struct Recipe { float wall, roofH; std::vector<const Mat*> walls, roofs; int minWin, maxWin, winStyle; bool chimney, holeOk, wideDoor, porchOk; };

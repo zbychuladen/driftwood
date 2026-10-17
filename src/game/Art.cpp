@@ -524,7 +524,7 @@ const bld::Design* designFor(const dw::Sim& s, const dw::Project& b) {
     bool snow = s.season() == 3 && b.done;
     auto it = designs.find(b.id);
     if (it == designs.end() || it->second.key != b.key || it->second.x != b.x || it->second.y != b.y || it->second.front != front || it->second.snow != snow)
-        it = designs.insert_or_assign(b.id, CachedDesign{b.key, b.x, b.y, front, snow, bld::make(b.key, b.id, b.x, b.y, b.w, b.h, front, snow)}).first;
+        it = designs.insert_or_assign(b.id, CachedDesign{b.key, b.x, b.y, front, snow, bld::make(b.key, b.id, b.x, b.y, b.w, b.h, front, snow, b.dx, b.dy)}).first;
     return &it->second.d;
 }
 void setDoor(int id, float open) { doors[id] = open; }
@@ -555,8 +555,6 @@ void building(const Ctx& c, dw::Project& b) {
         if (!bld::assembled(b.key)) draw::alpha = savedA * (.22f + prog * .78f);
     }
     const std::string& k = b.key;
-    static const std::set<std::string> onPlinth = {"pottery", "well", "shrine"};
-    if (b.done && onPlinth.count(k)) plinth(x + .02f, y + .02f, w - .04f, h - .04f, sn);
     if (bld::assembled(k)) {
         // built part by part: nothing but the marked-out plot until work starts
         if (b.done || b.progress > 0) {
@@ -565,8 +563,15 @@ void building(const Ctx& c, dw::Project& b) {
             for (auto* m : S.members()) if (m->bed == b.id && (m->hidden || m->sleeping)) home = true;
             bld::draw(*d, prog, doorOf(b.id), b.done && night && home);
             // a hearth smokes all day in the forge and smokehouse, mornings and evenings in a hall
-            bool hearth = k == "forge" || k == "smoke" || (k == "longhouse" && (c.hour >= 17 || c.hour < 8));
+            bool hearth = k == "forge" || k == "smoke" || k == "pottery" || (k == "longhouse" && (c.hour >= 17 || c.hour < 8));
             if (b.done && d->smokes && hearth) { V2 q = solid::project(d->smoke); smoke(c, q.x, q.y, 3, 1); }
+            if (b.done && d->flames) {
+                V2 f = solid::project(d->flame);
+                if (k == "signal") { flame(c, f.x, f.y, 1.3f); smoke(c, f.x, f.y - 12, 5, 1.6f); }
+                else if (k == "pottery") radial(f.x, f.y, 9, 6, rgba(255, 150, 60, .8f), rgba(255, 150, 60, 0));
+                else if (k == "lighthouse") radial(f.x, f.y, 16, 16, rgba(255, 220, 140, night ? .9f : .35f), rgba(255, 220, 140, 0));
+            }
+            if (b.done && k == "shrine") { V2 q = P(x + 1, y + 1); radial(q.x, q.y - 6, 18, 18, rgba(190, 150, 255, .55f), rgba(190, 150, 255, 0)); }
         }
     } else if (k == "fire") {
         V2 q = P(x + .5f, y + .5f);
@@ -575,14 +580,6 @@ void building(const Ctx& c, dw::Project& b) {
         poly({{q.x - 6, q.y + 3}, {q.x + 6, q.y - 3}, {q.x + 7, q.y - 1}, {q.x - 5, q.y + 5}}, hex(0x4a3020));
         if (b.done && b.fuel > 0) flame(c, q.x, q.y + 1, std::min(1.f, b.fuel / 3) * .5f + .6f);
         else if (b.done) smoke(c, q.x, q.y, 2, .6f);
-    } else if (k == "rack") {
-        V2 q = P(x + .5f, y + .5f);
-        push(q, px(scale::RACK) / 28.f);
-        line(q.x - 12, q.y + 2, q.x - 11, q.y - 22, 2.4f, hex(0x6b4a2e));
-        line(q.x + 12, q.y - 4, q.x + 11, q.y - 28, 2.4f, hex(0x6b4a2e));
-        line(q.x - 13, q.y - 21, q.x + 13, q.y - 27, 2.4f, hex(0x6b4a2e));
-        for (int i = 0; i < 5; i++) { float f = i / 4.f; rect(q.x - 9 + f * 18, q.y - 21 - f * 6, 2.4f, 10 + std::sin(float(t * .03 + i)) * .6f, i % 2 ? hex(0xc98a5a) : hex(0xb0704a)); }
-        pop();
     } else if (k == "garden" || k == "herbs" || k == "fields") {
         foot(x, y, w, h, hex(0x6a4a2e));
         for (int r = 1; r < h * 3; r++) { V2 a = P(x + .1f, y + r / 3.f), e = P(x + w - .1f, y + r / 3.f); line(a.x, a.y, e.x, e.y, 1.5f, hex(0x4f3820)); }
@@ -610,110 +607,6 @@ void building(const Ctx& c, dw::Project& b) {
             }
         }
         if (s == 3 && b.done) foot(x, y, w, h, rgba(255, 255, 255, .55f));
-    } else if (k == "well") {
-        V2 q = P(x + .5f, y + .5f);
-        float cu = px(scale::WELL_CURB), top = px(scale::WELL_ROOF), r = 16;
-        ellipse(q.x + 3, q.y + 3, r + 2, r / 2 + 1, SHADOW);
-        ellipse(q.x, q.y, r, r / 2, hex(0x8a8d86));
-        rect(q.x - r, q.y - cu, r * 2, cu, hex(0x8a8d86));
-        ellipse(q.x, q.y - cu, r, r / 2, hex(0xa3a69f));
-        ellipse(q.x, q.y - cu, r * .7f, r * .33f, hex(0x26404c));
-        line(q.x - r + 2, q.y - cu + 1, q.x - r + 2, q.y - top + 9, 2, hex(0x6b4a2e));
-        line(q.x + r - 2, q.y - cu + 1, q.x + r - 2, q.y - top + 9, 2, hex(0x6b4a2e));
-        poly({{q.x - r - 4, q.y - top + 10}, {q.x, q.y - top}, {q.x + r + 4, q.y - top + 10}, {q.x, q.y - top + 16}}, sn ? hex(0xe8edf0) : hex(0x8a5e38));
-    } else if (k == "mine") {
-        V2 q = P(x + .5f, y + .5f);
-        push(q, px(scale::MINE_HILL) / 26.f);
-        poly({{q.x - 22, q.y + 4}, {q.x - 15, q.y - 14}, {q.x, q.y - 26}, {q.x + 17, q.y - 14}, {q.x + 22, q.y + 4}}, s == 3 ? hex(0xa4aaae) : hex(0x7d7f78));
-        poly({{q.x, q.y - 26}, {q.x + 17, q.y - 14}, {q.x + 22, q.y + 4}, {q.x + 4, q.y + 4}}, s == 3 ? hex(0xb9bfc2) : hex(0x8f918a));
-        rect(q.x - 8, q.y - 14, 16, 17, hex(0x1d1b18));
-        rect(q.x - 10, q.y - 16, 3, 19, hex(0x6b4a2e));
-        rect(q.x + 7, q.y - 16, 3, 19, hex(0x6b4a2e));
-        rect(q.x - 11, q.y - 18, 22, 3, hex(0x6b4a2e));
-        pop();
-        V2 kc = P(x + 1.25f, y + .9f);
-        push(kc, 1.6f);
-        rect(kc.x - 6, kc.y - 8, 12, 6, hex(0x5a3c22));
-        circle(kc.x - 4, kc.y - 1, 2, hex(0x222222)); circle(kc.x + 4, kc.y - 1, 2, hex(0x222222));
-        circle(kc.x - 2, kc.y - 9, 2.2f, hex(0x9a9d96)); circle(kc.x + 2, kc.y - 9.5f, 2, hex(0x8a8d86));
-        pop();
-    } else if (k == "pottery") {
-        foot(x + .1f, y + .1f, w - .2f, h - .2f, rgba(150, 110, 70, .35f));
-        V2 q = P(x + .9f, y + .9f);
-        ellipse(q.x + 4, q.y + 3, 20, 8, SHADOW);
-        auto dome = bezier({q.x - 18, q.y}, {q.x - 18, q.y - 34}, {q.x, q.y - 34}, 10);
-        auto d2 = bezier({q.x, q.y - 34}, {q.x + 18, q.y - 34}, {q.x + 18, q.y}, 10);
-        dome.insert(dome.end(), d2.begin() + 1, d2.end());
-        auto base = arc(q.x, q.y, 18, 8, 0, 3.14159f, 12);
-        dome.insert(dome.end(), base.begin(), base.end());
-        dome.insert(dome.begin(), {q.x, q.y - 14});
-        polyGradX(dome, q.x - 18, q.x + 18, hex(0x8e4e2c), hex(0xc47a4a));
-        auto mouth = arc(q.x - 6, q.y + 2, 5, 6, 3.14159f, 6.283f, 10);
-        mouth.insert(mouth.begin(), {q.x - 6, q.y});
-        polyV(mouth, b.done ? rgba(255, 130, 40, .9f) : hex(0x2e2116));
-        if (b.done) smoke(c, q.x, q.y - 36, 3, .8f);
-        const uint32_t pc[3] = {0xb8683e, 0xa85a34, 0xc98a5a};
-        for (int i = 0; i < 3; i++) { V2 pp = P(x + 1.5f + i * .15f, y + 1.6f - i * .2f); ellipse(pp.x, pp.y - 4, 3.5f, 5, hex(pc[i])); rect(pp.x - 2, pp.y - 10, 4, 2, hex(pc[i])); }
-    } else if (k == "dock") {
-        for (int i = 0; i < 3; i++) {
-            float tx = x + b.dx * i, ty = y + b.dy * i;
-            foot(tx + .1f, ty + .1f, .8f, .8f, rgba(20, 40, 60, .3f));
-            foot(tx + .1f, ty + .1f, .8f, .8f, hex(0x9a7448), 4);
-            for (V2 pp : {P(tx + .15f, ty + .15f), P(tx + .85f, ty + .85f)}) rect(pp.x - 1.5f, pp.y - 4, 3, 8, hex(0x5a3c22));
-        }
-    } else if (k == "tower") {
-        V2 q = P(x + .5f, y + .5f);
-        Color wd = hex(0x6b4a2e);
-        push(q, px(scale::TOWER) / 92.f);
-        ellipse(q.x + 4, q.y + 2, 12, 5, SHADOW);
-        line(q.x - 10, q.y, q.x - 7, q.y - 64, 2.6f, wd); line(q.x + 10, q.y, q.x + 7, q.y - 64, 2.6f, wd); line(q.x, q.y + 5, q.x, q.y - 62, 2.6f, wd);
-        for (int i = 0; i < 5; i++) line(q.x - 10 + i * .6f, q.y - i * 12, q.x + 9 - i * .6f, q.y - i * 12 - 12, 1.2f, wd);
-        poly({{q.x - 14, q.y - 64}, {q.x, q.y - 70}, {q.x + 14, q.y - 64}, {q.x, q.y - 58}}, hex(0x8a5e38));
-        poly({{q.x - 15, q.y - 78}, {q.x, q.y - 92}, {q.x + 15, q.y - 78}, {q.x, q.y - 72}}, sn ? hex(0xe8edf0) : wd);
-        line(q.x - 12, q.y - 65, q.x - 12, q.y - 78, 1.2f, wd); line(q.x + 12, q.y - 65, q.x + 12, q.y - 78, 1.2f, wd);
-        if (b.done && night) circle(q.x + 10, q.y - 72, 2.5f, hex(0xffd27a));
-        pop();
-    } else if (k == "signal") {
-        V2 q = P(x + .5f, y + .5f);
-        push(q, px(scale::SIGNAL) / 26.f);
-        ellipse(q.x + 3, q.y + 2, 14, 6, SHADOW);
-        for (int l = 0; l < 5; l++) { float ww = 14 - l * 2.4f; poly({{q.x - ww, q.y - l * 5}, {q.x + ww, q.y - l * 5 - 3}, {q.x + ww, q.y - l * 5 - 6}, {q.x - ww, q.y - l * 5 - 3}}, l % 2 ? hex(0x6b4a2e) : hex(0x8a5e38)); }
-        if (b.done) { flame(c, q.x, q.y - 24, 1.3f); smoke(c, q.x, q.y - 36, 5, 1.6f); }
-        pop();
-    } else if (k == "lighthouse") {
-        V2 q = P(x + .5f, y + .5f);
-        push(q, px(scale::LIGHTHOUSE) / 103.f);
-        ellipse(q.x + 4, q.y + 2, 14, 6, SHADOW);
-        poly({{q.x - 11, q.y}, {q.x - 7, q.y - 80}, {q.x + 7, q.y - 80}, {q.x + 11, q.y}}, hex(0xe9e6dc));
-        rect(q.x - 9.5f, q.y - 30, 19, 8, hex(0xb8434a));
-        rect(q.x - 8.2f, q.y - 58, 16.4f, 8, hex(0xb8434a));
-        poly({{q.x - 11, q.y}, {q.x - 7, q.y - 80}, {q.x - 2, q.y - 80}, {q.x - 4, q.y}}, rgba(0, 0, 0, .12f));
-        rect(q.x - 9, q.y - 84, 18, 4, hex(0x3a3a3a));
-        circle(q.x, q.y - 89, 6, b.done ? hex(0xffd27a) : hex(0x666666));
-        tri({q.x - 9, q.y - 94}, {q.x, q.y - 103}, {q.x + 9, q.y - 94}, hex(0x3a3a3a));
-        pop();
-    } else if (k == "shrine") {
-        std::vector<std::pair<float, float>> st = {{.3f, .3f}, {1.7f, .3f}, {1.7f, 1.7f}, {.3f, 1.7f}, {1, .15f}, {1.85f, 1}, {1, 1.85f}, {.15f, 1}};
-        std::sort(st.begin(), st.end(), [](auto& a, auto& b2) { return a.first + a.second < b2.first + b2.second; });
-        foot(x + .3f, y + .3f, 1.4f, 1.4f, s == 3 ? rgba(255, 255, 255, .4f) : rgba(120, 140, 100, .4f));
-        for (auto [sx, sy] : st) {
-            V2 q = P(x + sx, y + sy);
-            push(q, px(scale::SHRINE_STONE) / 20.f);
-            poly({{q.x - 4, q.y}, {q.x - 3.5f, q.y - 18}, {q.x + 3, q.y - 20}, {q.x + 4, q.y}}, hex(0x8d918a));
-            poly({{q.x, q.y}, {q.x + .5f, q.y - 19}, {q.x + 3, q.y - 20}, {q.x + 4, q.y}}, hex(0xa7aba3));
-            pop();
-        }
-        if (b.done) { V2 q = P(x + 1, y + 1); radial(q.x, q.y - 6, 18, 18, rgba(190, 150, 255, .55f), rgba(190, 150, 255, 0)); }
-    } else if (k == "boatyard") {
-        foot(x, y, w, h, rgba(120, 90, 50, .3f));
-        V2 q = P(x + 1, y + 1);
-        Color wd = hex(0x6b4a2e);
-        push(q, px(scale::MAST) / 34.f);
-        line(q.x - 18, q.y + 2, q.x - 18, q.y - 14, 2, wd); line(q.x + 18, q.y - 6, q.x + 18, q.y - 22, 2, wd); line(q.x - 19, q.y - 13, q.x + 19, q.y - 21, 2, wd);
-        poly({{q.x - 16, q.y - 2}, {q.x + 14, q.y - 10}, {q.x + 10, q.y - 2}, {q.x - 12, q.y + 4}}, hex(0x7a5434));
-        line(q.x - 1, q.y - 4, q.x, q.y - 34, 1.5f, hex(0x5a3c22));
-        if (b.done) tri({q.x, q.y - 33}, {q.x + 12, q.y - 12}, {q.x, q.y - 10}, hex(0xefe8d6));
-        pop();
     } else if (k == "bath") {
         foot(x + .15f, y + .15f, w - .3f, h - .3f, hex(0x8d918a));
         foot(x + .4f, y + .4f, w - .8f, h - .8f, s == 3 ? hex(0x7fb3c4) : hex(0x5fa7b8), 2);
