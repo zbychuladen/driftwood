@@ -410,9 +410,10 @@ static void testInspect(uint32_t seed, int days) {
         if (d.kind != Drawable::OBJECT || s.objs[d.id].type != "tree" || s.objs[d.id].palm) continue;
         const Obj& o = s.objs[d.id];
         Vector2 base = iso::wp(o.x + .5f, o.y + .6f);
-        // the shadow reaches right of the trunk along the ground, below the crown
-        float k = scale::px(o.conifer ? scale::CONIFER : scale::BROADLEAF) / (o.conifer ? 40.f : 36.f) * o.size * (o.sapling ? .35f + o.grow * .6f : 1);
-        Vector2 w{base.x + 14 * k, base.y + 1};
+        // the shadow spreads along the ground beside the trunk, well below the crown
+        float h = scale::px(o.conifer ? scale::CONIFER : scale::BROADLEAF) * o.size * (o.sapling ? .35f + o.grow * .6f : 1);
+        if (o.conifer) continue;   // a fir's lowest tier reaches down to the ground
+        Vector2 w{base.x + h * .22f, base.y + 1};
         v.cam.target = w;
         Pick p = v.pickAt(s, GetWorldToScreen2D(w, v.cam));
         shadowChecked = true;
