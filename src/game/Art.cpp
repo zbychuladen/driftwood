@@ -3,6 +3,7 @@
 #include <cmath>
 #include <set>
 #include "engine/Draw.h"
+#include "game/Figure.h"
 #include "game/Iso.h"
 #include "game/Scale.h"
 
@@ -779,100 +780,30 @@ void poi(const Ctx& c, const dw::Poi& p) {
     }
 }
 
-static void note(float x, float y, Color c) {
-    ellipse(x, y, 1.8f, 1.3f, c);
-    line(x + 1.6f, y, x + 1.6f, y - 5, .8f, c);
-}
-
-void person(const Ctx& c, const dw::Person& p, bool selected) {
+void person(const Ctx& c, const dw::Person& p, bool selected, int facing, int detail) {
     if (p.hidden || p.dead) return;
     V2 o = wp(p.x, p.y);
-    // drawn around the feet at (0,0); the art is 25.2 units from feet to the top of the hair
-    float k = px(p.child ? scale::CHILD : scale::PERSON) / 25.2f;
-    push(o, k, {0, 0});
-    Color tunic = hex(p.tunic), skin = hex(p.skin), hair = hex(p.hair);
-    if (selected) ring(0, 0, 12, 6, 1.8f, hex(0xffd27a));
-    if (p.sleeping) {
-        ellipse(0, 1, 11, 4, SHADOW);
-        ellipse(1, -2, 9, 4.5f, tunic);
-        ellipse(3, -3, 6, 4, hex(0x8a6a4a));
-        circle(-7, 1, 3.8f, skin);
-        auto h = arc(-7.5f, .5f, 3.9f, 3.9f, 1.25f, 4.4f, 10);
-        h.insert(h.begin(), {-7.5f, .5f});
-        polyV(h, hair);
-        pop();
-        return;
+    figure::Pose pose = p.moving ? figure::walk(p.phase) : figure::activity(p.sleeping ? "sleep" : p.anim, float(c.t), p.id);
+    if (p.carry && !pose.lying) figure::carrying(pose, p.carry->t);
+    if (p.sick > 0 && !pose.lying && !p.moving && pose.prop == figure::NONE) figure::unwell(pose);
+    if (!pose.lying) ellipse(o.x, o.y, 9, 4, SHADOW);
+    if (selected) ring(o.x, o.y, pose.lying ? 22 : 13, pose.lying ? 11 : 6.5f, 1.8f, hex(0xffd27a));
+    figure::Look look = figure::lookOf(p);
+    look.beard = p.status == "hermit";
+    figure::draw(p.x, p.y, figure::Facing(facing), look, pose, detail);
+    // chips fly from an axe, sparks from a pick or hammer, at the moment it lands
+    if (pose.strike > 0 && c.effects) {
+        static const float FX[4] = {1, 0, 0, -1}, FY[4] = {0, 1, -1, 0};
+        float tx = p.x + FX[facing] * .3f, ty = p.y + FY[facing] * .3f;
+        V2 hit = P(tx, ty, px(pose.prop == figure::HAMMER ? .3f : .5f));
+        Color chip = pose.prop == figure::AXE ? hex(0xc79a62) : hex(0xffd27a);
+        for (int i = 0; i < 4; i++) circle(hit.x + (frand(p.id * 7 + i + int(c.t)) - .5f) * 14, hit.y - frand(p.id + i * 3 + int(c.t)) * 10, 1.4f, chip);
     }
-    ellipse(0, 0, 7, 3, SHADOW);
-    bool walking = p.moving;
-    float ph = p.phase, swing = walking ? std::sin(ph) * 3 : 0, bob = walking ? std::abs(std::sin(ph)) * 1.2f : 0;
-    const std::string& an = p.anim;
-    float crouch = (an == "forage" || an == "farm" || an == "drink") ? 3.f : (an == "sit" || an == "eat") ? 4.f : 0.f;
-    float f = float(p.face);
-    Color leg = hex(0x4a3b32);
-    if (crouch >= 4) { line(-2, -5, 3 * f, -2, 2.4f, leg); line(1, -5, 5 * f, -1.5f, 2.4f, leg); }
-    else { line(-1.7f, -6 + crouch, -1.7f + swing * .6f, 0, 2.4f, leg); line(1.7f, -6 + crouch, 1.7f - swing * .6f, 0, 2.4f, leg); }
-    float by = -6 - bob + crouch;
-    rect(-5, by - 8, 10, 9, tunic);
-    circle(-2.5f, by - 8, 2.5f, tunic); circle(2.5f, by - 8, 2.5f, tunic);
-    rect(-5, by - 8, 3, 9, rgba(0, 0, 0, .14f));
-    rect(-5, by - .5f, 10, 1.5f, rgba(0, 0, 0, .15f));
-    double t = c.t;
-    float ax = f * 4.5f, ay = by - 7;
-    if (an == "chop" || an == "mine" || an == "build") {
-        float sw = std::sin(float(t * 1.2 + p.id)) * 1.1f, hx = ax + f * (4 + std::cos(sw) * 2), hy = ay - 4 + std::sin(sw) * 6;
-        line(ax, ay, hx, hy, 2.1f, skin);
-        float tx = hx + f * std::cos(sw - .6f) * 9, ty = hy - std::sin(sw + .8f) * 9;
-        line(hx, hy, tx, ty, 1.7f, hex(0x6b4a2e));
-        rect(tx - 2, ty - 2, an == "mine" ? 6 : 4, an == "mine" ? 2 : 4, an == "build" ? hex(0x555555) : hex(0x9aa0a6));
-        if (std::sin(t * 1.2 + p.id) > .93) circle(hx + f * 11, hy + 2, 1.3f, an == "chop" ? hex(0xc79a62) : hex(0xbbbbbb));
-    } else if (an == "fish") {
-        line(ax, ay, ax + f * 5, ay - 2, 2.1f, skin);
-        float rx = ax + f * 24, ry = ay - 14;
-        line(ax + f * 5, ay - 2, rx, ry, 1.2f, hex(0x5a3c22));
-        float bobY = ry + 22 + std::sin(float(t * .2)) * 1.5f;
-        line(rx, ry, rx + f * 3, bobY, .6f, rgba(255, 255, 255, .75f));
-        circle(rx + f * 3, bobY, 1.4f, hex(0xe04a3a));
-    } else if (an == "forage" || an == "farm") {
-        float sw = std::sin(float(t * .8 + p.id)) * 2;
-        line(ax, ay, ax + f * 5, ay + 5 + sw, 2.1f, skin);
-        line(-ax * .6f, ay, -ax * .2f + f * 3, ay + 6 - sw, 2.1f, skin);
-    } else if (an == "eat") {
-        float sw = std::sin(float(t * .5 + p.id));
-        line(ax, ay, ax + f, ay - 3 - sw * 2, 2.1f, skin);
-        circle(ax + f * 2, ay - 4 - sw * 2, 1.7f, hex(0xc98a5a));
-    } else if (an == "sit") {
-        line(ax, ay, ax + f * 4, ay + 4, 2.1f, skin);
-    } else if (an == "music") {
-        line(ax, ay, f * 3, by - 12, 2.1f, skin);
-        line(-ax, ay, f * 6, by - 11, 2.1f, skin);
-        line(f * 2, by - 13, f * 13, by - 9, 1.6f, hex(0xc9a46a));
-        for (int i = 0; i < 2; i++) { float q = float(std::fmod(t * .03 + i * .5, 1.0)); note(f * (10 + q * 8) + i * 4, by - 18 - q * 16, rgba(80, 60, 140, 1 - q)); }
-    } else {
-        line(4.5f, ay, 4.5f + (walking ? -swing * .6f : 0), ay + 6, 2.1f, skin);
-        line(-4.5f, ay, -4.5f + (walking ? swing * .6f : 0), ay + 6, 2.1f, skin);
-    }
-    float hy = by - 14;
-    circle(0, hy, 4.4f, skin);
-    auto hr = arc(0, hy - .6f, 4.6f, 4.6f, 3.3f, 6.12f, 10);
-    hr.insert(hr.begin(), {0, hy - .6f});
-    polyV(hr, hair);
-    if (p.hairStyle == 1) rect(-f * 4.6f - .5f, hy - 2, 1.8f, 5, hair);
-    if (p.hairStyle == 2) circle(-f * 4, hy - 1, 2.3f, hair);
-    circle(f * 1.9f, hy, .75f, hex(0x1d1d1d));
-    if (p.status == "hermit") tri({-3, hy + 2}, {3, hy + 2}, {0, hy + 8}, hex(0xdddddd));
-    if (p.carry) {
-        float cy = by - 21;
-        const auto& ct = p.carry->t;
-        if (ct == "wood") { rect(-7, cy, 13, 3, hex(0x8a5e38)); rect(-6, cy - 3, 12, 3, hex(0x8a5e38)); circle(6, cy + 1.5f, 1.6f, hex(0xc79a62)); }
-        else if (ct == "stone") { circle(-2, cy, 3.2f, hex(0x8a8d86)); circle(2.6f, cy + .5f, 2.8f, hex(0x9a9d96)); }
-        else if (ct == "fish") { ellipse(f * 6, by - 4, 5, 2, hex(0x8fb4c2)); tri({f * 10, by - 4}, {f * 13, by - 7}, {f * 13, by - 1}, hex(0x8fb4c2)); }
-        else if (ct == "food") { rect(f * 4 - 3, by - 6, 7, 5, hex(0xb38a4e)); circle(f * 4 - 1, by - 6.5f, 1.4f, hex(0xc0303f)); circle(f * 4 + 1.5f, by - 6.5f, 1.4f, hex(0xc0303f)); }
-        else if (ct == "meal") ellipse(f * 5, by - 4, 4, 1.6f, hex(0xa0754a));
-    }
-    if (p.sick > 0) circle(0, hy - 9, 1.5f, hex(0x7fbf6a));
-    if (p.whisper && p.whisper->until > c.sim->tMin) poly({{0, hy - 12}, {2, hy - 9}, {0, hy - 6}, {-2, hy - 9}}, rgba(185, 154, 230, .9f));
-    pop();
+    // the sick and the whispered-to carry a small sign over their heads
+    float top = px((p.child ? scale::CHILD : scale::PERSON) + .25f);
+    V2 head = P(p.x, p.y, pose.lying ? px(.6f) : top);
+    if (p.sick > 0) circle(head.x, head.y, 2.4f, hex(0x7fbf6a));
+    if (p.whisper && p.whisper->until > c.sim->tMin) poly({{head.x, head.y - 9}, {head.x + 3, head.y - 5}, {head.x, head.y - 1}, {head.x - 3, head.y - 5}}, rgba(185, 154, 230, .9f));
 }
 
 void wolf(const Ctx&, const dw::Wolf& w) {

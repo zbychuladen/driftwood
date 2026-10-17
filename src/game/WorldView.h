@@ -2,6 +2,7 @@
 // fog of war, weather and lighting. Owns the camera and map input.
 #pragma once
 #include <functional>
+#include <unordered_map>
 #include <vector>
 #include "engine/Lighting.h"
 #include "game/Art.h"
@@ -75,6 +76,10 @@ private:
     void drawFog(dw::Sim& sim);
     void drawWeather(dw::Sim& sim, float dt, float speed);
     void drawLabels(dw::Sim& sim, int selectedId);
+    // Which way each settler faces: the way they last moved, or toward their work.
+    void updateFacings(dw::Sim& sim);
+    struct Track { float x, y; int facing; };
+    std::unordered_map<int, Track> tracks;
     void drawHighlight(dw::Sim& sim, Pick p);
     void drawLinks(dw::Sim& sim, int selectedId, Pick inspected);
     struct Caption { Vector2 world; std::string text; };

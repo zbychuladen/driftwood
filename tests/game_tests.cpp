@@ -118,8 +118,10 @@ static void testScale() {
     Person adult, child;
     adult.x = adult.y = child.x = child.y = 20;
     child.child = true;
-    float hAdult = heightM(iso::wp(20, 20), [&] { art::person(ctx, adult, false); });
-    float hChild = heightM(iso::wp(20, 20), [&] { art::person(ctx, child, false); });
+    // measured under the hair's back corner, as in the figure test below
+    Vector2 under = iso::wp(20 - .16f / scale::TILE_M, 20 - .16f / scale::TILE_M);
+    float hAdult = heightM(under, [&] { art::person(ctx, adult, false, 0, 1); });
+    float hChild = heightM(under, [&] { art::person(ctx, child, false, 0, 1); });
     checkAll({near("adult", hAdult, scale::PERSON), near("child", hChild, scale::CHILD)}, "people are drawn at their real height");
 
     // trees, bushes and rocks at a size of 1, measured from where they stand
@@ -582,6 +584,20 @@ static void testFigures() {
         lowest = std::min(lowest, h); highest = std::max(highest, h);
     }
     CHECK(lowest > scale::PERSON * .9f && highest < scale::PERSON * 1.05f, cat("through a stride the figure stays 1.5 to 1.8 m tall (", int(lowest * 100), " to ", int(highest * 100), " cm)").c_str());
+    // every activity the simulation uses has a pose of its own
+    std::set<std::string> seen;
+    for (uint32_t seed : {20261017u, 777u}) {
+        Sim s;
+        s.newWorld(seed);
+        for (int h = 0; h < 60 * 24 * 4; h++) {
+            s.step(15);
+            if (!s.pendingFate.empty()) { auto f = s.pendingFate[0]; s.pendingFate.clear(); s.applyFate(f); }
+            for (auto& p : s.people) if (!p.dead) seen.insert(p.anim);
+        }
+    }
+    std::string missing, list;
+    for (auto& a : seen) { list += " '" + a + "'"; if (!figure::hasPose(a)) missing += " '" + a + "'"; }
+    CHECK(missing.empty() && seen.size() > 8, ("every activity the sim uses has a pose:" + list + (missing.empty() ? "" : "; missing" + missing)).c_str());
     CHECK(figure::facingToward(1, .2f, figure::NE) == figure::SE && figure::facingToward(-.1f, 1, figure::NE) == figure::SW
           && figure::facingToward(0, -2, figure::SE) == figure::NE && figure::facingToward(-3, 1, figure::SE) == figure::NW
           && figure::facingToward(0, 0, figure::NW) == figure::NW, "a figure faces the way it moves, and keeps its facing when still");

@@ -20,23 +20,38 @@ Facing facingToward(float dx, float dy, Facing otherwise);
 struct Look {
     Color jacket, shirt, legs, skin, hair, shoes;
     int hairStyle = 0;           // 0 short, 1 bob, 2 bun
-    bool shorts = false, child = false;
+    bool shorts = false, child = false, beard = false;
 };
 Look lookOf(const dw::Person& p);
+
+// Things held: tools in the right hand (two-handed ones between both hands),
+// loads carried in front, a fish or basket hanging from the right hand.
+enum Prop { NONE, AXE, PICK, HAMMER, ROD, FLUTE, BOWL, LOGS, STONE, FISH, BASKET };
 
 // Joint angles in radians, distances in metres. Zero is standing straight with
 // arms hanging. Index 0 is the left limb, 1 the right.
 struct Pose {
-    float drop = 0, bob = 0;     // whole body lowered, and a small bounce
+    float drop = 0, bob = 0;     // whole body lowered (metres), and a small bounce
     float lean = 0, head = 0;    // torso and head pitch, forward positive
     float hip[2] = {0, 0}, knee[2] = {0, 0};
     float shoulder[2] = {0, 0}, spread[2] = {.07f, .07f}, elbow[2] = {.18f, .18f};
+    Prop prop = NONE;
+    bool lying = false;          // on the back, under a blanket
+    float strike = 0;            // 1 at the moment a tool lands (chips and sparks)
 };
 
-// Poses for an activity at time t (seconds) or, when walking, at the stride
-// phase (radians). Activities without a clip yet stand idle.
+// Standing at rest at time t, and walking at the stride phase (radians).
 Pose idle(float t);
 Pose walk(float phase);
+// The pose for one of the sim's activity names (Person::anim) at game time t.
+// seed staggers people doing the same thing. Empty or unknown names stand idle.
+Pose activity(const std::string& anim, float t, int seed);
+// Every activity name with a pose of its own, for the coverage test.
+bool hasPose(const std::string& anim);
+// Arms take what is carried (Carry::t: wood, stone, fish, food, meal); legs keep walking.
+void carrying(Pose& p, const std::string& what);
+// Head down, shoulders slumped.
+void unwell(Pose& p);
 
 // Draws a figure standing at tile (x, y). detail 0 is the simple far-away
 // version (no face, hands or trim), 1 the full one.
