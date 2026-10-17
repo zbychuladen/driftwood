@@ -2,6 +2,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include "engine/Draw.h"
+#include "game/Art.h"
 #include "game/Iso.h"
 #include "raylib.h"
 #include "rlgl.h"
@@ -68,6 +70,46 @@ void Game::frame(float dt) {
     EndDrawing();
 }
 
+// A plant sheet for judging the art: rows of each tree kind across the four
+// seasons and growth stages, on plain ground with the world's tone and ink.
+void Game::drawGallery() {
+    ClearBackground(Color{233, 230, 218, 255});
+    Camera2D cam{};
+    cam.zoom = opt.zoom > 0 ? opt.zoom : 1.6f;
+    cam.offset = {0, 0};
+    cam.target = {0, 0};
+    draw::tone = {.32f, .2f, {236, 233, 220, 255}};
+    draw::ink = {std::max(.55f, 1.05f / cam.zoom), {52, 62, 52, 255}};
+    BeginMode2D(cam);
+    rlDisableBackfaceCulling();
+    struct Row { const char* label; bool palm, conifer; float size; bool sapling; float grow; };
+    std::vector<Row> rows = {{"broadleaf", false, false, 1, false, 0}, {"broadleaf, size .8 to 1.25", false, false, 1.25f, false, 0},
+                             {"conifer", false, true, 1, false, 0}, {"palm", true, false, 1, false, 0}, {"saplings", false, false, 1, true, .4f}};
+    const float colW = 150, rowH = 175, x0 = 90, y0 = 165;
+    for (size_t r = 0; r < rows.size(); r++)
+        for (int c = 0; c < 8; c++) {
+            dw::Obj o;
+            o.type = "tree"; o.palm = rows[r].palm; o.conifer = rows[r].conifer; o.i = c * 7 + int(r) * 3;
+            o.size = r == 1 ? .8f + c * .065f : rows[r].size;
+            o.sapling = rows[r].sapling; o.grow = rows[r].sapling ? c / 7.f : 0;
+            int season = c % 4;
+            // place the tree's ground point in screen space, then find the tile there
+            Vector2 at{x0 + c * colW, y0 + r * rowH};
+            Vector2 t = iso::toTile(at.x / cam.zoom, at.y / cam.zoom);
+            o.x = int(std::floor(t.x)); o.y = int(std::floor(t.y));
+            art::Ctx ctx{&sim, 0, season, 12};
+            ctx.effects = false;
+            
+            art::tree(ctx, o);
+        }
+    EndMode2D();
+    draw::tone = {};
+    draw::ink.width = 0;
+    const char* seasons[4] = {"spring", "summer", "autumn", "winter"};
+    for (int c = 0; c < 8; c++) ui::text(ui::F.bold, seasons[c % 4], x0 + c * colW - 24, 12, 14, ui::T.muted);
+    for (size_t r = 0; r < rows.size(); r++) ui::text(ui::F.bold, rows[r].label, 8, y0 + r * rowH + 8, 12, ui::T.muted);
+}
+
 int Game::run() {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
     InitWindow(opt.width, opt.height, "Driftwood");
@@ -102,7 +144,8 @@ int Game::run() {
         if (opt.showJournal) journalOpen = true;
         view.showAllLinks = opt.allLinks;
         speed = 1;
-        for (int i = 0; i < 4; i++) frame(1.f / 60);
+        if (opt.gallery) for (int i = 0; i < 3; i++) { BeginDrawing(); drawGallery(); EndDrawing(); }
+        else for (int i = 0; i < 4; i++) frame(1.f / 60);
         if (opt.hasPick) {
             // Report what a click at this screen point would select (for scripted checks).
             Pick p = view.pickAt(sim, {opt.pickX, opt.pickY});

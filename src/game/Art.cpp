@@ -115,60 +115,301 @@ static V2 roundHut(float x, float y, float w, float h, float wh, float rh, bool 
     return c;
 }
 
+// ---------------------------------------------------------------- trees
+// Every tree is drawn around its foot at (0,0) exactly 100 units tall, then
+// scaled to its real height from Scale.h. Crowns are one bumpy silhouette with
+// a single ink outline, shaded inside without ink: a darker underside, a lit
+// mass toward the light (up and left), highlights and a scatter of leaves.
+
+namespace {
+
+// Turns ink outlines off for interior detail, back on when it goes out of scope.
+struct NoInk {
+    float w;
+    NoInk() : w(draw::ink.width) { draw::ink.width = 0; }
+    ~NoInk() { draw::ink.width = w; }
+};
+
+struct Lobe { float x, y, r; };
+
+// The outline of a union of circles, seen from a point inside it, with that
+// point first so the fill fans from the middle and the outline traces the rim.
+std::vector<V2> blob(const std::vector<Lobe>& L, V2 o, int n = 60) {
+    std::vector<V2> pts{o};
+    for (int i = 0; i < n; i++) {
+        float a = 6.2831853f * i / n, dx = std::cos(a), dy = std::sin(a), best = 0;
+        for (auto& l : L) {
+            float cx = l.x - o.x, cy = l.y - o.y, b = dx * cx + dy * cy, disc = b * b - (cx * cx + cy * cy - l.r * l.r);
+            if (disc >= 0) best = std::max(best, b + std::sqrt(disc));
+        }
+        pts.push_back({o.x + dx * best, o.y + dy * best});
+    }
+    pts.push_back(pts[1]);   // close the fan's last wedge
+    return pts;
+}
+
+struct Leaf { Color dark, base, light, fleck; };
+
+Leaf leafColors(int season, int seed) {
+    if (season == 0) return {hex(0x5a8a42), hex(0x76a654), hex(0x9cc672), hex(0xbcdc8e)};
+    if (season == 1) return {hex(0x466f34), hex(0x5f8f44), hex(0x84b25c), hex(0xa4c878)};
+    static const Leaf autumn[4] = {
+        {hex(0x9a6e24), hex(0xc4952f), hex(0xe2bb58), hex(0xf2d684)},   // gold
+        {hex(0x9c4f22), hex(0xc8702f), hex(0xe69a50), hex(0xf2bc78)},   // orange
+        {hex(0x86362a), hex(0xae4b36), hex(0xcf7258), hex(0xe69a7c)},   // red
+        {hex(0x5e6c2c), hex(0x7f8f3a), hex(0xa8b45a), hex(0xc8cc7c)}};  // still green-ish
+    return autumn[seed % 4];
+}
+
+// A crown: shaded silhouette plus inner light, from a set of lobes around o.
+void crown(const std::vector<Lobe>& L, V2 o, const Leaf& col, int seed, bool blossom) {
+    polyV(blob(L, o), col.dark);   // the outlined silhouette in the shade colour
+    NoInk ni;
+    std::vector<Lobe> lit, hi;
+    float avgR = 0;
+    for (auto& l : L) {
+        lit.push_back({l.x - l.r * .10f, l.y - l.r * .14f, l.r * .82f});   // stays inside its own lobe
+        hi.push_back({l.x - l.r * .24f, l.y - l.r * .30f, l.r * .46f});
+        avgR += l.r;
+    }
+    avgR /= float(L.size());
+    polyV(blob(lit, {o.x - avgR * .1f, o.y - avgR * .14f}), col.base);
+    // highlights only on the upper lobes, where the light falls
+    for (size_t i = 0; i < L.size(); i++) if (L[i].y <= o.y + avgR * .2f) circle(hi[i].x, hi[i].y, hi[i].r, col.light);
+    // a scatter of single leaves breaks up the shapes
+    for (int k = 0; k < 14; k++) {
+        const Lobe& l = L[size_t(k * 5 + seed) % L.size()];
+        float a = frand(seed * 31 + k) * 6.283f, d = frand(seed * 17 + k * 3) * l.r * .7f;
+        float lx = l.x + std::cos(a) * d, ly = l.y + std::sin(a) * d * .9f, lr = avgR * (.09f + frand(seed + k * 7) * .05f);
+        ellipse(lx, ly, lr * 1.3f, lr, ly < o.y ? col.fleck : col.dark);
+    }
+    if (blossom)
+        for (int k = 0; k < 10; k++) {
+            const Lobe& l = L[size_t(k * 3 + seed) % L.size()];
+            float a = frand(seed * 7 + k * 11) * 6.283f, d = frand(seed * 13 + k) * l.r * .75f;
+            circle(l.x + std::cos(a) * d, l.y + std::sin(a) * d, avgR * .07f, hex(0xf7e4ec));
+        }
+}
+
+// A tapered trunk, outlined, with its shaded side on the right.
+void trunk(V2 base, V2 top, float w0, float w1, Color bark) {
+    float dx = top.x - base.x, dy = top.y - base.y, len = std::max(.01f, std::hypot(dx, dy)), nx = -dy / len, ny = dx / len;
+    poly({{base.x - nx * w0, base.y - ny * w0}, {top.x - nx * w1, top.y - ny * w1}, {top.x + nx * w1, top.y + ny * w1}, {base.x + nx * w0, base.y + ny * w0}}, bark);
+    NoInk ni;
+    poly({{base.x, base.y}, {top.x, top.y}, {top.x + nx * w1, top.y + ny * w1}, {base.x + nx * w0, base.y + ny * w0}}, shade(bark, .78f));
+}
+
+// Moves a crown so its highest point sits at the tree's full height.
+void topAt(std::vector<Lobe>& L, V2& o, float top) {
+    float hi = 1e9f;
+    for (auto& l : L) hi = std::min(hi, l.y - l.r);
+    float d = top - hi;
+    for (auto& l : L) l.y += d;
+    o.y += d;
+}
+
+void broadleaf(const Ctx& c, const dw::Obj& o, float sway) {
+    int seed = o.i, shape = int(frand(seed * 7 + 3) * 4) % 4;
+    Leaf col = leafColors(c.season, int(frand(seed * 13) * 4));
+    Color bark = hex(0x6e5440);
+    // crown: a core and a ring of lobes, in one of four shapes
+    struct Shape { float cy, core, rx, ry, lobe, trunkTop; int n; } S[4] = {
+        {-60, 23, 22, 17, 15, -44, 8},    // round
+        {-58, 17, 14, 26, 12, -36, 8},    // tall oval
+        {-58, 25, 33, 15, 15, -30, 9},    // wide oak
+        {-60, 21, 19, 16, 13, -40, 8}};   // two masses
+    const Shape& sh = S[shape];
+    V2 o0{sway, sh.cy};
+    std::vector<Lobe> L{{o0.x, o0.y, sh.core}};
+    for (int k = 0; k < sh.n; k++) {
+        float a = 6.283f * k / sh.n + frand(seed + k) * .5f;
+        L.push_back({o0.x + std::cos(a) * sh.rx, o0.y + std::sin(a) * sh.ry, sh.lobe * (.8f + frand(seed * 3 + k) * .4f)});
+    }
+    if (shape == 3) { L.push_back({o0.x + 17, o0.y + 14, 14}); L.push_back({o0.x + 24, o0.y + 6, 10}); }
+    topAt(L, o0, -100);
+    // soft shadow right under the crown
+    float half = (shape == 2 ? 46 : shape == 1 ? 28 : 36);
+    ellipse(6, 2, half * .9f, half * .34f, SHADOW);
+    // trunk and the forks that carry the crown
+    V2 fork{sway * .3f, sh.trunkTop};
+    trunk({0, 0}, fork, 4.f, 2.8f, bark);
+    float spread = shape == 2 ? 16 : shape == 1 ? 6 : 10;
+    for (float side : {-1.f, 1.f}) {
+        V2 end{o0.x + side * spread, o0.y + 6};
+        trunk(fork, end, 2.2f, 1.2f, bark);
+    }
+    if (shape == 2) trunk(fork, {o0.x + 2, o0.y - 4}, 2.f, 1.f, bark);
+    crown(L, o0, col, seed, c.season == 0 && seed % 3 == 0);
+}
+
+// Winter: bare, finely branching limbs.
+struct Seg { V2 a, b; float w; int depth; };
+void limbs(std::vector<Seg>& out, V2 a, float ang, float len, float w, int depth, int seed) {
+    V2 b{a.x + std::cos(ang) * len, a.y + std::sin(ang) * len};
+    out.push_back({a, b, w, depth});
+    if (depth == 0) return;
+    int n = 2 + (frand(seed) > .6f ? 1 : 0);
+    for (int k = 0; k < n; k++) {
+        float off = (n == 2 ? (k ? .42f : -.42f) : (k - 1) * .5f) + (frand(seed * 5 + k) - .5f) * .3f;
+        limbs(out, b, ang + off, len * (.68f + frand(seed * 3 + k) * .1f), w * .62f, depth - 1, seed * 7 + k + 1);
+    }
+}
+
+void bareTree(const Ctx&, const dw::Obj& o, float sway) {
+    const float trunkTop = -26;
+    std::vector<Seg> segs;
+    // two or three main limbs from the top of the trunk, each branching five times
+    int mains = 2 + (frand(o.i * 3) > .5f ? 1 : 0);
+    for (int m = 0; m < mains; m++) {
+        float ang = -1.5708f + (m - (mains - 1) / 2.f) * .5f + (frand(o.i + m) - .5f) * .2f;
+        limbs(segs, {0, trunkTop}, ang, 20, 2.4f, 5, o.i * 11 + m * 101 + 1);
+    }
+    // stretch the branches above the trunk so the tips reach full height
+    float hi = 1e9f;
+    for (auto& s : segs) hi = std::min({hi, s.a.y, s.b.y});
+    float k = (-100 - trunkTop) / (hi - trunkTop);
+    auto fit = [&](V2 p) { float f = (trunkTop - p.y) / (trunkTop + 100); return V2{p.x * k + sway * f, trunkTop + (p.y - trunkTop) * k}; };
+    float half = 30;
+    for (auto& s : segs) half = std::max(half, std::abs(fit(s.b).x));
+    ellipse(6, 2, half * .8f, half * .3f, SHADOW);
+    Color bark = hex(0x6a5544);
+    trunk({0, 0}, {0, trunkTop}, 3.8f, 2.6f, bark);
+    NoInk ni;
+    for (auto& s : segs) {
+        V2 a = fit(s.a), b = fit(s.b);
+        line(a.x, a.y, b.x, b.y, std::max(.45f, s.w), s.depth <= 1 ? hex(0x86705c) : bark);
+        // a little snow along the tops of the lower limbs
+        if (s.depth >= 4 && std::abs(b.x - a.x) > std::abs(b.y - a.y) * .4f) line(a.x, a.y - s.w * .7f, b.x, b.y - s.w * .6f, s.w * .6f, hex(0xf6f8f8));
+    }
+}
+
+void fir(const Ctx& c, const dw::Obj& o, float sway) {
+    int seed = o.i;
+    float W = 30 + frand(seed * 5) * 10;   // half-width of the lowest tier
+    bool winter = c.season == 3;
+    Color dark = winter ? hex(0x3f5c4a) : hex(0x335c3e), lit = winter ? hex(0x557562) : hex(0x4a7a50), bark = hex(0x5e4636);
+    ellipse(5, 2, W * .95f, W * .34f, SHADOW);
+    trunk({0, 0}, {0, -14}, 3.f, 2.4f, bark);
+    const int tiers = 5;
+    for (int i = 0; i < tiers; i++) {
+        float yb = -10 - i * 16.5f, yt = i == tiers - 1 ? -100 : yb - 34, hw = W * (1 - i * .17f);
+        float sx = sway * (-yt / 100);   // tips sway more than the base
+        V2 apex{sx, yt};
+        // drooping bottom edge: tips hang lower than the notches between them
+        int tips = i < 2 ? 4 : 3;
+        std::vector<V2> rim;
+        rim.push_back({sx * .5f, (yt + yb) / 2 + 6});   // a point inside, for the fan
+        rim.push_back(apex);
+        rim.push_back({sx * .5f + hw * .55f, (yt + yb) / 2 + 2});
+        for (int t = 0; t <= tips * 2; t++) {
+            float f = 1 - float(t) / (tips * 2);
+            float x = sx * .3f + (f * 2 - 1) * hw, droop = t % 2 == 0 ? 4.f : -3.f;
+            rim.push_back({x, yb + droop});
+        }
+        rim.push_back({sx * .5f - hw * .55f, (yt + yb) / 2 + 2});
+        rim.push_back(apex);   // close the fan
+        polyV(rim, dark);
+        NoInk ni;
+        // the lit left half of the tier
+        std::vector<V2> left{apex, {sx * .3f, yb - 1}};
+        for (int t = tips * 2; t >= tips; t--) {
+            float f = 1 - float(t) / (tips * 2);
+            left.push_back({sx * .3f + (f * 2 - 1) * hw * .92f, yb + (t % 2 == 0 ? 2.f : -4.f)});
+        }
+        left.push_back({sx * .5f - hw * .52f, (yt + yb) / 2 + 2});
+        std::vector<V2> fan{{sx * .1f - hw * .25f, (yt + yb) / 2 + 4}};
+        fan.insert(fan.end(), left.begin(), left.end());
+        fan.push_back(apex);
+        polyV(fan, lit);
+        if (winter) {
+            // snow resting on the drooping branch tips, the part of each tier left in view
+            // irregular drifts, mostly on the lit side; not every branch holds snow
+            for (int t = 0; t <= tips * 2; t += 2) {
+                if (frand(seed * 19 + i * 7 + t) < .35f) continue;
+                float f = 1 - float(t) / (tips * 2), x = sx * .3f + (f * 2 - 1) * hw * .82f;
+                float w = hw * (.18f + frand(seed + i * 3 + t) * .14f) * (x < 0 ? 1.f : .7f);
+                poly({{x - w, yb + 1}, {x - w * .4f, yb - 2.2f}, {x + w * .5f, yb - 1.6f}, {x + w, yb + .6f}}, hex(0xf4f6f6));
+            }
+            if (i == tiers - 1) poly({apex, {sx + 4, yt + 9}, {sx, yt + 7}, {sx - 4, yt + 10}}, hex(0xf4f6f6));
+        }
+    }
+}
+
+void palm(const Ctx& c, const dw::Obj& o, float sway) {
+    int seed = o.i;
+    float lean = frand(seed * 3) > .5f ? 1.f : -1.f;
+    V2 top{lean * 13 + sway, -86}, ctrl{lean * 2, -44};
+    ellipse(6 + lean * 6, 2, 34, 12, SHADOW);
+    // trunk: a curve that thins toward the top, outlined, with growth rings
+    std::vector<V2> L, R, spine;
+    for (int i = 0; i <= 14; i++) {
+        float t = i / 14.f, u = 1 - t;
+        V2 p{2 * u * t * ctrl.x + t * t * top.x, 2 * u * t * ctrl.y + t * t * top.y};
+        V2 d{2 * u * (ctrl.x) + 2 * t * (top.x - ctrl.x), 2 * u * ctrl.y + 2 * t * (top.y - ctrl.y)};
+        float len = std::max(.01f, std::hypot(d.x, d.y)), w = 3.6f - t * 1.4f;
+        L.push_back({p.x + d.y / len * w, p.y - d.x / len * w});
+        R.push_back({p.x - d.y / len * w, p.y + d.x / len * w});
+        spine.push_back(p);
+    }
+    for (size_t i = 0; i + 1 < spine.size(); i++) poly({L[i], L[i + 1], R[i + 1], R[i]}, hex(0x9a7652));
+    {
+        NoInk ni;
+        for (size_t i = 1; i + 1 < spine.size(); i++) line(L[i].x, L[i].y, R[i].x, R[i].y, .8f, hex(0x6e5238));
+    }
+    // ink along the two sides of the trunk
+    for (size_t i = 0; i + 1 < spine.size(); i++) {
+        line(L[i].x, L[i].y, L[i + 1].x, L[i + 1].y, draw::ink.width, draw::ink.color);
+        line(R[i].x, R[i].y, R[i + 1].x, R[i + 1].y, draw::ink.width, draw::ink.color);
+    }
+    // fronds: back ones first and darker, feathered and drooping
+    Color frondLit = c.season == 3 ? hex(0x7f9a6e) : hex(0x7fae4a), frondDark = c.season == 3 ? hex(0x5e7a54) : hex(0x5a8a36);
+    const int n = 9;
+    auto frond = [&](float a, Color col) {
+        float Lf = 34 + frand(seed * 5 + int(a * 10)) * 6;
+        V2 tip{top.x + std::cos(a) * Lf, top.y + std::sin(a) * Lf * .42f + 24};
+        V2 mid{top.x + std::cos(a) * Lf * .55f, top.y - 13 + std::sin(a) * Lf * .18f};
+        std::vector<V2> le, ri;
+        for (int i = 0; i <= 12; i++) {
+            float t = i / 12.f, u = 1 - t;
+            V2 p{u * u * top.x + 2 * u * t * mid.x + t * t * tip.x, u * u * top.y + 2 * u * t * mid.y + t * t * tip.y};
+            V2 d{2 * u * (mid.x - top.x) + 2 * t * (tip.x - mid.x), 2 * u * (mid.y - top.y) + 2 * t * (tip.y - mid.y)};
+            float len = std::max(.01f, std::hypot(d.x, d.y)), w = 6.f * std::pow(std::sin(3.1416f * std::min(t * 1.1f, 1.f)), .7f) * (i % 2 ? .45f : 1.f);
+            le.push_back({p.x + d.y / len * w, p.y - d.x / len * w});
+            ri.push_back({p.x - d.y / len * w * .8f, p.y + d.x / len * w * .8f});
+        }
+        {
+            NoInk ni;
+            for (size_t i = 0; i + 1 < le.size(); i++) poly({le[i], le[i + 1], ri[i + 1], ri[i]}, col);
+        }
+        float iw = draw::ink.width * .8f;
+        for (size_t i = 0; i + 1 < le.size(); i++) {
+            line(le[i].x, le[i].y, le[i + 1].x, le[i + 1].y, iw, draw::ink.color);
+            line(ri[i].x, ri[i].y, ri[i + 1].x, ri[i + 1].y, iw, draw::ink.color);
+        }
+    };
+    std::vector<float> back, front;
+    for (int k = 0; k < n; k++) {
+        float a = 6.283f * k / n + frand(seed + k) * .3f;
+        (std::sin(a) < 0 ? back : front).push_back(a);
+    }
+    for (float a : back) frond(a, frondDark);
+    for (int k = 0; k < 3; k++) circle(top.x - 3 + k * 3, top.y + 3 + (k % 2) * 1.5f, 2.4f, hex(0x7a5634));
+    for (float a : front) frond(a, frondLit);
+}
+
+} // namespace
+
 void tree(const Ctx& c, const dw::Obj& o) {
-    int s = c.season;
     V2 p = wp(o.x + .5f, o.y + .6f);
-    // the art below is drawn k units tall per unit of its natural height
-    bool bare = !o.palm && !o.conifer && s == 3;
     float H = o.palm ? scale::PALM : o.conifer ? scale::CONIFER : scale::BROADLEAF;
-    float natural = o.palm ? 33.f : o.conifer ? 40.f : bare ? 26.f : 36.f;
-    float x = p.x, y = p.y, k = px(H) / natural * o.size * (o.sapling ? .35f + o.grow * .6f : 1);
-    float sway = std::sin(float(c.t * .02 + o.i)) * 1.2f * k * (c.sim->weather == "storm" ? 3 : 1);
-    ellipse(x + 6 * k, y + 1, 12 * k, 5 * k, SHADOW);
-    if (o.palm) {
-        V2 top{x + 2 * k + sway, y - 26 * k};
-        curve({x, y}, {x + 4 * k, y - 14 * k}, top, 3 * k, hex(0x8a6a43));
-        Color leaf = s == 3 ? hex(0x7f9a74) : hex(0x4f8f4a);
-        for (int a = 0; a < 6; a++) {
-            float an = a / 6.f * 6.283f + .3f;
-            V2 tip{top.x + std::cos(an) * 16 * k, top.y + std::sin(an) * 7 * k + 3};
-            V2 mid{top.x + std::cos(an) * 8 * k, top.y + std::sin(an) * 4 * k - 2};
-            float nx = -std::sin(an) * 2.5f * k, ny = std::cos(an) * 1.2f * k;
-            poly({top, {mid.x + nx, mid.y + ny}, tip, {mid.x - nx, mid.y - ny}}, leaf);
-        }
-        return;
-    }
-    rect(x - 2 * k, y - 12 * k, 4 * k, 12 * k, hex(0x6b4a2e));
-    rect(x - 2 * k, y - 12 * k, 1.5f * k, 12 * k, hex(0x553a24));
-    if (o.conifer) {
-        uint32_t cols[3] = {0x2f5d3a, 0x3b6f45, 0x4a8152};
-        if (s == 3) { cols[0] = 0x3e5b4a; cols[1] = 0x4d6b58; cols[2] = 0x5c7a66; }
-        for (int l = 0; l < 3; l++) {
-            float w = (13 - l * 3.2f) * k, yy = y - 10 * k - l * 8 * k, sx = sway * .3f * l, tx = sway * (.4f + l * .3f);
-            tri({x - w + sx, yy}, {x + tx, yy - 14 * k}, {x + w + sx, yy}, hex(cols[l]));
-            tri({x - w + sx, yy}, {x + tx, yy - 14 * k}, {x - w * .2f + sx, yy}, rgba(0, 0, 0, .12f));
-            if (s == 3) tri({x - w * .45f + sx, yy - 7 * k}, {x + tx, yy - 14 * k}, {x + w * .45f + sx, yy - 7 * k}, rgba(255, 255, 255, .85f));
-        }
-        return;
-    }
-    if (s == 3) {
-        for (int b = 0; b < 5; b++) {
-            float an = -1.5708f + (b - 2) * .45f;
-            line(x, y - 11 * k, x + std::cos(an) * 13 * k + sway, y - 11 * k + std::sin(an) * 15 * k, 1.6f * k, hex(0x5b4330));
-        }
-        return;
-    }
-    uint32_t pal[3];
-    if (s == 2) { if (o.i % 3 == 0) { pal[0] = 0xa8442a; pal[1] = 0xc8642c; pal[2] = 0xe0884a; } else { pal[0] = 0xb47a22; pal[1] = 0xd39a2e; pal[2] = 0xecc054; } }
-    else if (s == 1) { pal[0] = 0x3d6e34; pal[1] = 0x4f8740; pal[2] = 0x68a052; }
-    else { pal[0] = 0x4a8a3e; pal[1] = 0x5fa04a; pal[2] = 0x7dba5e; }
-    float cx = x + sway, cy = y - 22 * k;
-    circle(cx - 6 * k, cy + 3 * k, 9 * k, hex(pal[0]));
-    circle(cx + 6 * k, cy + 3 * k, 9 * k, hex(pal[0]));
-    circle(cx, cy - 3 * k, 11 * k, hex(pal[1]));
-    circle(cx + 3 * k, cy - 6 * k, 6 * k, hex(pal[2]));
-    circle(cx - 5 * k, cy + 5 * k, 5 * k, rgba(0, 0, 0, .1f));
-    if (s == 0 && o.i % 4 == 0) for (int b = 0; b < 5; b++) circle(cx + std::cos(b * 1.3f) * 8 * k, cy + std::sin(b * 1.7f) * 6 * k, 1.4f * k, hex(0xf6d6e4));
+    float k = px(H) / 100.f * o.size * (o.sapling ? .35f + o.grow * .6f : 1);
+    float sway = std::sin(float(c.t * .02 + o.i)) * 1.2f * (c.sim && c.sim->weather == "storm" ? 3 : 1);
+    push(p, k, {0, 0});
+    if (o.palm) palm(c, o, sway);
+    else if (o.conifer) fir(c, o, sway);
+    else if (c.season == 3) bareTree(c, o, sway);
+    else broadleaf(c, o, sway);
+    pop();
 }
 
 void stump(const Ctx&, const dw::Obj& o) {
