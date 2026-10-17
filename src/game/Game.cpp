@@ -260,7 +260,7 @@ void Game::drawBuildingGallery(bool structures) {
     };
     struct T { const char* key; int w, h; };
     const T houses[9] = {{"hut", 2, 2}, {"leanto", 3, 1}, {"longhouse", 4, 2}, {"store", 2, 2}, {"school", 2, 2}, {"forge", 2, 2}, {"smoke", 2, 1}, {"loomhouse", 2, 2}, {"infirmary", 2, 2}};
-    const T others[10] = {{"well", 1, 1}, {"rack", 1, 1}, {"tower", 1, 1}, {"lighthouse", 1, 1}, {"signal", 1, 1}, {"mine", 1, 1}, {"dock", 1, 3}, {"shrine", 2, 2}, {"pottery", 2, 2}, {"boatyard", 2, 2}};
+    const T others[10] = {{"well", 1, 1}, {"rack", 1, 1}, {"tower", 1, 1}, {"lighthouse", 1, 1}, {"signal", 1, 1}, {"mine", 1, 1}, {"dock", 1, 3}, {"circle", 2, 2}, {"pottery", 2, 2}, {"boatyard", 2, 2}};
     const T* types = structures ? others : houses;
     const int count = structures ? 10 : 9;
     for (int i = 0; i < count * 3; i++) {
@@ -350,6 +350,7 @@ int Game::run() {
         sim.flash = 0;
         tab = opt.tab;
         if (opt.selectFirst) { auto m = sim.members(); if (!m.empty()) select(m[std::min<int>(opt.selectFirst - 1, int(m.size()) - 1)]->id, true); }
+        if (auto* p = sim.person(selected)) for (int i = 0; i < opt.narrate; i++) sim.whisper(*p, "wood");
         else if (!sim.pendingPlacement) view.centerOnTile(sim.campX + 1.f, sim.campY + 1.f);
         if (opt.placement && sim.pendingPlacement) {
             // aim at the suggestion, or at a given point (--pick X,Y) to show another spot

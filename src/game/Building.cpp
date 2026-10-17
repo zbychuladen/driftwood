@@ -212,7 +212,7 @@ V3 cross2(V3 v) { return {-v.y, v.x, 0}; }
 
 bool assembled(const std::string& k) {
     static const char* keys[] = {"hut", "leanto", "longhouse", "store", "school", "forge", "smoke", "loomhouse", "infirmary", "cookhouse",
-                                 "well", "rack", "tower", "lighthouse", "signal", "mine", "dock", "shrine", "pottery", "boatyard"};
+                                 "well", "rack", "tower", "lighthouse", "signal", "mine", "dock", "circle", "pottery", "boatyard"};
     for (auto s : keys) if (k == s) return true;
     return false;
 }
@@ -480,27 +480,50 @@ Design make(const std::string& key, int id, int x, int y, int w, int h, int fron
         d.walls = std::string(rail ? "railed " : "open ") + (pale ? "pale" : "dark");
         d.roof = coil ? "rope" : "bare";
         d.features = {"deck", "posts", "bollard"};
-    } else if (key == "shrine") {
-        // a ring of standing stones round a low altar
+    } else if (key == "circle") {
+        // log seats in a ring round a fire pit, where people gather to tell tales
         V3 c = b.centre;
-        b.add(upright(solid::CYLINDER, c, 3.0f, 3.0f, .06f, 0, snow ? hex(0xeef1f2) : hex(0x9aa88a)), BASE, FOUNDATION);
-        int stones = 6 + r.pick(4);
-        bool lintel = r.chance(.4f);
-        for (int i = 0; i < stones; i++) {
-            float a = 6.283f * i / stones + .2f;
-            float hgt = i == 0 ? scale::SHRINE_STONE : scale::SHRINE_STONE * (.7f + r() * .35f);
-            b.add(upright(solid::BOX, c + V3{std::cos(a) * 1.3f, std::sin(a) * 1.3f, 0}, .5f, .3f, hgt, a + 1.5708f, hex(i % 2 ? 0x8d918a : 0xa7aba3), solid::STONE), WALL, WALLS, true);
+        b.add(upright(solid::CYLINDER, c, 3.2f, 3.2f, .04f, 0, snow ? hex(0xeef1f2) : hex(0xa89a7c)), BASE, FOUNDATION);
+        int pit = 8 + r.pick(4);
+        for (int i = 0; i < pit; i++) {
+            float a = 6.283f * i / pit;
+            b.add(upright(solid::BOX, c + V3{std::cos(a) * .42f, std::sin(a) * .42f, .04f}, .22f, .16f, .16f + r() * .06f, a, hex(i % 2 ? 0x8d918a : 0xa7aba3), solid::STONE), BASE, FOUNDATION);
         }
-        if (lintel) {
-            float a0 = .2f, a1 = .2f + 6.283f / stones;
-            V3 p0{std::cos(a0) * 1.3f, std::sin(a0) * 1.3f, scale::SHRINE_STONE + .1f}, p1{std::cos(a1) * 1.3f, std::sin(a1) * 1.3f, scale::SHRINE_STONE + .1f};
-            b.add(solid::along(c + p0, c + p1, .32f, .22f, V3{0, 0, 1}, hex(0x969a92)), ROOF, ROOFING);
+        b.add(upright(solid::CYLINDER, c + V3{0, 0, .04f}, .6f, .6f, .05f, 0, hex(0x3a2e26)), BASE, FRAME);
+        int seats = 4 + r.pick(3);
+        bool stump = r.chance(.5f), tripod = r.chance(.5f);
+        float a0 = r() * 6.283f;
+        for (int i = 0; i < seats; i++) {
+            float a = a0 + 6.283f * i / seats;
+            V3 m = c + V3{std::cos(a) * 1.15f, std::sin(a) * 1.15f, .04f + scale::CIRCLE_SEAT / 2};
+            V3 t{-std::sin(a), std::cos(a), 0};
+            float len = .9f + r() * .3f;
+            Solid lg = solid::along(m - t * (len / 2), m + t * (len / 2), scale::CIRCLE_SEAT, scale::CIRCLE_SEAT * .8f, V3{0, 0, 1}, i % 2 ? hex(0x7a5634) : hex(0x8a6440));
+            lg.tex = solid::LOGS;
+            b.add(lg, WALL, WALLS, true);
         }
-        b.add(upright(solid::BOX, c, .9f, .6f, .55f, r() * 3, hex(0xb8b4a8), solid::STONE), EXTRA, DETAILS);
-        d.made = cat(stones, " standing stones", lintel ? ", two joined by a lintel" : "", ", round an altar");
-        d.walls = cat(stones, " stones");
-        d.roof = lintel ? "lintel" : "open";
-        d.features = {"stones", "altar"};
+        // the storyteller's stump, between two seats
+        if (stump) { float a = a0 + 3.1416f / seats; b.add(upright(solid::CYLINDER, c + V3{std::cos(a) * 1.25f, std::sin(a) * 1.25f, .04f}, .42f, .42f, scale::CIRCLE_SEAT + .05f, 0, hex(0x6e5238), solid::LOGS), EXTRA, DETAILS); }
+        if (tripod) {
+            for (int i = 0; i < 3; i++) {
+                float a = .5f + 2.094f * i;
+                b.add(solid::along(c + V3{std::cos(a) * .55f, std::sin(a) * .55f, .04f}, c + V3{0, 0, scale::CIRCLE_TRIPOD}, .05f, .05f, V3{0, 0, 1}, hex(0x5e4636)), ROOF, ROOFING);
+            }
+            b.add(upright(solid::CYLINDER, c + V3{0, 0, .45f}, .3f, .3f, .24f, 0, hex(0x3c3c3a)), EXTRA, DETAILS);
+        }
+        // a few split logs stacked for the evening
+        V3 pile = c + V3{std::cos(a0 + 3.4f) * .8f, std::sin(a0 + 3.4f) * .8f, .04f};
+        for (int i = 0; i < 3; i++) {
+            Solid lg = solid::along(pile + V3{-.25f, i * .1f - .1f, .06f + (i == 2) * .1f}, pile + V3{.25f, i * .1f - .1f, .06f + (i == 2) * .1f}, .1f, .1f, V3{0, 0, 1}, hex(0x8a6440));
+            lg.tex = solid::LOGS;
+            b.add(lg, EXTRA, DETAILS);
+        }
+        d.flame = c + V3{0, 0, .2f};
+        d.flames = true;
+        d.made = cat(seats, " log seats round a fire pit", stump ? ", a storyteller's stump" : "", tripod ? ", a pot on a tripod" : "");
+        d.walls = cat(seats, " seats");
+        d.roof = tripod ? "tripod" : "open";
+        d.features = {"seats", "firepit"};
     } else if (key == "pottery") {
         // a beehive kiln of clay with a glowing mouth, pots drying, a stack of wood
         V3 c = b.centre + V3{-.2f, -.2f, 0};

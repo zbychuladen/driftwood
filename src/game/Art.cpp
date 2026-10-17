@@ -570,9 +570,9 @@ void building(const Ctx& c, dw::Project& b) {
                 V2 f = solid::project(d->flame);
                 if (k == "signal") { flame(c, f.x, f.y, 1.3f); smoke(c, f.x, f.y - 12, 5, 1.6f); }
                 else if (k == "pottery") radial(f.x, f.y, 9, 6, rgba(255, 150, 60, .8f), rgba(255, 150, 60, 0));
+                else if (k == "circle" && (c.hour >= 18 || c.hour < 1)) flame(c, f.x, f.y, .8f);
                 else if (k == "lighthouse") radial(f.x, f.y, 16, 16, rgba(255, 220, 140, night ? .9f : .35f), rgba(255, 220, 140, 0));
             }
-            if (b.done && k == "shrine") { V2 q = P(x + 1, y + 1); radial(q.x, q.y - 6, 18, 18, rgba(190, 150, 255, .55f), rgba(190, 150, 255, 0)); }
         }
     } else if (k == "fire") {
         V2 q = P(x + .5f, y + .5f);

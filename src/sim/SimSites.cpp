@@ -203,7 +203,7 @@ std::vector<Opinion> Sim::opinions(const ProjectDef& d, int x, int y) const {
         float e = std::clamp(gift * .85f + build * .15f, 0.f, 1.f);
         // everyone's eye is off by some amount; the specialist's barely at all
         float noise = (hash01(uint32_t(p.id), uint32_t(x * 131 + y), keyHash) - .5f) * .6f;
-        float temper = (p.has("cheerful") ? .08f : 0) - (p.has("gloomy") ? .08f : 0) - (p.has("skeptic") ? .05f : 0);
+        float temper = (p.has("cheerful") ? .08f : 0) - (p.has("gloomy") ? .08f : 0) - (p.has("obstinate") ? .05f : 0);
         float perceived = r.quality + (noise + temper) * (1 - e);
         std::string say;
         const SiteFactor* worst = r.factors.empty() || r.factors.front().weight >= 0 ? nullptr : &r.factors.front();
@@ -307,7 +307,7 @@ void Sim::siteJudged(Project& b, bool finished) {
         if (o.perceived < .85f) {
             p->mood = std::max(0.f, p->mood - 3 - 6 * o.expertise);
             // overruled by the narrator, the specialist takes it a little personally
-            if (b.sited && o.expertise >= .45f) p->belief = std::max(0.f, p->belief - 4);
+            if (b.sited && o.expertise >= .45f) p->rapport = std::max(0.f, p->rapport - 4);
         } else if (o.perceived > 1.1f) p->mood = std::min(100.f, p->mood + 2 + 3 * o.expertise);
     }
     if (lead.expertise >= .45f && lead.perceived < .85f)

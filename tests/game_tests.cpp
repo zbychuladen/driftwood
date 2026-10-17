@@ -494,7 +494,7 @@ static void testContrast() {
     std::vector<Pair> pairs = {
         {"body text on a panel", T.text, T.panel, 7}, {"body text on a card", T.text, T.panel2, 7},
         {"secondary text on a panel", T.muted, T.panel, 4.5f}, {"secondary text on a card", T.muted, T.panel2, 4.5f},
-        {"accent text", T.accent, T.panel, 4.5f}, {"the Voice's text", T.voice, T.panel, 4.5f},
+        {"accent text", T.accent, T.panel, 4.5f}, {"the narrator's text", T.narrator, T.panel, 4.5f},
         {"warning text", T.berry, T.panel, 4.5f}, {"ember text", T.ember, T.panel, 4.5f}, {"good-news text", T.ok, T.panel, 4.5f},
         {"a selected button's label", T.onAccent, T.accent, 4.5f}, {"a hovered button's label", T.text, T.hover, 7},
         {"typing in a text field", T.text, T.field, 7}, {"a text field's placeholder", T.muted, T.field, 4.5f},
@@ -623,13 +623,13 @@ static void testBuildings() {
                        {"smoke", 2, 1, scale::SMOKE_WALL + scale::SMOKE_ROOF}, {"loomhouse", 2, 2, scale::LOOM_WALL + scale::LOOM_ROOF}, {"infirmary", 2, 2, scale::INFIRMARY_WALL + scale::INFIRMARY_ROOF},
                        {"cookhouse", 2, 2, scale::COOK_WALL + scale::COOK_ROOF},
                        {"well", 1, 1, scale::WELL_ROOF}, {"rack", 1, 1, scale::RACK}, {"tower", 1, 1, scale::TOWER}, {"lighthouse", 1, 1, scale::LIGHTHOUSE},
-                       {"signal", 1, 1, scale::SIGNAL}, {"mine", 1, 1, scale::MINE_HILL}, {"dock", 1, 3, .6f}, {"shrine", 2, 2, scale::SHRINE_STONE},
+                       {"signal", 1, 1, scale::SIGNAL}, {"mine", 1, 1, scale::MINE_HILL}, {"dock", 1, 3, .6f}, {"circle", 2, 2, scale::CIRCLE_SEAT},
                        {"pottery", 2, 2, scale::KILN}, {"boatyard", 2, 2, scale::MAST}};
     // what each structure's recipe promises
     const std::map<std::string, std::vector<std::string>> promised = {
         {"well", {"curb", "water", "windlass", "bucket", "roof"}}, {"rack", {"posts", "crossbar", "fish"}}, {"tower", {"legs", "platform", "railing", "roof", "ladder"}},
         {"lighthouse", {"tower", "gallery", "lantern", "roof", "door"}}, {"signal", {"ring", "crib"}}, {"mine", {"mound", "entrance", "cart"}},
-        {"dock", {"deck", "posts", "bollard"}}, {"shrine", {"stones", "altar"}}, {"pottery", {"kiln", "mouth", "flue", "pots"}}, {"boatyard", {"slip", "trestles", "hull", "mast", "sail"}}};
+        {"dock", {"deck", "posts", "bollard"}}, {"circle", {"seats", "firepit"}}, {"pottery", {"kiln", "mouth", "flue", "pots"}}, {"boatyard", {"slip", "trestles", "hull", "mast", "sail"}}};
     std::string missing, outside, tall, front, stages, hinge;
     int made = 0;
     std::map<std::string, std::set<std::string>> variety;

@@ -12,7 +12,7 @@ struct Fonts { Font body, bold, head, hand; };
 extern Fonts F;
 
 struct Theme {
-    Color panel, panel2, line, text, muted, accent, voice, ember, berry, ok, dark;
+    Color panel, panel2, line, text, muted, accent, narrator, ember, berry, ok, dark;
     Color onAccent;   // text on an accent fill
     Color field;      // text input background
     Color hover;      // button under the pointer

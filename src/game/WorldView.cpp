@@ -382,7 +382,7 @@ void WorldView::draw(Sim& s, Rectangle map, int selectedId, float realDt, float 
             V2 w = wp(b->x + .5f, b->y + .5f); w.y -= up;
             lights.push_back({toS(w), (std::string(key) == "lighthouse" ? 170.f : 85.f) * cam.zoom, Color{255, 160, 70, 60}});
         }
-        if (auto* b = s.built("shrine")) lights.push_back({toS(wp(b->x + 1.f, b->y + 1.f)), 55 * cam.zoom, Color{190, 150, 255, 50}});
+        if (auto* b = s.built("circle"); b && (h >= 18 || h < 1)) lights.push_back({toS(wp(b->x + 1.f, b->y + 1.f)), 60 * cam.zoom, Color{255, 170, 90, 60}});
         lighting.render(dk, Color{12, 18, 44, 255}, lights);
     }
     if (s.flash > 0) { draw::rect(0, 0, sw, shh, draw::rgba(230, 235, 255, s.flash * .5f)); s.flash = std::max(0.f, s.flash - realDt * 4); }

@@ -15,7 +15,7 @@ static std::string names(Sim& s, const std::vector<int>& ids) {
 
 static std::string metres(float m) { return cat(int(std::lround(m)), " m"); }
 
-// What each structure is for, in the journal's voice. Proposals carry their
+// What each structure is for, in the journal's words. Proposals carry their
 // own text in the project table; these cover the ones the camp plans itself.
 static std::string purpose(const Project& b) {
     static const std::map<std::string, std::string> d = {

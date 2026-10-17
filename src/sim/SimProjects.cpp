@@ -35,7 +35,7 @@ float Sim::needOf(const std::string& k) {
     if (k == "herbs") { bool sick = false; for (auto* p : m) if (p->sick > 0) sick = true; return sick || (lastSick && day() - lastSick < 8) ? .7f : .2f; }
     if (k == "pottery") return stock.food > 30 ? .5f : .25f;
     if (k == "loomhouse") return season() >= 2 ? .7f : .2f;
-    if (k == "shrine") return avgBelief() / 120;
+    if (k == "circle") return avgRapport() / 120;
     if (k == "school") { for (auto* p : m) if (p->child) return .6f; return .1f; }
     if (k == "infirmary") return pop > 10 ? .5f : .2f;
     if (k == "signal" || k == "boatyard") return .3f;
@@ -279,7 +279,7 @@ void Sim::finish(Project& b) {
         {"signal", " piled a great signal fire on the high ground. We keep it smoking day and night, hoping a ship will see."},
         {"smoke", " finished the smokehouse. The whole camp smells of fish and alder smoke."},
         {"herbs", " planted an herb garden: yarrow, mint and a bitter leaf that soothes fever."},
-        {"shrine", " raised standing stones at the edge of camp. We go there to listen for the Voice."},
+        {"circle", " laid log seats round a fire pit at the edge of camp. Most evenings someone tells a story there, and the narrator gets a few lines in."},
         {"boatyard", " launched our new boat. They sailed all the way around the island and drew the coastline on bark."},
         {"lighthouse", " finished the lighthouse. Its fire can be seen from far out at sea."},
         {"school", " built a schoolhouse. The children sit in a circle and learn letters scratched in clay."},
@@ -304,7 +304,7 @@ void Sim::finish(Project& b) {
     }
     if (b.key == "boatyard")
         for (int y = 0; y < GH; y++) for (int x = 0; x < GW; x++) if (tt[idx(x, y)] >= 2 && distSea[idx(x, y)] <= 2) reveal(x, y, .8f);
-    if (b.voiced) for (auto* p : members()) p->belief = std::min(100.f, p->belief + 5);
+    if (b.voiced) for (auto* p : members()) p->rapport = std::min(100.f, p->rapport + 5);
     for (auto* p : ws) {
         p->esteemPts = std::min(100.f, p->esteemPts + 12);
         p->mood = std::min(100.f, p->mood + 8);

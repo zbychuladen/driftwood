@@ -41,7 +41,7 @@ struct Action {
 struct Needs { float hunger = 20, thirst = 30, fatigue = 30, cold = 0, social = 20; };
 struct Carry { std::string t; int n = 0; };
 struct Bubble { std::string text; double until = 0; };
-struct Whisper { std::string job; double until = 0; };
+struct Whisper { std::string job; double until = 0; bool contrary = false; };
 
 // What a person is busy with, so front ends can show the link between them
 // and the thing they are working on. fromStock: they fetch materials from the
@@ -68,7 +68,9 @@ struct Person {
     std::map<std::string, float> sk;          // basic survival skills 1..10
     std::map<std::string, int> gifts;         // specialist talents 1..10
     int charisma = 5;
-    float belief = 40;
+    float rapport = 40;                       // how willing they are to go along with the narrator, 0..100
+    float pressure = 0;                       // narration they have had lately; fades by one a day
+    double contraryUntil = 0;                 // contrary until then: narrate them and they do the opposite
     std::unordered_map<int, float> aff;       // affinity toward other people
     int partner = -1;
     bool child = false;
@@ -98,7 +100,7 @@ struct Person {
     std::function<void()> release;
     float trust = 0;
     int inventProg = 0, lastBaby = -99;
-    bool lostFaith = false;
+    bool weary = false;                       // tired of being narrated (rapport ran out once)
     bool has(const char* trait) const;
 };
 
@@ -205,7 +207,7 @@ public:
     // The whole game as bytes, and back. Settlers' half-done actions are not
     // kept: after a load everyone picks their next task. load() leaves the sim
     // as it was and returns false, with a reason, for anything it cannot read.
-    static constexpr int SAVE_VERSION = 2;   // 2: site quality and pending placement
+    static constexpr int SAVE_VERSION = 3;   // 2: site quality and pending placement; 3: rapport, contrariness, the story circle
     struct SaveInfo { std::string village; int day = 0, year = 0, season = 0, people = 0; uint32_t seed = 0; };
     std::string save() const;
     bool load(const std::string& data, std::string* error = nullptr);
@@ -254,7 +256,11 @@ public:
     std::vector<const ProjectDef*> proposalList();
     void propose(const std::string& key);
     void applyFate(const Fate& f);
-    float avgBelief();
+    float avgRapport();
+    // How much narrating a person takes before they turn contrary: easygoing
+    // settlers put up with more, obstinate ones with less.
+    static float tolerance(const Person& p);
+    bool contrary(const Person& p) const { return p.contraryUntil > tMin; }
     std::string lastWhisperName, lastWhisperResult;
 
     // building sites

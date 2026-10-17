@@ -152,7 +152,7 @@ float Game::settlerCard(Person& p, float x, float y, float w, bool d) {
         std::string nm = p.name + (p.child ? "  (child)" : "");
         text(F.bold, nm, x + pad + 54, cy, 17, T.text);
         std::string mood = p.inspired ? "inspired" : moodWord(p.mood);
-        text(F.body, mood, x + w - pad - measure(F.body, mood, 13).x, cy + 3, 13, p.inspired ? T.voice : T.muted);
+        text(F.body, mood, x + w - pad - measure(F.body, mood, 13).x, cy + 3, 13, p.inspired ? T.narrator : T.muted);
         std::string doing = std::string(p.sick > 0 ? "Sick - " : "") + (p.whisper && p.whisper->until > sim.tMin ? "* " : "") + p.doing;
         text(F.body, truncate(F.body, doing, 13.5f, inner - 44), x + pad + 44, cy + 21, 13.5f, T.muted);
         float sx = x + pad + 44, sy = cy + 39;
@@ -181,7 +181,9 @@ float Game::settlerCard(Person& p, float x, float y, float w, bool d) {
         std::string desc = cat(p.name, " is ", traits, p.calling.empty() ? "" : ", a " + lower(callingInfo().at(p.calling).n) + " at heart", ". Best at ", best, ".");
         if (partner) desc += " Partner: " + partner->name + ".";
         else if (friendP) desc += " Closest to " + friendP->name + ".";
-        desc += cat("\nGifts: ", p.gifts.empty() ? "none, a jack of all trades" : sim.giftText(p), ". Charisma ", p.charisma, "/10 (", Sim::charWord(p.charisma), "). Faith in the Voice: ", int(p.belief), ".");
+        desc += cat("\nGifts: ", p.gifts.empty() ? "none, a jack of all trades" : sim.giftText(p), ". Charisma ", p.charisma, "/10 (", Sim::charWord(p.charisma), "). Rapport with the narrator: ", int(p.rapport), ".");
+        if (sim.contrary(p)) desc += "\nContrary: narrated once too often, and doing the opposite for now.";
+        else if (p.weary) desc += "\nTired of being narrated.";
         if (sim.agenda && sim.agenda->by == p.id) desc += "\nCurrently setting the camp's agenda.";
         dy += 6;
         dy += wrapped(F.body, desc, x + pad, dy, inner, 13.5f, T.text, d);
@@ -201,7 +203,7 @@ void Game::drawSettlers(Rectangle a) {
     float y = a.y - sideScroll.y, x = a.x, w = a.width - 8;
     auto m = sim.members();
     y += sectionTitle(cat("The Settlers"), x, y);
-    text(F.body, cat(int(m.size()), " souls, ", int(sim.avgBelief()), " faith"), x + 140, y - 25, 13, T.muted);
+    text(F.body, cat(int(m.size()), " souls, rapport ", int(sim.avgRapport())), x + 140, y - 25, 13, T.muted);
     for (auto* p : m) { y += settlerCard(*p, x, y, w, true) + 4; }
     for (auto& p : sim.people) if (!p.dead && p.status != "member") y += settlerCard(p, x, y, w, true) + 4;
     endScroll(a, sideScroll, y + sideScroll.y - a.y + 20);
@@ -210,20 +212,20 @@ void Game::drawSettlers(Rectangle a) {
 void Game::drawNarrator(Rectangle a) {
     beginScroll(a, sideScroll);
     float x = a.x, w = a.width - 10, y = a.y - sideScroll.y;
-    // faith
-    y += sectionTitle("The Voice", x, y);
-    float f = sim.avgBelief();
-    bar({x, y + 6, w - 60, 10}, f / 100, T.voice, T.panel2);
-    text(F.head, cat(int(f)), x + w - 44, y - 4, 26, T.voice);
+    // rapport
+    y += sectionTitle("Rapport", x, y);
+    float f = sim.avgRapport();
+    bar({x, y + 6, w - 60, 10}, f / 100, T.narrator, T.panel2);
+    text(F.head, cat(int(f)), x + w - 44, y - 4, 26, T.narrator);
     y += 30;
-    y += wrapped(F.body, f > 75 ? "They speak of you openly and listen for your guidance." : f > 50 ? "Most of them believe something is guiding them." : f > 25 ? "They half-believe. Some think they are going mad." : "They barely believe you exist. Whispers rarely land.", x, y, w, 14, T.muted) + 18;
-    // whisper
-    y += sectionTitle("Whisper", x, y);
+    y += wrapped(F.body, f > 75 ? "They chat with the narrator like an old friend and mostly go along with the story." : f > 50 ? "They take the narration in their stride and usually play along." : f > 25 ? "They put up with being narrated, some days more than others." : "They are tired of being narrated. Lines rarely land.", x, y, w, 14, T.muted) + 18;
+    // narrate one settler
+    y += sectionTitle("Narrate", x, y);
     Person* p = sim.person(selected);
     if (!p || p->status != "member" || p->child) {
-        y += wrapped(F.body, "Select an adult settler on the map or in the Settlers tab, then whisper an idea to them. Whispers land more often with those who believe.", x, y, w, 14, T.muted) + 16;
+        y += wrapped(F.body, "Select an adult settler on the map or in the Settlers tab, then narrate what they do next. Lines land more often with those you get on with.", x, y, w, 14, T.muted) + 16;
     } else {
-        y += wrapped(F.body, cat("To ", p->name, ", faith ", int(p->belief), ". ", p->lastWhisper == sim.day() ? "You already whispered today. Again will unsettle them." : "One whisper a day is safe."), x, y, w, 14, T.text) + 8;
+        y += wrapped(F.body, cat(p->name, ", rapport ", int(p->rapport), ". ", sim.contrary(*p) ? "Contrary right now: they will do the opposite." : p->lastWhisper == sim.day() ? "Already narrated today. Push too often and they turn contrary." : "Once a day is welcome."), x, y, w, 14, T.text) + 8;
         struct W { std::string label, job; Person* target = nullptr; };
         std::vector<W> opts = {{"Explore beyond the trees", "explore"}, {"Gather food", "food"}, {"Fetch wood", "wood"}, {"Help build", "build"}, {"Rest a while", "rest"}};
         if (!p->calling.empty()) opts.push_back({"Follow your calling", "calling"});
@@ -240,14 +242,14 @@ void Game::drawNarrator(Rectangle a) {
         }
         y = rowY + 40;
         if (sim.lastWhisperName == p->name && !sim.lastWhisperResult.empty()) {
-            std::string r = sim.lastWhisperResult == "ok" ? p->name + " heard you." : sim.lastWhisperResult == "ignored" ? p->name + " shrugged it off as the wind." : "Too much. " + p->name + " is frightened by the voice.";
-            y += wrapped(F.body, r, x, y, w, 14, T.voice) + 6;
+            std::string r = sim.lastWhisperResult == "ok" ? p->name + " went along with it." : sim.lastWhisperResult == "ignored" ? p->name + " thought about it and carried on." : sim.lastWhisperResult == "pushed" ? "Twice in a day. " + p->name + " rolled their eyes." : p->name + " has had enough narrating and is doing the opposite.";
+            y += wrapped(F.body, r, x, y, w, 14, T.narrator) + 6;
         }
         y += 10;
     }
     // words in the sand
     y += sectionTitle("Words in the sand", x, y);
-    y += wrapped(F.body, "Write a line. They will find it at dawn and take it as a sign. Once a day.", x, y, w, 14, T.muted) + 8;
+    y += wrapped(F.body, "Write a line. They will find it at dawn and take it to heart. Once a day.", x, y, w, 14, T.muted) + 8;
     bool enter = textField({x, y, w - 84, 36}, sandText, sandFocus, 120, "Winter will be long and hungry...");
     if (button({x + w - 76, y + 3, 76, 30}, "Write", true, false, 14) || enter) {
         auto r = sim.writeSand(sandText);
@@ -255,7 +257,7 @@ void Game::drawNarrator(Rectangle a) {
         sandFocus = false;
     }
     y += 44;
-    if (!sandNote.empty()) y += wrapped(F.body, sandNote, x, y, w, 13.5f, T.voice) + 6;
+    if (!sandNote.empty()) y += wrapped(F.body, sandNote, x, y, w, 13.5f, T.narrator) + 6;
     y += 12;
     // proposals
     y += sectionTitle("Propose a project", x, y);
@@ -283,7 +285,7 @@ void Game::drawNarrator(Rectangle a) {
         auto& v = *sim.vote;
         std::string s = cat(v.name, ": ", v.pass ? "approved " : "rejected ", v.y, " to ", v.n, ".\n");
         for (auto& r : v.rows) if (auto* q = sim.person(r.pid)) s += q->name + (r.yes ? " yes" : " no") + " (" + r.why + ").  ";
-        DrawRectangle(int(x), int(y), 3, int(wrapped(F.body, s, x + 12, y + 6, w - 16, 13.5f, T.text, false) + 12), T.voice);
+        DrawRectangle(int(x), int(y), 3, int(wrapped(F.body, s, x + 12, y + 6, w - 16, 13.5f, T.text, false) + 12), T.narrator);
         y += wrapped(F.body, s, x + 12, y + 6, w - 16, 13.5f, T.text) + 18;
     }
     endScroll(a, sideScroll, y + sideScroll.y - a.y + 20);
@@ -381,7 +383,7 @@ void Game::drawJournal() {
             while (!line.empty() && measure(F.hand, line + "...", 21).x > room) line.pop_back();
             line += "...";
         }
-        Color c = e.cls == "big" ? T.accent : e.cls == "sad" ? T.berry : e.cls == "voice" ? T.voice : T.text;
+        Color c = e.cls == "big" ? T.accent : e.cls == "sad" ? T.berry : e.cls == "narrator" ? T.narrator : T.text;
         text(F.hand, line, x0, r.y + 9, 21, c);
         return;
     }
@@ -401,7 +403,7 @@ void Game::drawJournal() {
         if (y + h > a.y && y < a.y + a.height) {
             text(F.bold, cat("DAY ", e.d), a.x, y + 6, 11, T.muted);
             text(F.body, e.season, a.x, y + 20, 11, T.muted);
-            Color c = e.cls == "big" ? T.accent : e.cls == "sad" ? T.berry : e.cls == "voice" ? T.voice : T.text;
+            Color c = e.cls == "big" ? T.accent : e.cls == "sad" ? T.berry : e.cls == "narrator" ? T.narrator : T.text;
             wrapped(F.hand, e.text, a.x + 100, y, tw, 23, c, true, 1.05f);
         }
         y += h; total += h; i++;
@@ -424,7 +426,7 @@ void Game::drawFate() {
         if (h) r.y -= 4;
         DrawRectangleRounded({r.x + 3, r.y + 6, r.width, r.height}, .06f, 8, Color{0, 0, 0, 90});
         DrawRectangleRounded(r, .06f, 8, Color{246, 241, 228, 255});
-        if (h) DrawRectangleRoundedLinesEx(r, .06f, 8, 2, T.voice);
+        if (h) DrawRectangleRoundedLinesEx(r, .06f, 8, 2, T.narrator);
         text(F.bold, "FATE", r.x + 18, r.y + 16, 12, Color{122, 79, 176, 255});
         float yy = r.y + 36;
         yy += wrapped(F.head, f.title, r.x + 18, yy, cw - 36, 20, Color{42, 36, 28, 255}, true, 1.15f) + 6;

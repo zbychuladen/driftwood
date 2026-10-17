@@ -49,7 +49,7 @@ constexpr float TOWER = 8.5f;         // to the roof peak
 constexpr float LIGHTHOUSE = 11.f;
 constexpr float SIGNAL = 2.f;
 constexpr float MINE_HILL = 3.5f, MINE_ENTRANCE = 2.1f;
-constexpr float SHRINE_STONE = 2.4f;
+constexpr float CIRCLE_SEAT = .45f, CIRCLE_TRIPOD = 1.05f;   // story circle: log seat height, the pot tripod over its fire
 constexpr float MAST = 5.f;
 constexpr float BOAT_LENGTH = 3.5f;   // the castaways' dinghy
 

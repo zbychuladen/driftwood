@@ -3,6 +3,7 @@
 #include <cmath>
 #include <algorithm>
 #include <cstdio>
+#include <regex>
 #include <set>
 #include <string>
 #include "sim/Sim.h"
@@ -84,6 +85,7 @@ static void testNarrator() {
     CHECK(r.find("found your words") != std::string::npos, "words in the sand are found");
     CHECK(s.writeSand("again") .find("tide") != std::string::npos, "only one message per day");
     auto* p = s.members()[0];
+    p->traits = {"cheerful", "curious"};   // neither easygoing nor stubborn
     s.whisper(*p, "explore");
     CHECK(s.whisper(*p, "explore") == "pushed", "second whisper in a day unsettles them");
     auto props = s.proposalList();
@@ -317,11 +319,90 @@ static void testSiteEffects() {
     CHECK(g < b, cat("people are less thirsty with a well in a good spot (", int(g), " vs ", int(b), ")").c_str());
 }
 
+// Narrating one person over and over turns them contrary for a while; how much
+// they put up with first depends on who they are.
+static void testContrary() {
+    std::printf("contrariness\n");
+    auto pushesUntilContrary = [](std::vector<std::string> traits) {
+        Sim s;
+        s.newWorld(20261017);
+        runDays(s, 2);
+        auto* p = s.members()[1];
+        p->traits = traits;
+        for (int n = 1; n <= 10; n++) if (s.whisper(*p, "wood") == "contrary") return n;
+        return 99;
+    };
+    int easy = pushesUntilContrary({"easygoing", "cheerful"}), plain = pushesUntilContrary({"cheerful", "curious"}), stubborn = pushesUntilContrary({"obstinate", "curious"});
+    CHECK(plain == 3, cat("pushing someone three times in a day makes them contrary (took ", plain, ")").c_str());
+    CHECK(easy > plain && plain > stubborn, cat("easygoing settlers put up with more than stubborn ones (", easy, " pushes vs ", plain, " vs ", stubborn, ")").c_str());
+
+    Sim s;
+    s.newWorld(20261017);
+    runDays(s, 2);
+    auto* p = s.members()[1];
+    p->traits = {"cheerful", "curious"};
+    for (int i = 0; i < 3; i++) s.whisper(*p, "wood");
+    CHECK(s.contrary(*p) && p->whisper && p->whisper->contrary && p->whisper->job == "rest", "a contrary settler asked to fetch wood takes the day off instead");
+    CHECK(s.whisper(*p, "rest") == "contrary" && p->whisper->job == "wood", "and asked to rest, goes and works");
+    std::string data = s.save();
+    Sim t;
+    CHECK(t.load(data) && t.contrary(*t.person(p->id)) && t.person(p->id)->pressure == p->pressure, "contrariness and pressure survive a save");
+    runDays(s, 4);   // four pushes, fading by one a day
+    bool noted = false;
+    for (auto& e : s.journal) if (e.text.find(p->name + " has stopped bristling") != std::string::npos) noted = true;
+    CHECK(!s.contrary(*p) && p->pressure < .01f && noted, cat("after a few days it fades, and the journal says so (pressure ", p->pressure, noted ? "" : ", no journal line", ")").c_str());
+    CHECK(s.whisper(*p, "wood") != "contrary", "then they hear a line again");
+}
+
+// The narrator is part of life, never divine: nothing the game writes calls
+// it a voice, a god or something to pray to.
+static void testNoGodWords() {
+    std::printf("the narrator is not a god\n");
+    static const std::regex god("\\b(voices?|faith|pray(s|ed|er|ers|ing)?|shrines?|worship\\w*|divine|gods?|holy|sacred|altars?|mystics?|meditat\\w*|visions?|omens?|belie(f|fs|ve|ves|ved))\\b", std::regex::icase);
+    std::string bad;
+    auto scan = [&](const std::string& where, const std::string& text) { if (std::regex_search(text, god) && bad.size() < 600) bad += "\n          " + where + ": " + text; };
+    for (auto& d : allProjects()) { scan("project", d.name); scan("project", d.desc); }
+    for (auto& [k, g] : giftInfo()) { scan("gift", g.n); scan("gift", g.v); }
+    for (auto& [k, c] : callingInfo()) scan("calling", c.n);
+    for (auto& [k, t] : traitNames()) scan("trait", t);
+    for (uint32_t seed : {20261017u, 777u}) {
+        Sim s;
+        s.newWorld(seed);
+        int lastDay = 0;
+        while (s.day() < 80) {
+            s.step(60);
+            if (!s.pendingFate.empty()) {
+                for (auto& f : s.pendingFate) { scan("fate", f.title); scan("fate", f.desc); }
+                auto f = s.pendingFate[s.day() % s.pendingFate.size()];
+                s.pendingFate.clear();
+                s.applyFate(f);
+            }
+            // a busy narrator: a line or three every day, words in the sand, proposals
+            if (s.day() != lastDay && s.hour() > 9) {
+                lastDay = s.day();
+                auto m = s.members();
+                for (int i = 0; i < 3 && !m.empty(); i++) {
+                    auto* p = m[(s.day() * 7 + i) % m.size()];
+                    if (!p->child) s.whisper(*p, i == 2 ? "rest" : "wood", m[0] != p ? m[0] : nullptr);
+                }
+                s.writeSand(s.day() % 2 ? "Winter is coming, gather food" : "something odd");
+                auto props = s.proposalList();
+                if (!props.empty() && s.day() % 5 == 0) s.propose(props[0]->key);
+            }
+        }
+        for (auto& e : s.journal) scan("journal", e.text);
+        for (auto& p : s.people) scan("bubble", p.bubble ? p.bubble->text : std::string());
+    }
+    CHECK(bad.empty(), ("no voices, faith, prayers or shrines in anything the game writes" + bad).c_str());
+}
+
 int main() {
     for (uint32_t seed : {20261017u, 777u, 4242u}) testSurvival(seed);
     testNoSmithNoForge();
     testCharismaPushes();
     testNarrator();
+    testContrary();
+    testNoGodWords();
     testDeterminism();
     testFocus(20261017);
     testFocus(777);

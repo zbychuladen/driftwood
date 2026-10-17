@@ -264,7 +264,7 @@ void Sim::newWorld(uint32_t s) {
     for (auto& hp : pois) if (hp.type == "hermit") {
         auto& h = makePerson(names[6], 0x7b6a52, hp.x + .5f, hp.y + 1.3f);
         usedNames.insert(names[6]);
-        h.status = "hermit"; h.age = 54; h.traits = {"loner", "devout"};
+        h.status = "hermit"; h.age = 54; h.traits = {"loner", "easygoing"};
         h.gifts = {{"herbalist", 7 + ri(3)}}; h.charisma = 3;
         hp.who = h.id;
     }
@@ -290,7 +290,7 @@ void Sim::newWorld(uint32_t s) {
         if (!missing.empty()) { m = " Nobody here is a "; for (size_t i = 0; i < missing.size(); i++) m += (i ? ", or a " : "") + missing[i]; m += "."; }
         note("We all know how to chop wood and lash a shelter together. Beyond that: " + k + "." + m);
     }
-    note("Something strange: each of us thinks we heard a voice on the beach. Nobody wants to say it out loud.", "voice");
+    note("There is a narrator on this island. Everyone noticed it on the first morning, shrugged, and went looking for water.", "narrator");
     for (auto* p : members()) computeTiers(*p);
 }
 
