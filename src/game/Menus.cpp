@@ -57,7 +57,7 @@ void Game::drawTitle() {
     float cw = 420, x = 70, y = H * .5f - 190;
     panel({x - 30, y - 34, cw + 60, 420}, draw::withA(T.panel, .94f), T.line, .04f);
     text(F.head, "Driftwood", x, y, 64, T.text);
-    wrapped(F.body, "Five castaways, an island, and you: the voice they half believe in.", x, y + 82, cw, 17, T.muted);
+    wrapped(F.body, "Five castaways, an island, and you: the narrator they have all got used to.", x, y + 82, cw, 17, T.muted);
     float by = y + 150;
     if (button({x, by, cw, 46}, "New game", true, true, 17)) {
         newGame(uint32_t(GetRandomValue(1, 1 << 30)));

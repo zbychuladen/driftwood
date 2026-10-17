@@ -1,6 +1,6 @@
 # Driftwood
 
-An isometric island colony sim. Five castaways wash ashore with a hatchet, a knife and a sack of seeds. They build a village, form friendships, fall in love, find their callings and fight through winters. You don't control them. You are the **unseen narrator**: a voice they half-believe in, nudging their story with whispers, omens and choices of fate.
+An isometric island colony sim. Five castaways wash ashore with a hatchet, a knife and a sack of seeds. They build a village, form friendships, fall in love, find their callings and fight through winters. You don't control them. You are the **narrator**: everyone on the island knows you are there and takes it in their stride, like the weather. You nudge their story with lines, words in the sand and choices of fate.
 
 ![A summer village](docs/day.png)
 ![Night falls on Pine Point](docs/night.png)
@@ -8,11 +8,11 @@ An isometric island colony sim. Five castaways wash ashore with a hatchet, a kni
 
 ## What makes it tick
 
-- **Maslow's hierarchy of needs.** Every settler has five levels: body, safety, belonging, esteem and purpose. Higher levels only matter once the lower ones are met. Fulfilled settlers discover a **calling** (carver, musician, storyteller, explorer, inventor, healer, teacher, mystic) that changes the village.
+- **Maslow's hierarchy of needs.** Every settler has five levels: body, safety, belonging, esteem and purpose. Higher levels only matter once the lower ones are met. Fulfilled settlers discover a **calling** (carver, musician, storyteller, explorer, inventor, healer, teacher, philosopher) that changes the village.
 - **Gifted specialists.** Everyone can chop wood and lash a shelter together. Ambitious projects need a gifted person: no farmer, no fields; no smith, no forge; no mason, no well.
 - **Charisma.** A magnetic smith will talk the camp into breaking stone even when it isn't what they need most. A quiet one waits until the need is real.
 - **A living island.** Fog of war to explore, seasons, storms, wolves in winter, a hermit in the forest, ruins, a cave and an old wreck to find. Shipwrecks, signal fires and births grow the village.
-- **The narrator's tools.** Whisper to one settler a day. Write words in the sand that they find at dawn. Propose projects and watch them vote. Choose one of three fate cards each season. Their faith in you rises and falls with how it all turns out.
+- **The narrator's tools.** Narrate what one settler does next. Push the same person too often and they turn contrary: stubborn people sooner, easygoing ones later. Write words in the sand that they find at dawn. Propose projects and watch them vote. Choose one of three fate cards each season. Their rapport with you rises and falls with how it all turns out, and a story circle by the fire raises it.
 
 ## Controls
 

@@ -5,7 +5,7 @@ Two goals:
 1. Make the player the island's **narrator**. Everyone knows the narrator is there and just accepts it, like the weather. Nobody worships it. Settlers go along with it, argue with it, tease it and ask it things.
 2. When the settlers decide to build a **specialist building**, **the player places it**. The settlers judge the spot, and a good or bad spot changes how well the building works.
 
-**Status:** phase 1 done (placement, site quality, cookhouse). Next: phase 2.
+**Status:** phase 1 done (placement, site quality, cookhouse); phase 2 done (rapport, story circle, contrariness). Next: phase 3.
 
 Each phase below lands as its own PR into `main`, with its own tests and screenshots, like the graphics work.
 

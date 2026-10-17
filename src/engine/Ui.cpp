@@ -14,7 +14,7 @@ Theme T = {
     {34, 48, 37, 255},   // text
     {92, 102, 90, 255},  // muted
     {74, 102, 64, 255},  // accent
-    {112, 78, 168, 255}, // voice
+    {112, 78, 168, 255}, // narrator
     {160, 92, 26, 255},  // ember
     {166, 52, 64, 255},  // berry
     {58, 112, 52, 255},  // ok
@@ -139,7 +139,7 @@ void endScroll(Rectangle r, Scroll& s, float h) {
 bool textField(Rectangle r, std::string& buf, bool& focus, int maxLen, const std::string& ph) {
     if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) focus = hovered(r);
     DrawRectangleRounded(r, .25f, 6, T.field);
-    DrawRectangleRoundedLinesEx(r, .25f, 6, 1, focus ? T.voice : T.line);
+    DrawRectangleRoundedLinesEx(r, .25f, 6, 1, focus ? T.narrator : T.line);
     bool enter = false;
     if (focus) {
         for (int c = GetCharPressed(); c > 0; c = GetCharPressed())
@@ -156,7 +156,7 @@ bool textField(Rectangle r, std::string& buf, bool& focus, int maxLen, const std
     text(F.hand, shown, r.x + 10, r.y + (r.height - size) / 2 - 1, size, c);
     if (focus && int(GetTime() * 2) % 2 == 0) {
         float cx = r.x + 10 + measure(F.hand, buf.empty() ? "" : shown, size).x + 1;
-        DrawRectangle(int(cx), int(r.y + 8), 2, int(r.height - 16), T.voice);
+        DrawRectangle(int(cx), int(r.y + 8), 2, int(r.height - 16), T.narrator);
     }
     return enter;
 }

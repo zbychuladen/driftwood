@@ -129,7 +129,7 @@ template <class A> void io(A& a, Shore& v) { io(a, v.x); io(a, v.y); io(a, v.dx)
 template <class A> void io(A& a, Needs& v) { io(a, v.hunger); io(a, v.thirst); io(a, v.fatigue); io(a, v.cold); io(a, v.social); }
 template <class A> void io(A& a, Carry& v) { io(a, v.t); io(a, v.n); }
 template <class A> void io(A& a, Bubble& v) { io(a, v.text); io(a, v.until); }
-template <class A> void io(A& a, Whisper& v) { io(a, v.job); io(a, v.until); }
+template <class A> void io(A& a, Whisper& v) { io(a, v.job); io(a, v.until); io(a, v.contrary); }
 template <class A> void io(A& a, Focus& v) {
     int k = int(v.kind);
     io(a, k);
@@ -139,12 +139,12 @@ template <class A> void io(A& a, Focus& v) {
 template <class A> void io(A& a, Person& p) {
     io(a, p.id); io(a, p.name); io(a, p.tunic); io(a, p.skin); io(a, p.hair); io(a, p.hairStyle); io(a, p.x); io(a, p.y);
     io(a, p.kind); io(a, p.doing); io(a, p.status); io(a, p.focus); io(a, p.needs); io(a, p.mood); io(a, p.traits);
-    io(a, p.sk); io(a, p.gifts); io(a, p.charisma); io(a, p.belief); io(a, p.aff); io(a, p.partner); io(a, p.child);
+    io(a, p.sk); io(a, p.gifts); io(a, p.charisma); io(a, p.rapport); io(a, p.aff); io(a, p.partner); io(a, p.child);
     io(a, p.age); io(a, p.bornDay); io(a, p.bed); io(a, p.hidden); io(a, p.sleeping); io(a, p.sleepIn); io(a, p.sick);
     io(a, p.starve); io(a, p.phase); io(a, p.moving); io(a, p.face); io(a, p.anim); io(a, p.carry); io(a, p.bubble);
     io(a, p.whisper); io(a, p.dead); io(a, p.gone); io(a, p.parents); io(a, p.lastWhisper); io(a, p.tiers); io(a, p.gates);
     io(a, p.seeking); io(a, p.calling); io(a, p.callingNeed); io(a, p.esteemPts); io(a, p.titles); io(a, p.goodDays);
-    io(a, p.inspired); io(a, p.trust); io(a, p.inventProg); io(a, p.lastBaby); io(a, p.lostFaith);
+    io(a, p.inspired); io(a, p.trust); io(a, p.inventProg); io(a, p.lastBaby); io(a, p.weary); io(a, p.pressure); io(a, p.contraryUntil);
 }
 template <class A> void io(A& a, Obj& o) {
     io(a, o.i); io(a, o.type); io(a, o.x); io(a, o.y); io(a, o.palm); io(a, o.conifer); io(a, o.sapling); io(a, o.dead);

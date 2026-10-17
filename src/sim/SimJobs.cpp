@@ -277,7 +277,7 @@ void Sim::plan_(Person& p) {
     if (p.child) return setQ(p, "play", "Playing near camp", wanderQ(p, true));
     if (p.whisper && p.whisper->until > tMin) {
         auto w = p.whisper->job;
-        if (w == "rest") { auto q = wanderQ(p); q.push_back(workA(90, "Resting", "sit", [](Person& p) { p.mood = std::min(100.f, p.mood + 3); })); return setQ(p, "idle", "Resting, as the Voice asked", q); }
+        if (w == "rest") { auto q = wanderQ(p); q.push_back(workA(90, "Resting", "sit", [](Person& p) { p.mood = std::min(100.f, p.mood + 3); })); return setQ(p, "idle", p.whisper->contrary ? "Taking the day off, on principle" : "Resting, as narrated", q); }
         if (w == "calling" && !p.calling.empty()) return callingJob(p);
         if (w == "hermit") for (auto& hp : pois) if (hp.type == "hermit" && hp.found && !hp.joined) return visitJob(p, hp);
         if (w == "explore") return exploreJob(p);
@@ -701,18 +701,18 @@ void Sim::callingJob(Person& p) {
                 st->sk[best] = std::min(10.f, st->sk[best] + .35f); affAdd(*st, q.id, 4);
             }))}, onPerson(*st));
     }
-    if (c == "mystic") {
-        auto* sh = built("shrine");
+    if (c == "philosopher") {
+        auto* sh = built("circle");
         float sx = sh ? sh->x + 2.3f : pondX + 2.6f, sy = sh ? sh->y + 1.f : pondY + .5f;
-        return setQ(p, "calling", "Listening for the Voice", {walkA(sx, sy), workA(120, "Meditating", "sit", done([this](Person& q) {
-            q.belief = std::min(100.f, q.belief + 5);
-            for (auto* o : members()) o->belief = std::min(100.f, o->belief + .8f);
+        return setQ(p, "calling", "Turning the story over", {walkA(sx, sy), workA(120, "Thinking", "sit", done([this](Person& q) {
+            q.rapport = std::min(100.f, q.rapport + 5);
+            for (auto* o : members()) o->rapport = std::min(100.f, o->rapport + .8f);
             if (rnd() < .2f) {
                 auto fr = frontier();
                 if (!fr.empty()) {
                     auto f2 = pick(fr);
                     reveal(f2.first, f2.second, 5);
-                    note(cat(q.name, " came back from meditating with a vision of a place to the ", dirWord(f2.first - campX, f2.second - campY), ". It turned out to be real."), "voice");
+                    note(cat(q.name, " came back from a long think by the water sure of a place to the ", dirWord(f2.first - campX, f2.second - campY), ". It turned out to be real."), "narrator");
                 }
             }
         }))});

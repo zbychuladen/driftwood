@@ -1,47 +1,72 @@
-// The player's tools as the unseen narrator: whispers, words in the sand,
-// project proposals with votes, fate cards. Also newcomers and discoveries.
+// The player's tools as the narrator everyone knows is there and takes in
+// their stride: narrating a settler, words in the sand, project proposals with
+// votes, fate cards. Also newcomers and discoveries.
 #include <algorithm>
 #include <regex>
 #include "Sim.h"
 
 namespace dw {
 
-float Sim::avgBelief() {
+float Sim::avgRapport() {
     float s = 0; int n = 0;
-    for (auto* p : members()) if (!p->child) { s += p->belief; n++; }
+    for (auto* p : members()) if (!p->child) { s += p->rapport; n++; }
     return n ? s / n : 0;
 }
+
+float Sim::tolerance(const Person& p) { return p.has("easygoing") ? 5 : p.has("obstinate") ? 2 : 3; }
 
 std::string Sim::whisper(Person& p, const std::string& job, Person* target) {
     lastWhisperName = p.name;
     int today = day();
+    p.pressure += 1;
+    // narrated once too often: they do the opposite, or nothing at all
+    if (contrary(p) || p.pressure >= tolerance(p)) {
+        bool already = contrary(p);
+        p.contraryUntil = std::max(p.contraryUntil, tMin + 36 * 60);
+        p.rapport = std::max(0.f, p.rapport - 3);
+        if (job == "peace" && target) {
+            affAdd(p, target->id, -8);
+            bubble(p, "I'll talk to " + target->name + " when I feel like it", 80);
+            note(cat(p.name, " heard the narrator suggest making up with ", target->name, ", and pointedly sat on the other side of the fire."), "narrator");
+        } else {
+            static const std::map<std::string, std::string> opposite = {{"rest", "wood"}};
+            auto it = opposite.find(job);
+            p.whisper = Whisper{it == opposite.end() ? "rest" : it->second, tMin + 6 * 60, true};
+            clearQ(p);
+            p.carry.reset();
+            bubble(p, already ? "No." : "I decide what I do today.", 70);
+            note(already ? cat(p.name, " is still having none of it, and did the opposite again.")
+                         : cat(p.name, " has been narrated once too often. \"I can decide things myself, thank you.\" They will do as they please for a while."), "narrator");
+        }
+        return lastWhisperResult = "contrary";
+    }
     if (p.lastWhisper == today) {
-        p.belief = std::max(0.f, p.belief - 6);
-        bubble(p, "that voice again...", 60);
-        note(cat(p.name, " clutched their head. \"The voice won't stop.\" They trust it a little less now."), "voice");
+        p.rapport = std::max(0.f, p.rapport - 6);
+        bubble(p, "not again...", 60);
+        note(cat(p.name, " rolled their eyes. \"Twice in one day?\" They go along a little less willingly now."), "narrator");
         return lastWhisperResult = "pushed";
     }
     p.lastWhisper = today;
-    float ch = .18f + p.belief * .007f + (p.has("devout") ? .15f : 0) - (p.has("skeptic") ? .2f : 0) - (p.needs.fatigue > 75 ? .15f : 0) + (job == "peace" ? .1f : 0);
+    float ch = .18f + p.rapport * .007f + (p.has("easygoing") ? .15f : 0) - (p.has("obstinate") ? .2f : 0) - (p.needs.fatigue > 75 ? .15f : 0) + (job == "peace" ? .1f : 0);
     if (rnd() >= ch) {
-        p.belief = std::max(0.f, p.belief - 1.5f);
-        bubble(p, "...just the wind", 50);
-        note(cat(p.name, " paused, frowned at the trees, and went back to what they were doing."), "voice");
+        p.rapport = std::max(0.f, p.rapport - 1.5f);
+        bubble(p, "hm, maybe later", 50);
+        note(cat(p.name, " heard the line, thought it over, and went back to what they were doing."), "narrator");
         return lastWhisperResult = "ignored";
     }
-    p.belief = std::min(100.f, p.belief + 4);
+    p.rapport = std::min(100.f, p.rapport + 4);
     if (job == "peace" && target) {
         affAdd(p, target->id, 22); affAdd(*target, p.id, 15);
         bubble(p, target->name + ", I'm sorry", 80);
-        note(cat(p.name, " sought out ", target->name, " and apologized. They talked until the fire burned low."), "voice");
+        note(cat(p.name, " sought out ", target->name, " and apologized. They talked until the fire burned low."), "narrator");
         return lastWhisperResult = "ok";
     }
     static const std::map<std::string, std::string> label = {{"calling", "follow their calling"}, {"explore", "explore the island"}, {"food", "gather food"}, {"wood", "fetch wood"}, {"build", "help with the building"}, {"rest", "rest for a while"}, {"hermit", "visit the hermit"}};
     p.whisper = Whisper{job, tMin + 9 * 60};
     clearQ(p);
     p.carry.reset();
-    bubble(p, "...yes. I will.", 70);
-    note(cat(p.name, " says a voice told them to ", label.count(job) ? label.at(job) : job, ". They went without a word."), "voice");
+    bubble(p, "fair enough", 70);
+    note(cat("And so ", p.name, " went to ", label.count(job) ? label.at(job) : job, ". The narrator said so, and it seemed as good a plan as any."), "narrator");
     return lastWhisperResult = "ok";
 }
 
@@ -50,7 +75,7 @@ std::string Sim::writeSand(const std::string& raw) {
     if (txt.find_first_not_of(" \t") == std::string::npos) return "";
     if (lastSand == day()) return "The tide has not yet washed away your last words. Try again tomorrow.";
     lastSand = day();
-    note("\"" + txt + "\"", "voice");
+    note("\"" + txt + "\"", "narrator");
     std::vector<Person*> adults;
     for (auto* p : members()) if (!p->child) adults.push_back(p);
     Person* finder = adults.empty() ? members()[0] : pick(adults);
@@ -67,7 +92,7 @@ std::string Sim::writeSand(const std::string& raw) {
     std::vector<const Key*> hits;
     for (auto& k : KEYS) if (std::regex_search(txt, k.re)) hits.push_back(&k);
     if (hits.empty()) {
-        for (auto* p : members()) p->belief = std::min(100.f, p->belief + .5f);
+        for (auto* p : members()) p->rapport = std::min(100.f, p->rapport + .5f);
         note(cat(finder->name, " found words in the sand at dawn. Nobody could agree on what they meant."));
         return "They found it, and argued about what it meant.";
     }
@@ -79,7 +104,7 @@ std::string Sim::writeSand(const std::string& raw) {
         if (b == "guard") mods["guard"] = day() + 3;
         if (b == "purpose") for (auto* p : members()) { if (!p->calling.empty()) p->callingNeed = std::min(100.f, p->callingNeed + 30); else if (!p->child) p->goodDays++; }
     }
-    for (auto* p : members()) p->belief = std::min(100.f, p->belief + (p->has("skeptic") ? .5f : 2.5f));
+    for (auto* p : members()) p->rapport = std::min(100.f, p->rapport + (p->has("obstinate") ? .5f : 2.5f));
     note(cat(finder->name, " found words in the sand at dawn and read them aloud. ", hits[0]->r));
     return "They found your words. Watch how they respond.";
 }
@@ -106,7 +131,7 @@ void Sim::propose(const std::string& key) {
     Vote v; v.name = o->name;
     auto hasAny = [](Person* p, const std::vector<std::string>& ts) -> std::string { for (auto& t : ts) if (p->has(t.c_str())) return t; return ""; };
     for (auto* p : voters) {
-        float s = .38f + (p->belief - 40) / 110 + (p->has("hardworking") ? .08f : 0);
+        float s = .38f + (p->rapport - 40) / 110 + (p->has("hardworking") ? .08f : 0);
         std::string why = "likes the idea";
         auto lk = hasAny(p, o->like), dl = hasAny(p, o->dislike);
         if (!lk.empty()) { s += .28f; why = "is " + traitNames().at(lk); }
@@ -115,19 +140,19 @@ void Sim::propose(const std::string& key) {
         if (days < 4 && !o->food) s -= .35f;
         if (p->mood < 30) s -= .15f;
         bool yes = rnd() < clampf(s, .05f, .95f);
-        if (!yes) why = days < 4 && !o->food ? "says food comes first" : !dl.empty() ? "is " + traitNames().at(dl) : p->belief < 25 ? "distrusts the voice" : p->mood < 30 ? "is too tired" : "thinks it is a waste";
-        else if (p->belief > 65) why = "trusts the Voice";
+        if (!yes) why = days < 4 && !o->food ? "says food comes first" : !dl.empty() ? "is " + traitNames().at(dl) : p->rapport < 25 ? "is tired of the narrator" : p->mood < 30 ? "is too tired" : "thinks it is a waste";
+        else if (p->rapport > 65) why = "likes where the story is going";
         v.rows.push_back({p->id, yes, why});
         if (yes) v.y++; else v.n++;
     }
-    v.pass = v.y > v.n || (v.y == v.n && avgBelief() > 50);
+    v.pass = v.y > v.n || (v.y == v.n && avgRapport() > 50);
     Person* proposer = voters.empty() ? nullptr : pick(voters);
-    note(cat(proposer ? proposer->name : "Someone", " woke with an idea that did not feel like their own: a ", lower(o->name), ". The group voted ", v.y, " to ", v.n, ". ", v.pass ? "It will be built." : "The idea was dropped."), "voice");
+    note(cat(proposer ? proposer->name : "Someone", " heard the narrator float an idea over breakfast: a ", lower(o->name), ". The group voted ", v.y, " to ", v.n, ". ", v.pass ? "It will be built." : "The idea was dropped."), "narrator");
     if (v.pass) {
         mkProj(*o, true);
-        for (auto& r : v.rows) if (r.yes) if (auto* p = person(r.pid)) p->belief = std::min(100.f, p->belief + 2);
+        for (auto& r : v.rows) if (r.yes) if (auto* p = person(r.pid)) p->rapport = std::min(100.f, p->rapport + 2);
     } else {
-        for (auto& r : v.rows) if (auto* p = person(r.pid)) p->belief = std::max(0.f, p->belief - 1);
+        for (auto& r : v.rows) if (auto* p = person(r.pid)) p->rapport = std::max(0.f, p->rapport - 1);
     }
     vote = v;
 }
@@ -138,7 +163,7 @@ std::vector<Fate> Sim::drawFates() {
         {"whale", "A whale beaches itself", "Food for weeks. The smell will sour moods for a while."},
         {"bounty", "A bountiful season", "Berries and crops grow twice as fast until the season turns."},
         {"tools", "A crate of tools washes up", "Iron axes and a saw. Everyone works faster this season."},
-        {"fever", "A fever sweeps the camp", "Two will fall sick. Those who recover will trust the Voice more."},
+        {"fever", "A fever sweeps the camp", "Two will fall sick. Nursing them will draw everyone closer to the story."},
         {"dream", "A shared dream", "They all dream of the same far place. Part of the island is revealed."},
         {"driftwood", "A storm of driftwood", "A terrible night of wind. Spirits drop, but the beach is covered in timber."},
         {"love", "A season of warmth", "Friendships deepen quickly. Someone may fall in love."},
@@ -155,7 +180,7 @@ void Sim::applyFate(const Fate& f) {
     auto m = members();
     int endOfSeason = ((day() - 1) / 10 + 1) * 10;
     for (auto k : {"bounty", "tools", "love", "wolves", "calm"}) mods.erase(k);
-    note(cat("The fates turned: ", lower(f.title), "."), "voice");
+    note(cat("The story turned: ", lower(f.title), "."), "narrator");
     const auto& id = f.id;
     if (id == "stranger") spawnNewcomers(1, "tide");
     else if (id == "whale") { stock.food += 70; for (auto* p : m) p->mood = std::max(0.f, p->mood - 8); note("A whale lay dead on the beach at sunrise. We will eat for weeks, if we can stand the smell."); }
@@ -167,16 +192,16 @@ void Sim::applyFate(const Fate& f) {
         std::shuffle(adults.begin(), adults.end(), gen);
         if (adults.size() > 2) adults.resize(2);
         for (auto* p : adults) { p->sick = 30; clearQ(*p); }
-        for (auto* p : m) p->belief = std::min(100.f, p->belief + 8);
+        for (auto* p : m) p->rapport = std::min(100.f, p->rapport + 8);
         lastSick = day();
-        note(cat(listNames(adults), " fell sick with fever. The others prayed to the voice they all pretend not to hear."), "sad");
+        note(cat(listNames(adults), " fell sick with fever. The others sat up with them and asked the narrator, half joking, how this part ends."), "sad");
     } else if (id == "dream") {
         std::vector<Poi*> t;
         for (auto& p : pois) if (!p.found) t.push_back(&p);
         if (!t.empty()) { auto* p = pick(t); reveal(p->x, p->y, 6); }
         else for (int k = 0; k < 4; k++) reveal(ri(GW), ri(GH), 6);
-        for (auto* q : m) q->belief = std::min(100.f, q->belief + 4);
-        note("Everyone woke having dreamed of the same distant place. Now they know it is real.", "voice");
+        for (auto* q : m) q->rapport = std::min(100.f, q->rapport + 4);
+        note("Everyone woke having dreamed of the same distant place. The narrator had described it in the night, and now they know it is real.", "narrator");
     } else if (id == "driftwood") {
         stock.wood += 45;
         for (auto* p : m) p->mood = std::max(0.f, p->mood - 6);
@@ -188,7 +213,7 @@ void Sim::applyFate(const Fate& f) {
     } else if (id == "smoke") {
         for (auto& h : pois) if (h.type == "hermit") reveal(h.x, h.y, 4);
     }
-    for (auto* p : m) p->belief = std::min(100.f, p->belief + 1);
+    for (auto* p : m) p->rapport = std::min(100.f, p->rapport + 1);
 }
 
 void Sim::spawnNewcomers(int n, const std::string& how) {
@@ -201,7 +226,7 @@ void Sim::spawnNewcomers(int n, const std::string& how) {
     std::vector<Person*> group;
     for (int i = 0; i < n; i++) {
         auto& p = makePerson(newName(), pick(TUN), s.x + .5f + i * .4f, s.y + .5f);
-        p.status = "arriving"; p.needs.hunger = 55; p.belief = 20 + rnd() * 30;
+        p.status = "arriving"; p.needs.hunger = 55; p.rapport = 20 + rnd() * 30;
         group.push_back(&p);
     }
     reveal(s.x, s.y, 3);
@@ -237,7 +262,7 @@ void Sim::spawnFromCave(Poi& poi) {
     static const std::vector<uint32_t> TUN = {0xc8553d,0x3d7ec8,0xe0b13a,0x5a9a5b,0x8d5bb5,0xd47fa6};
     auto& p = makePerson(newName(), pick(TUN), poi.x + .5f, poi.y + 1.2f);
     p.status = "arriving"; p.needs.hunger = 80;
-    note(cat("Deep in a cave, a thin voice called out. ", p.name, " had been living there alone since their own ship went down. They followed us back toward camp."), "big");
+    note(cat("Deep in a cave, someone called out. ", p.name, " had been living there alone since their own ship went down. They followed us back toward camp."), "big");
 }
 
 void Sim::discover(Poi& poi) {

@@ -12,6 +12,7 @@ void Sim::step(double minutes) {
         tMin += dm;
         if (auto* f = fire(); f && f->fuel > 0) f->fuel = std::max(0.f, f->fuel - float(dm / 90 * (weather == "storm" ? 1.6 : 1)));
         for (size_t i = 0; i < people.size(); i++) updatePerson(people[i], dm);
+        for (auto& p : people) if (p.pressure > 0) p.pressure = std::max(0.f, p.pressure - float(dm / 1440));
         updateWolf(dm);
         int h = int(hour());
         if (h != lastHour) { lastHour = h; hourly(); }
@@ -108,7 +109,7 @@ void Sim::hourly() {
     for (auto* p : alive) {
         auto& n = p->needs;
         float m = computeTiers(*p);
-        if (built("shrine")) m += 2;
+        if (built("circle")) m += 2;
         if (built("bath")) m += 5 * siteQ("bath");
         if (fireLit() && (h >= 18 || h < 6)) m += 3;
         if (p->has("cheerful")) m += 8;
@@ -155,6 +156,7 @@ void Sim::hourly() {
 void Sim::daily() {
     int d = day(), s = season(), prevS = ((d - 2) / 10) % 4;
     auto m = members();
+    for (auto* p : m) if (p->contraryUntil > 0 && !contrary(*p)) { p->contraryUntil = 0; note(cat(p->name, " has stopped bristling at the narrator, and will hear a line again.")); }
     // a well-placed store or smokehouse keeps food better; a damp or out-of-the-way one worse
     float rate = (built("smoke") ? .006f * (2 - siteQ("smoke")) : built("store") ? .01f * (2 - siteQ("store")) : built("rack") ? .035f : .07f) * (1 - std::min(.6f, pots * .04f));
     stock.food -= std::floor(stock.food * rate);
@@ -184,7 +186,7 @@ void Sim::daily() {
     if (wasStorm && rnd() < .3f && d - newcomerDay > 4) { newcomerDay = d; spawnNewcomers(1 + (rnd() < .35f ? 1 : 0), "wreck"); }
     auto* sig = built("signal"); auto* lh = built("lighthouse");
     if ((sig || lh) && d - newcomerDay > 5 && rnd() < (lh ? .2f : .09f)) { newcomerDay = d; spawnNewcomers(lh ? 2 + ri(2) : 1 + ri(2), lh ? "light" : "signal"); }
-    if (built("shrine")) for (auto* p : m) p->belief = std::min(100.f, p->belief + .6f);
+    if (built("circle")) for (auto* p : m) p->rapport = std::min(100.f, p->rapport + .6f);
     if (s != prevS && d > 1) {
         std::string spring = "Spring returned. Green shoots everywhere.";
         if (yearN() > 1) spring += cat(" We have survived ", yearN() - 1, yearN() > 2 ? " years" : " year", " on this island.");
@@ -250,10 +252,10 @@ void Sim::daily() {
     bool pendingHut = false;
     for (auto& b : plan) if (b.key == "hut" && !b.done && !b.skip) pendingHut = true;
     if (totalBeds(true) < int(m.size()) && !pendingHut) mkProj(*projectDef("hut"));
-    bool haveShrine = false;
-    for (auto& b : plan) if (b.key == "shrine") haveShrine = true;
-    if (avgBelief() > 75 && !haveShrine) { mkProj(*projectDef("shrine"), true); note("They have begun to speak of the Voice openly. Tonight they decided to raise a shrine.", "voice"); }
-    for (auto* p : m) if (p->belief < 12 && !p->lostFaith) { p->lostFaith = true; note(cat(p->name, " says there is no voice. Just wind and hunger and wishful thinking.")); }
+    bool haveCircle = false;
+    for (auto& b : plan) if (b.key == "circle") haveCircle = true;
+    if (avgRapport() > 75 && !haveCircle) { mkProj(*projectDef("circle"), true); note("They talk back to the narrator now, and laugh about it. Tonight they decided to make a story circle, to tell the island's tales out loud.", "narrator"); }
+    for (auto* p : m) if (p->rapport < 12 && !p->weary) { p->weary = true; note(cat(p->name, " is tired of being narrated. \"Tell someone else's story for a while.\"")); }
     bool allDone = true;
     for (auto& b : plan) if (!b.done && !b.skip && giftOk(b) && prereqOk(b)) allDone = false;
     if (allDone && !firsts.count("complete")) { firsts.insert("complete"); note(cat("Everything we can build right now is built. ", villageName.empty() ? "The camp" : villageName, " is a real village. Perhaps the Voice has new ideas."), "big"); }

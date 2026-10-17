@@ -15,7 +15,7 @@ std::map<std::string, int> Sim::rollGifts(const std::vector<std::string>& traits
     for (auto& [k, v] : giftInfo()) keys.push_back(k);
     float r = rnd();
     int n = r < .18f ? 0 : r < .82f ? 1 : 2;
-    static const std::map<std::string, std::string> bias = {{"greenthumb", "farmer"}, {"strong", "smith"}, {"angler", "sailor"}, {"hardworking", "carpenter"}, {"curious", "potter"}, {"devout", "herbalist"}};
+    static const std::map<std::string, std::string> bias = {{"greenthumb", "farmer"}, {"strong", "smith"}, {"angler", "sailor"}, {"hardworking", "carpenter"}, {"curious", "potter"}, {"easygoing", "herbalist"}};
     for (int i = 0; i < n; i++) {
         std::string k = pick(keys);
         if (i == 0 && rnd() < .5f) for (auto& t : traits) if (bias.count(t)) { k = bias.at(t); break; }
@@ -36,7 +36,7 @@ Person& Sim::makePerson(const std::string& name, uint32_t tunic, float x, float 
     for (auto& k : keys) {
         if (p.traits.size() >= 2) break;
         auto has = [&](const char* t) { return std::find(p.traits.begin(), p.traits.end(), t) != p.traits.end(); };
-        if ((k == "loner" && has("social")) || (k == "social" && has("loner")) || (k == "devout" && has("skeptic")) || (k == "skeptic" && has("devout"))) continue;
+        if ((k == "loner" && has("social")) || (k == "social" && has("loner")) || (k == "easygoing" && has("obstinate")) || (k == "obstinate" && has("easygoing"))) continue;
         p.traits.push_back(k);
     }
     for (auto& [k, v] : skillNames()) {
@@ -45,7 +45,7 @@ Person& Sim::makePerson(const std::string& name, uint32_t tunic, float x, float 
         p.sk[k] = s;
     }
     p.needs = {15 + rnd() * 15, 30 + rnd() * 10, 30, 0, 20};
-    p.belief = p.has("devout") ? 62 : p.has("skeptic") ? 14 : 34 + rnd() * 14;
+    p.rapport = p.has("easygoing") ? 62 : p.has("obstinate") ? 14 : 34 + rnd() * 14;
     p.child = child;
     p.age = child ? 0 : 18 + ri(30);
     p.bornDay = child ? day() : 0;
@@ -81,7 +81,7 @@ void Sim::birth(Person& a, Person& b, bool twin) {
     c.parents = {a.id, b.id};
     c.skin = rnd() < .5f ? a.skin : b.skin;
     c.hair = rnd() < .5f ? a.hair : b.hair;
-    c.status = "member"; c.belief = 50;
+    c.status = "member"; c.rapport = 50;
     for (auto* q : members()) { c.aff[q->id] = 50; q->aff[c.id] = 50; }
     assignBeds();
     note(twin ? cat("And then a second baby! We named them ", nm, ".") : cat(a.name, " and ", b.name, " welcomed a baby. We named them ", nm, ". The island feels less lonely."), "big");
@@ -109,7 +109,7 @@ void Sim::die(Person& p) {
     note(cat(p.name, " did not wake this morning. There was not enough food. We buried them on the hill above the sea."), "sad");
     for (auto* q : members()) {
         q->mood = std::max(0.f, q->mood - 25);
-        q->belief = std::max(0.f, q->belief - 6);
+        q->rapport = std::max(0.f, q->rapport - 6);
         if (q->partner == p.id) q->partner = -1;
     }
     assignBeds();
@@ -138,7 +138,7 @@ float Sim::computeTiers(Person& p) {
     float mastery = 0;
     for (auto& [k, v] : p.sk) mastery = std::max(mastery, v * 10);
     float esteem = clampf(p.esteemPts * .45f + mastery * .3f + resp * .25f + (p.titles.empty() ? 0 : 8), 0, 100);
-    float purpose = !p.calling.empty() ? clampf(100 - p.callingNeed, 0, 100) : clampf(8 + p.belief * .12f, 0, 100);
+    float purpose = !p.calling.empty() ? clampf(100 - p.callingNeed, 0, 100) : clampf(8 + p.rapport * .12f, 0, 100);
     p.tiers = {body, safety, belonging, esteem, purpose};
     float g1 = clampf((body - 40) / 30, 0, 1), g2 = g1 * clampf((safety - 40) / 30, 0, 1), g3 = g2 * clampf((belonging - 40) / 30, 0, 1), g4 = g3 * clampf((esteem - 35) / 30, 0, 1);
     p.gates = {1, g1, g2, g3, g4};
@@ -151,10 +151,10 @@ float Sim::computeTiers(Person& p) {
 }
 
 void Sim::awaken(Person& p) {
-    std::map<std::string, float> w = {{"carver", 1}, {"musician", 1}, {"storyteller", 1}, {"explorer", 1}, {"inventor", 1}, {"healer", 1}, {"teacher", .5f}, {"mystic", .8f}};
+    std::map<std::string, float> w = {{"carver", 1}, {"musician", 1}, {"storyteller", 1}, {"explorer", 1}, {"inventor", 1}, {"healer", 1}, {"teacher", .5f}, {"philosopher", .8f}};
     if (p.has("curious")) { w["explorer"] += 2; w["inventor"] += 1.5f; }
-    if (p.has("devout")) w["mystic"] += 3;
-    if (p.has("skeptic")) { w["mystic"] = 0; w["inventor"] += 1; }
+    if (p.has("easygoing")) w["philosopher"] += 3;
+    if (p.has("obstinate")) { w["philosopher"] = 0; w["inventor"] += 1; }
     if (p.has("social")) { w["storyteller"] += 2; w["musician"] += 1; }
     if (p.has("cheerful")) w["musician"] += 2;
     if (p.has("greenthumb")) w["healer"] += 2.5f;
@@ -179,7 +179,7 @@ void Sim::awaken(Person& p) {
         {"inventor", " keeps sketching contraptions in the sand. \"What if we could...\" is their favorite phrase now."},
         {"healer", " has started collecting plants and testing which ones ease pain. We have a healer."},
         {"teacher", " has started teaching others what they know. They light up when a lesson lands."},
-        {"mystic", " sits alone by the water for hours, listening. They say the Voice is clearer in silence."}};
+        {"philosopher", " sits by the water for hours, turning the narrator's lines over. They say the story makes more sense from there."}};
     note(p.name + lines.at(pickK), "big");
 }
 

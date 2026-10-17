@@ -48,12 +48,12 @@ const std::vector<ProjectDef>& allProjects() {
         };
         o(P("signal", "Signal fire", 1, 1, 30, 6, 400), "A great pyre on high ground. Passing ships may see it and bring newcomers.", {"social", "curious"}, {"loner"}, 0, 0);
         o(P("smoke", "Smokehouse", 2, 1, 26, 10, 480), "Smoked fish barely spoils, and catches go further.", {"angler", "hardworking"}, {}, 3, 7)->food = true;
-        o(P("shrine", "Shrine to the Voice", 2, 2, 12, 24, 520), "Standing stones where they listen for you. Faith grows daily.", {"devout"}, {"skeptic"}, 5, 10);
+        o(P("circle", "Story circle", 2, 2, 12, 24, 520), "Log seats round a fire, where people gather to tell tales. Rapport and spirits rise every day.", {"easygoing"}, {"obstinate"}, 5, 10);
         o(P("boatyard", "Boatyard", 2, 2, 40, 0, 620), "A small sailing boat. Better fishing, and they can chart the whole coastline.", {"angler", "curious"}, {}, 0, 0, "sailor", 4, "dock");
         o(P("lighthouse", "Lighthouse", 1, 1, 40, 40, 900), "A beacon that draws ships from far away. More newcomers.", {"social"}, {}, 0, 0, "mason", 6, "signal");
         o(P("school", "Schoolhouse", 2, 2, 36, 10, 600), "Children learn faster and grow up sooner.", {"cheerful", "social"}, {}, 4, 8, "carpenter", 4, "child");
         o(P("bath", "Hot spring bath", 2, 2, 20, 20, 560), "A steaming pool. Everyone is happier and shakes off the cold.", {"cheerful"}, {}, 5, 10, "mason", 4);
-        o(P("infirmary", "Infirmary", 2, 2, 30, 14, 520), "Beds and remedies. The sick recover much faster.", {"devout", "social"}, {}, 4, 8, "herbalist", 5, "herbs");
+        o(P("infirmary", "Infirmary", 2, 2, 30, 14, 520), "Beds and remedies. The sick recover much faster.", {"easygoing", "social"}, {}, 4, 8, "herbalist", 5, "herbs");
         return v;
     }();
     return v;
@@ -68,7 +68,7 @@ const std::map<std::string, std::string>& traitNames() {
     static std::map<std::string, std::string> m = {
         {"hardworking", "hardworking"}, {"cheerful", "cheerful"}, {"social", "sociable"}, {"loner", "a loner"},
         {"tough", "tough in the cold"}, {"greenthumb", "good with plants"}, {"angler", "a born angler"}, {"strong", "strong"},
-        {"gloomy", "prone to gloom"}, {"devout", "spiritual"}, {"skeptic", "a skeptic"}, {"curious", "curious"}};
+        {"gloomy", "prone to gloom"}, {"easygoing", "easygoing"}, {"obstinate", "stubborn"}, {"curious", "curious"}};
     return m;
 }
 
@@ -90,7 +90,7 @@ const std::map<std::string, GiftInfo>& giftInfo() {
 const std::map<std::string, CallingInfo>& callingInfo() {
     static std::map<std::string, CallingInfo> m = {
         {"carver", {"Carver"}}, {"musician", {"Musician"}}, {"storyteller", {"Storyteller"}}, {"explorer", {"Explorer"}},
-        {"inventor", {"Inventor"}}, {"healer", {"Healer"}}, {"teacher", {"Teacher"}}, {"mystic", {"Mystic"}}};
+        {"inventor", {"Inventor"}}, {"healer", {"Healer"}}, {"teacher", {"Teacher"}}, {"philosopher", {"Philosopher"}}};
     return m;
 }
 

@@ -16,6 +16,7 @@ struct Options {
     float hour = -1;
     float zoom = 0;
     int selectFirst = 0;
+    int narrate = 0;                 // narrate the selected settler this many times before the capture
     int tab = 0;
     bool fullscreen = false;
     bool showJournal = false;
