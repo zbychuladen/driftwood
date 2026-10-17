@@ -5,3 +5,4 @@ dist/
 .idea/
 *.swp
 .DS_Store
+.shots/
