@@ -275,9 +275,9 @@ void Sim::plan_(Person& p) {
     if (h >= 19.5 && h < 22) return setQ(p, "social", "Talking by the fire", socialQ(p), atFire);
     if (!p.child && !p.calling.empty() && p.callingNeed > 55 && h >= 9 && h < 18 && p.gates[3] > .45f && foodDays() > 3) return callingJob(p);
     if (p.child) return setQ(p, "play", "Playing near camp", wanderQ(p, true));
-    if (p.whisper && p.whisper->until > tMin) {
-        auto w = p.whisper->job;
-        if (w == "rest") { auto q = wanderQ(p); q.push_back(workA(90, "Resting", "sit", [](Person& p) { p.mood = std::min(100.f, p.mood + 3); })); return setQ(p, "idle", p.whisper->contrary ? "Taking the day off, on principle" : "Resting, as narrated", q); }
+    if (p.told && p.told->until > tMin && p.told->from <= tMin) {
+        auto w = p.told->job;
+        if (w == "rest") { auto q = wanderQ(p); q.push_back(workA(90, "Resting", "sit", [](Person& p) { p.mood = std::min(100.f, p.mood + 3); })); return setQ(p, "idle", p.told->contrary ? "Taking the day off, on principle" : "Resting, as narrated", q); }
         if (w == "calling" && !p.calling.empty()) return callingJob(p);
         if (w == "hermit") for (auto& hp : pois) if (hp.type == "hermit" && hp.found && !hp.joined) return visitJob(p, hp);
         if (w == "explore") return exploreJob(p);

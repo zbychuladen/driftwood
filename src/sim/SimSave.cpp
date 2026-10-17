@@ -44,7 +44,7 @@ template <class A> void io(A& a, Shore& v);
 template <class A> void io(A& a, Needs& v);
 template <class A> void io(A& a, Carry& v);
 template <class A> void io(A& a, Bubble& v);
-template <class A> void io(A& a, Whisper& v);
+template <class A> void io(A& a, Narration& v);
 template <class A> void io(A& a, Focus& v);
 template <class A> void io(A& a, Person& v);
 template <class A> void io(A& a, Obj& v);
@@ -58,6 +58,9 @@ template <class A> void io(A& a, Wolf& v);
 template <class A> void io(A& a, Agenda& v);
 template <class A> void io(A& a, Stock& v);
 template <class A> void io(A& a, PendingPlacement& v);
+template <class A> void io(A& a, Reply& v);
+template <class A> void io(A& a, Question& v);
+template <class A> void io(A& a, Fib& v);
 
 // ---- plain values
 template <class A> void io(A& a, int& v) { a.pod(v); }
@@ -129,7 +132,12 @@ template <class A> void io(A& a, Shore& v) { io(a, v.x); io(a, v.y); io(a, v.dx)
 template <class A> void io(A& a, Needs& v) { io(a, v.hunger); io(a, v.thirst); io(a, v.fatigue); io(a, v.cold); io(a, v.social); }
 template <class A> void io(A& a, Carry& v) { io(a, v.t); io(a, v.n); }
 template <class A> void io(A& a, Bubble& v) { io(a, v.text); io(a, v.until); }
-template <class A> void io(A& a, Whisper& v) { io(a, v.job); io(a, v.until); io(a, v.contrary); }
+template <class A> void io(A& a, Narration& v) { io(a, v.job); io(a, v.until); io(a, v.contrary); io(a, v.from); }
+template <class A> void io(A& a, Reply& v) { io(a, v.kind); io(a, v.text); }
+template <class A> void io(A& a, Question& v) {
+    io(a, v.id); io(a, v.pid); io(a, v.about); io(a, v.topic); io(a, v.text); io(a, v.replies); io(a, v.asked); io(a, v.expires); io(a, v.truth);
+}
+template <class A> void io(A& a, Fib& v) { io(a, v.pid); io(a, v.due); io(a, v.reveal); }
 template <class A> void io(A& a, Focus& v) {
     int k = int(v.kind);
     io(a, k);
@@ -142,7 +150,7 @@ template <class A> void io(A& a, Person& p) {
     io(a, p.sk); io(a, p.gifts); io(a, p.charisma); io(a, p.rapport); io(a, p.aff); io(a, p.partner); io(a, p.child);
     io(a, p.age); io(a, p.bornDay); io(a, p.bed); io(a, p.hidden); io(a, p.sleeping); io(a, p.sleepIn); io(a, p.sick);
     io(a, p.starve); io(a, p.phase); io(a, p.moving); io(a, p.face); io(a, p.anim); io(a, p.carry); io(a, p.bubble);
-    io(a, p.whisper); io(a, p.dead); io(a, p.gone); io(a, p.parents); io(a, p.lastWhisper); io(a, p.tiers); io(a, p.gates);
+    io(a, p.told); io(a, p.dead); io(a, p.gone); io(a, p.parents); io(a, p.lastTold); io(a, p.lastAsked); io(a, p.tiers); io(a, p.gates);
     io(a, p.seeking); io(a, p.calling); io(a, p.callingNeed); io(a, p.esteemPts); io(a, p.titles); io(a, p.goodDays);
     io(a, p.inspired); io(a, p.trust); io(a, p.inventProg); io(a, p.lastBaby); io(a, p.weary); io(a, p.pressure); io(a, p.contraryUntil);
 }
@@ -181,12 +189,17 @@ template <class A> void body(A& a, Sim& s) {
     io(a, s.lastProposal); io(a, s.lastSand); io(a, s.newcomerDay); io(a, s.lastRaid); io(a, s.lastSick); io(a, s.lastFeast);
     io(a, s.totems); io(a, s.vote); io(a, s.pendingFate); io(a, s.nextProjId); io(a, s.nextPid); io(a, s.active);
     io(a, s.fuelRes); io(a, s.dockRes); io(a, s.toolWear); io(a, s.pots); io(a, s.cloth); io(a, s.herbs); io(a, s.ironTools);
-    io(a, s.hasHerb); io(a, s.agenda); io(a, s.lastWhisperName); io(a, s.lastWhisperResult); io(a, s.pendingPlacement);
+    io(a, s.hasHerb); io(a, s.agenda); io(a, s.lastToldName); io(a, s.lastReply); io(a, s.pendingPlacement);
+    io(a, s.questions); io(a, s.fibs); io(a, s.nextQuestion); io(a, s.lastSaid);
     // the behaviour random generator, so a loaded game goes on the same way every time
     std::string rng;
     if constexpr (!A::reading) { std::ostringstream o; o << s.gen; rng = o.str(); }
     io(a, rng);
     if constexpr (A::reading) { std::istringstream i(rng); i >> s.gen; if (i.fail()) a.ok = false; }
+    std::string talk;
+    if constexpr (!A::reading) { std::ostringstream o; o << s.talkGen; talk = o.str(); }
+    io(a, talk);
+    if constexpr (A::reading) { std::istringstream i(talk); i >> s.talkGen; if (i.fail()) a.ok = false; }
 }
 
 Sim::SaveInfo infoOf(const Sim& s) {

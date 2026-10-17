@@ -71,7 +71,7 @@ void Game::drawTitle() {
 
 void Game::drawMenu() {
     if (picker != Picker::NONE) return;
-    Rectangle r = card(360, 380);
+    Rectangle r = card(360, 430);
     float x = r.x + 30, w = r.width - 60, y = r.y + 26;
     text(F.head, "Paused", x, y, 30, T.text);
     std::string where = (sim.villageName.empty() ? std::string("The camp") : sim.villageName) + ", day " + std::to_string(sim.day());
@@ -81,7 +81,8 @@ void Game::drawMenu() {
     if (button({x, y + 50, w, 40}, "Save game", true, false, 16)) { picker = Picker::SAVE; confirmSlot = -1; }
     if (button({x, y + 100, w, 40}, "Load game", saves::any(), false, 16)) { picker = Picker::LOAD; confirmSlot = -1; }
     if (button({x, y + 150, w, 40}, settlersPlace ? "Building spots: settlers choose" : "Building spots: you choose", true, false, 15)) settlersPlace = !settlersPlace;
-    if (button({x, y + 200, w, 40}, "Quit to title", true, false, 16)) { menuOpen = false; screen = Screen::TITLE; titleClock = 0; }
+    if (button({x, y + 200, w, 40}, pauseQuestions ? "Questions: pause the game" : "Questions: keep playing", true, false, 15)) pauseQuestions = !pauseQuestions;
+    if (button({x, y + 250, w, 40}, "Quit to title", true, false, 16)) { menuOpen = false; screen = Screen::TITLE; titleClock = 0; }
 }
 
 void Game::drawPicker() {

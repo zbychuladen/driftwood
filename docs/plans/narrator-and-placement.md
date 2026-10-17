@@ -5,7 +5,7 @@ Two goals:
 1. Make the player the island's **narrator**. Everyone knows the narrator is there and just accepts it, like the weather. Nobody worships it. Settlers go along with it, argue with it, tease it and ask it things.
 2. When the settlers decide to build a **specialist building**, **the player places it**. The settlers judge the spot, and a good or bad spot changes how well the building works.
 
-**Status:** phase 1 done (placement, site quality, cookhouse); phase 2 done (rapport, story circle, contrariness). Next: phase 3.
+**Status:** phase 1 done (placement, site quality, cookhouse); phase 2 done (rapport, story circle, contrariness); phase 3 done (narrated lines, questions, pending list). Next: phase 4.
 
 Each phase below lands as its own PR into `main`, with its own tests and screenshots, like the graphics work.
 
@@ -176,6 +176,10 @@ Everyone's opinion of a spot is `perceived = quality + bias`.
 | 7. Rewind, tone, the book | 4 | medium |
 
 Phases 1 and 2 don't touch each other's code and could run in parallel. Phase 1 adds the most to play right away.
+
+## Later
+
+- **Buildings unlocked by the needs pyramid** (raised 2026-10-17, not scheduled): as a settler's Maslow levels open up (body, safety, belonging, esteem, purpose), buildings tied to each level become possible. For example, belonging could unlock the longhouse and story circle, esteem the school or carvings, purpose the specialist halls. To plan once the narrator phases settle.
 
 ## Open questions
 

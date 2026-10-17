@@ -54,6 +54,7 @@ void Game::frame(float dt) {
         ui::block(rSide);
         ui::block(rJournal);
         if (inspected.ok) ui::block({16, rTop.height + 16, 340, inspectH});
+        if (decisionsR.height > 0) ui::block(decisionsR);
         if (fate) ui::block(rMap);
     }
     if (!overlay) view.handleInput(dt, rMap, !ui::mouseOverUi() && !fate);
@@ -86,6 +87,13 @@ void Game::frame(float dt) {
         view.centerOnTile(sim.campX + .5f + std::cos(a) * 4, sim.campY + .5f + std::sin(a) * 4);
         view.cam.zoom = 1.25f;
     } else if (!overlay && !fate && speed > 0) sim.step(dt * speed * MIN_PER_SEC);
+    // a new question: open it, and pause for it if the narrator asked to be
+    if (!title)
+        for (auto& q : sim.questions)
+            if (q.id > seenQuestion) {
+                seenQuestion = q.id;
+                if (pauseQuestions && speed > 0) { prevSpeed = speed; speed = 0; openQuestion = q.id; }
+            }
     // what the pointer is over, for name tags
     Vector2 mouse = GetMousePosition();
     view.hovered = !overlay && !fate && !ui::mouseOverUi() && CheckCollisionPointRec(mouse, rMap) ? view.pickAt(sim, mouse) : Pick{};
@@ -350,7 +358,11 @@ int Game::run() {
         sim.flash = 0;
         tab = opt.tab;
         if (opt.selectFirst) { auto m = sim.members(); if (!m.empty()) select(m[std::min<int>(opt.selectFirst - 1, int(m.size()) - 1)]->id, true); }
-        if (auto* p = sim.person(selected)) for (int i = 0; i < opt.narrate; i++) sim.whisper(*p, "wood");
+        if (auto* p = sim.person(selected)) for (int i = 0; i < opt.narrate; i++) sim.narrate(*p, "wood");
+        if (opt.question) {
+            auto m = sim.members();
+            if (m.size() > 2) { sim.ask(*m[1], "friend", m[2]->id); openQuestion = sim.questions.back().id; seenQuestion = openQuestion; }
+        }
         else if (!sim.pendingPlacement) view.centerOnTile(sim.campX + 1.f, sim.campY + 1.f);
         if (opt.placement && sim.pendingPlacement) {
             // aim at the suggestion, or at a given point (--pick X,Y) to show another spot

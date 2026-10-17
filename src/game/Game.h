@@ -16,7 +16,8 @@ struct Options {
     float hour = -1;
     float zoom = 0;
     int selectFirst = 0;
-    int narrate = 0;                 // narrate the selected settler this many times before the capture
+    int narrate = 0;
+    bool question = false;           // a settler asks the narrator something, shown open                 // narrate the selected settler this many times before the capture
     int tab = 0;
     bool fullscreen = false;
     bool showJournal = false;
@@ -65,6 +66,7 @@ private:
     void saveTo(int slot);
     void loadFrom(int slot);
     void drawPlacement();
+    void drawDecisions();
     float settlerCard(dw::Person& p, float x, float y, float w, bool drawIt);
     void select(int id, bool center);
 
@@ -92,6 +94,9 @@ private:
     double toastUntil = 0;
     float titleClock = 0;                 // the title backdrop's camera drift
     bool settlersPlace = false;           // the settlers choose every building's spot themselves
+    bool pauseQuestions = false;          // pause the game when a settler asks the narrator something
+    int openQuestion = -1, seenQuestion = 0;
+    Rectangle decisionsR{};               // the pending-decisions list, as last drawn
     float placeH = 0;                     // the placement panel's height last frame, to keep clicks off the map
     bool placingOverride = false;         // captures: aim the footprint at a fixed screen point
     Vector2 placingAt{};

@@ -82,6 +82,7 @@ void Sim::updatePerson(Person& p, double dmd) {
 
 void Sim::hourly() {
     int h = int(hour());
+    talkHourly();
     auto alive = members();
     if (fire() && (h >= 19 || h < 1)) {
         std::vector<Person*> at;

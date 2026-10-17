@@ -13,63 +13,6 @@ float Sim::avgRapport() {
     return n ? s / n : 0;
 }
 
-float Sim::tolerance(const Person& p) { return p.has("easygoing") ? 5 : p.has("obstinate") ? 2 : 3; }
-
-std::string Sim::whisper(Person& p, const std::string& job, Person* target) {
-    lastWhisperName = p.name;
-    int today = day();
-    p.pressure += 1;
-    // narrated once too often: they do the opposite, or nothing at all
-    if (contrary(p) || p.pressure >= tolerance(p)) {
-        bool already = contrary(p);
-        p.contraryUntil = std::max(p.contraryUntil, tMin + 36 * 60);
-        p.rapport = std::max(0.f, p.rapport - 3);
-        if (job == "peace" && target) {
-            affAdd(p, target->id, -8);
-            bubble(p, "I'll talk to " + target->name + " when I feel like it", 80);
-            note(cat(p.name, " heard the narrator suggest making up with ", target->name, ", and pointedly sat on the other side of the fire."), "narrator");
-        } else {
-            static const std::map<std::string, std::string> opposite = {{"rest", "wood"}};
-            auto it = opposite.find(job);
-            p.whisper = Whisper{it == opposite.end() ? "rest" : it->second, tMin + 6 * 60, true};
-            clearQ(p);
-            p.carry.reset();
-            bubble(p, already ? "No." : "I decide what I do today.", 70);
-            note(already ? cat(p.name, " is still having none of it, and did the opposite again.")
-                         : cat(p.name, " has been narrated once too often. \"I can decide things myself, thank you.\" They will do as they please for a while."), "narrator");
-        }
-        return lastWhisperResult = "contrary";
-    }
-    if (p.lastWhisper == today) {
-        p.rapport = std::max(0.f, p.rapport - 6);
-        bubble(p, "not again...", 60);
-        note(cat(p.name, " rolled their eyes. \"Twice in one day?\" They go along a little less willingly now."), "narrator");
-        return lastWhisperResult = "pushed";
-    }
-    p.lastWhisper = today;
-    float ch = .18f + p.rapport * .007f + (p.has("easygoing") ? .15f : 0) - (p.has("obstinate") ? .2f : 0) - (p.needs.fatigue > 75 ? .15f : 0) + (job == "peace" ? .1f : 0);
-    if (rnd() >= ch) {
-        p.rapport = std::max(0.f, p.rapport - 1.5f);
-        bubble(p, "hm, maybe later", 50);
-        note(cat(p.name, " heard the line, thought it over, and went back to what they were doing."), "narrator");
-        return lastWhisperResult = "ignored";
-    }
-    p.rapport = std::min(100.f, p.rapport + 4);
-    if (job == "peace" && target) {
-        affAdd(p, target->id, 22); affAdd(*target, p.id, 15);
-        bubble(p, target->name + ", I'm sorry", 80);
-        note(cat(p.name, " sought out ", target->name, " and apologized. They talked until the fire burned low."), "narrator");
-        return lastWhisperResult = "ok";
-    }
-    static const std::map<std::string, std::string> label = {{"calling", "follow their calling"}, {"explore", "explore the island"}, {"food", "gather food"}, {"wood", "fetch wood"}, {"build", "help with the building"}, {"rest", "rest for a while"}, {"hermit", "visit the hermit"}};
-    p.whisper = Whisper{job, tMin + 9 * 60};
-    clearQ(p);
-    p.carry.reset();
-    bubble(p, "fair enough", 70);
-    note(cat("And so ", p.name, " went to ", label.count(job) ? label.at(job) : job, ". The narrator said so, and it seemed as good a plan as any."), "narrator");
-    return lastWhisperResult = "ok";
-}
-
 std::string Sim::writeSand(const std::string& raw) {
     std::string txt = raw.substr(0, 120);
     if (txt.find_first_not_of(" \t") == std::string::npos) return "";

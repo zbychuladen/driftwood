@@ -86,8 +86,8 @@ static void testNarrator() {
     CHECK(s.writeSand("again") .find("tide") != std::string::npos, "only one message per day");
     auto* p = s.members()[0];
     p->traits = {"cheerful", "curious"};   // neither easygoing nor stubborn
-    s.whisper(*p, "explore");
-    CHECK(s.whisper(*p, "explore") == "pushed", "second whisper in a day unsettles them");
+    s.narrate(*p, "explore");
+    CHECK(s.narrate(*p, "explore") == "pushed", "narrating someone twice in a day irritates them");
     auto props = s.proposalList();
     CHECK(!props.empty(), "there are projects to propose");
     if (!props.empty()) { s.propose(props[0]->key); CHECK(s.vote.has_value() && s.vote->y + s.vote->n > 0, "settlers vote on proposals"); }
@@ -107,7 +107,7 @@ static void testFocus(uint32_t seed) {
         s.step(60);
         if (!s.pendingFate.empty()) { auto f = s.pendingFate[0]; s.pendingFate.clear(); s.applyFate(f); }
         for (auto* p : s.members()) {
-            // an empty queue means a whisper or fever just interrupted them; they get a new job next update
+            // an empty queue means a narrated line or fever just interrupted them; they get a new job next update
             if (!jobs.count(p->kind) || p->q.empty()) continue;
             checked++;
             const Focus& f = p->focus;
@@ -329,7 +329,7 @@ static void testContrary() {
         runDays(s, 2);
         auto* p = s.members()[1];
         p->traits = traits;
-        for (int n = 1; n <= 10; n++) if (s.whisper(*p, "wood") == "contrary") return n;
+        for (int n = 1; n <= 10; n++) if (s.narrate(*p, "wood") == "contrary") return n;
         return 99;
     };
     int easy = pushesUntilContrary({"easygoing", "cheerful"}), plain = pushesUntilContrary({"cheerful", "curious"}), stubborn = pushesUntilContrary({"obstinate", "curious"});
@@ -341,9 +341,9 @@ static void testContrary() {
     runDays(s, 2);
     auto* p = s.members()[1];
     p->traits = {"cheerful", "curious"};
-    for (int i = 0; i < 3; i++) s.whisper(*p, "wood");
-    CHECK(s.contrary(*p) && p->whisper && p->whisper->contrary && p->whisper->job == "rest", "a contrary settler asked to fetch wood takes the day off instead");
-    CHECK(s.whisper(*p, "rest") == "contrary" && p->whisper->job == "wood", "and asked to rest, goes and works");
+    for (int i = 0; i < 3; i++) s.narrate(*p, "wood");
+    CHECK(s.contrary(*p) && p->told && p->told->contrary && p->told->job == "rest", "a contrary settler asked to fetch wood takes the day off instead");
+    CHECK(s.narrate(*p, "rest") == "contrary" && p->told->job == "wood", "and asked to rest, goes and works");
     std::string data = s.save();
     Sim t;
     CHECK(t.load(data) && t.contrary(*t.person(p->id)) && t.person(p->id)->pressure == p->pressure, "contrariness and pressure survive a save");
@@ -351,7 +351,7 @@ static void testContrary() {
     bool noted = false;
     for (auto& e : s.journal) if (e.text.find(p->name + " has stopped bristling") != std::string::npos) noted = true;
     CHECK(!s.contrary(*p) && p->pressure < .01f && noted, cat("after a few days it fades, and the journal says so (pressure ", p->pressure, noted ? "" : ", no journal line", ")").c_str());
-    CHECK(s.whisper(*p, "wood") != "contrary", "then they hear a line again");
+    CHECK(s.narrate(*p, "wood") != "contrary", "then they hear a line again");
 }
 
 // The narrator is part of life, never divine: nothing the game writes calls
@@ -383,7 +383,7 @@ static void testNoGodWords() {
                 auto m = s.members();
                 for (int i = 0; i < 3 && !m.empty(); i++) {
                     auto* p = m[(s.day() * 7 + i) % m.size()];
-                    if (!p->child) s.whisper(*p, i == 2 ? "rest" : "wood", m[0] != p ? m[0] : nullptr);
+                    if (!p->child) s.narrate(*p, i == 2 ? "rest" : "wood", m[0] != p ? m[0] : nullptr);
                 }
                 s.writeSand(s.day() % 2 ? "Winter is coming, gather food" : "something odd");
                 auto props = s.proposalList();
@@ -396,6 +396,127 @@ static void testNoGodWords() {
     CHECK(bad.empty(), ("no voices, faith, prayers or shrines in anything the game writes" + bad).c_str());
 }
 
+// The lines offered always fit the settler, and looking at them changes nothing.
+static void testLines() {
+    std::printf("narrated lines\n");
+    std::string bad;
+    int offered = 0, few = 0;
+    bool still = true;
+    for (uint32_t seed : {20261017u, 777u}) {
+        Sim s;
+        s.newWorld(seed);
+        for (int k = 0; k < 160; k++) {
+            runDays(s, 0);
+            s.step(6 * 60);
+            if (!s.pendingFate.empty()) { auto f = s.pendingFate[0]; s.pendingFate.clear(); s.applyFate(f); }
+            std::string before = k % 40 == 0 ? s.save() : "";
+            for (auto* p : s.members()) {
+                if (p->child) continue;
+                auto ls = s.linesFor(*p);
+                if (ls.size() < 2 || ls.size() > 3) few++;
+                for (auto& l : ls) {
+                    offered++;
+                    Person* t = l.target >= 0 ? s.person(l.target) : nullptr;
+                    bool hermit = false;
+                    for (auto& h : s.pois) hermit |= h.type == "hermit" && h.found && !h.joined;
+                    bool ok = l.text.find(p->name) != std::string::npos
+                           && (l.job != "build" || s.activeProject())
+                           && (l.job != "calling" || !p->calling.empty())
+                           && (l.job != "hermit" || hermit)
+                           && ((l.job != "peace" && l.job != "talk") || (t && t != p && !t->dead && !t->child && t->status == "member"));
+                    if (!ok && bad.size() < 300) bad += "\n          " + l.job + ": " + l.text;
+                }
+            }
+            if (!before.empty() && s.save() != before) still = false;
+        }
+    }
+    CHECK(few == 0, cat("every adult is offered two or three lines (", offered, " offered)").c_str());
+    CHECK(bad.empty(), ("every line fits: a project to help with, a calling to follow, someone to talk to" + bad).c_str());
+    CHECK(still, "reading the lines never changes the game");
+    // replies: going along, haggling and refusing all happen, and a haggle starts later
+    std::set<std::string> seen;
+    bool later = true;
+    for (uint32_t seed = 1; seed <= 12; seed++) {
+        Sim s;
+        s.newWorld(seed);
+        runDays(s, 2);
+        for (auto* p : s.members()) {
+            if (p->child) continue;
+            p->traits = {"cheerful", "curious"};
+            auto ls = s.linesFor(*p);
+            Line l = ls[0];
+            for (auto& o : ls) if (o.job != "peace" && o.job != "talk") l = o;
+            auto r = s.narrate(*p, l);
+            seen.insert(r);
+            if (r == "haggled" && !(p->told && p->told->from > s.tMin)) later = false;
+        }
+    }
+    CHECK(seen.count("agreed") && seen.count("haggled") && seen.count("refused"), "settlers go along, haggle or refuse");
+    CHECK(later, "a haggled line starts a few hours later");
+}
+
+static int askAndAnswer(Sim& s, Person& p, const char* topic, int reply, int about = -1) {
+    s.ask(p, topic, about);
+    int id = s.questions.back().id;
+    s.answer(id, reply);
+    return id;
+}
+
+static void testQuestions() {
+    std::printf("questions for the narrator\n");
+    Sim s;
+    s.newWorld(20261017);
+    runDays(s, 3);
+    s.questions.clear();
+    auto m = s.members();
+    Person& a = *m[0];
+    a.traits = {"cheerful", "curious"};
+    float r0 = a.rapport;
+    askAndAnswer(s, a, "skill", 0);
+    CHECK(a.rapport > r0, "an honest answer builds rapport");
+    a.needs.social = 60;
+    r0 = a.rapport;
+    askAndAnswer(s, a, "home", 1);
+    CHECK(a.needs.social < 60 && a.rapport >= r0, "teasing makes them feel part of things");
+    a.traits = {"gloomy", "curious"};
+    r0 = a.rapport;
+    askAndAnswer(s, a, "home", 1);
+    CHECK(a.rapport < r0, "teasing costs rapport with the sensitive");
+    // a misleading answer feels good now and costs more when it comes out
+    float gained = 0, lost = 0;
+    int found = 0;
+    for (int k = 0; k < 12 && found < 3; k++) {
+        Person& p = *m[k % m.size()];
+        if (p.child) continue;
+        p.rapport = 50;
+        askAndAnswer(s, p, "winter", 2);
+        gained += p.rapport - 50;
+        float before = p.rapport;
+        int v0 = s.journalVersion;
+        runDays(s, 4);
+        bool out = false;
+        // the journal is newest first
+        for (size_t i = 0; i < std::min(s.journal.size(), size_t(s.journalVersion - v0)); i++) out |= s.journal[i].text.find(p.name) != std::string::npos && s.journal[i].text.find("the truth about winter") != std::string::npos;
+        if (out) { found++; lost += before - p.rapport; }
+    }
+    CHECK(found > 0 && lost / found > gained / 12 * 2, cat("a misleading answer that comes out costs more than it gained (", found, " came out)").c_str());
+    // questions lapse after a day, and survive a save while they wait
+    s.questions.clear();
+    s.ask(*m[1], "friend", m[2]->id);
+    int id = s.questions.back().id;
+    std::string data = s.save();
+    Sim t;
+    CHECK(t.load(data) && t.questions.size() == 1 && t.questions[0].id == id && t.questions[0].replies.size() == 3, "a waiting question survives a save");
+    runDays(t, 2);
+    CHECK(std::none_of(t.questions.begin(), t.questions.end(), [&](const Question& q) { return q.id == id; }), "an unanswered question lapses after a day");
+    // left alone, settlers do ask now and then
+    Sim u;
+    u.newWorld(777);
+    int asked = 0, last = 0;
+    for (int d = 0; d < 20; d++) { runDays(u, 1); for (auto& q : u.questions) if (q.id > last) { asked++; last = q.id; } }
+    CHECK(asked >= 3 && asked <= 20, cat("settlers ask the narrator things now and then (", asked, " in 20 days)").c_str());
+}
+
 int main() {
     for (uint32_t seed : {20261017u, 777u, 4242u}) testSurvival(seed);
     testNoSmithNoForge();
@@ -403,6 +524,8 @@ int main() {
     testNarrator();
     testContrary();
     testNoGodWords();
+    testLines();
+    testQuestions();
     testDeterminism();
     testFocus(20261017);
     testFocus(777);

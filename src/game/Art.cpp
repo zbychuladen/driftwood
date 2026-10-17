@@ -677,11 +677,11 @@ void person(const Ctx& c, const dw::Person& p, bool selected, int facing, int de
         Color chip = pose.prop == figure::AXE ? hex(0xc79a62) : hex(0xffd27a);
         for (int i = 0; i < 4; i++) circle(hit.x + (frand(p.id * 7 + i + int(c.t)) - .5f) * 14, hit.y - frand(p.id + i * 3 + int(c.t)) * 10, 1.4f, chip);
     }
-    // the sick and the whispered-to carry a small sign over their heads
+    // the sick and the whispered-to carry a small sign over their heads, and so do the narrated
     float top = px((p.child ? scale::CHILD : scale::PERSON) + .25f);
     V2 head = P(p.x, p.y, pose.lying ? px(.6f) : top);
     if (p.sick > 0) circle(head.x, head.y, 2.4f, hex(0x7fbf6a));
-    if (p.whisper && p.whisper->until > c.sim->tMin) poly({{head.x, head.y - 9}, {head.x + 3, head.y - 5}, {head.x, head.y - 1}, {head.x - 3, head.y - 5}}, rgba(185, 154, 230, .9f));
+    if (p.told && p.told->until > c.sim->tMin) poly({{head.x, head.y - 9}, {head.x + 3, head.y - 5}, {head.x, head.y - 1}, {head.x - 3, head.y - 5}}, rgba(185, 154, 230, .9f));
 }
 
 void wolf(const Ctx&, const dw::Wolf& w) {
