@@ -46,6 +46,10 @@ public:
     void handleInput(float dt, Rectangle mapRect, bool pointerFree);
     void draw(dw::Sim& sim, Rectangle mapRect, int selectedId, float realDt, float speed, Pick inspected = {});
     bool showAllLinks = false;                // every settler's link to their work, not just the selected one
+    // Doors open as settlers go in to sleep or come out, then swing shut.
+    void updateDoors(dw::Sim& sim);
+    float doorOpen(int buildingId) const;
+    static constexpr double DOOR_OPEN_MIN = 15, DOOR_CLOSE_MIN = 10;   // game minutes
     Pick hovered;                             // what is under the pointer this frame, set by the game
     // Name tags appear only for the settler under the pointer, the selected
     // one, and (hovering their hut) whoever sleeps inside.
@@ -80,6 +84,9 @@ private:
     void updateFacings(dw::Sim& sim);
     struct Track { float x, y; int facing; };
     std::unordered_map<int, Track> tracks;
+    std::unordered_map<int, bool> wasInside;      // person id: hidden in a building last frame
+    std::unordered_map<int, double> lastPass;     // building id: when someone last went through its door
+    double lastPassClock = 0;                     // the sim's clock at the last door update
     void drawHighlight(dw::Sim& sim, Pick p);
     void drawLinks(dw::Sim& sim, int selectedId, Pick inspected);
     struct Caption { Vector2 world; std::string text; };

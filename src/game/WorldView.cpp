@@ -309,6 +309,7 @@ static float darkness(double h) {
 void WorldView::draw(Sim& s, Rectangle map, int selectedId, float realDt, float speed, Pick inspected) {
     draw::tone = WORLD_TONE;
     updateFacings(s);
+    updateDoors(s);
     if (gc.season != s.season() || gc.seed != s.seed) buildGround(s);
     bool liveGround = cam.zoom >= LIVE_GROUND_ZOOM;
     if (!liveGround && (bakedSeason != gc.season || bakedSeed != gc.seed)) bakeGround(s);
@@ -572,6 +573,27 @@ void WorldView::updateFacings(Sim& s) {
         }
         t = {p.x, p.y, f};
     }
+}
+
+// ---------------------------------------------------------------- doors
+void WorldView::updateDoors(Sim& s) {
+    lastPassClock = s.tMin;
+    for (auto& p : s.people) {
+        if (p.dead) continue;
+        auto [it, fresh] = wasInside.try_emplace(p.id, p.hidden);
+        if (!fresh && it->second != p.hidden && s.projectById(p.bed)) lastPass[p.bed] = s.tMin;   // in or out through the door
+        it->second = p.hidden;
+    }
+    for (auto& [id, t] : lastPass) art::setDoor(id, doorOpen(id));
+}
+
+float WorldView::doorOpen(int id) const {
+    auto it = lastPass.find(id);
+    if (it == lastPass.end()) return 0;
+    double since = lastPassClock - it->second;
+    if (since < 0) return 0;
+    if (since <= DOOR_OPEN_MIN) return 1;
+    return float(std::clamp(1 - (since - DOOR_OPEN_MIN) / DOOR_CLOSE_MIN, 0.0, 1.0));
 }
 
 // ---------------------------------------------------------------- links between people and their work

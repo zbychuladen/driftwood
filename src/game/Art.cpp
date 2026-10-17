@@ -2,8 +2,11 @@
 #include <algorithm>
 #include <cmath>
 #include <set>
+#include <unordered_map>
 #include "engine/Draw.h"
+#include "game/Building.h"
 #include "game/Figure.h"
+#include "game/Solid.h"
 #include "game/Iso.h"
 #include "game/Scale.h"
 
@@ -509,6 +512,24 @@ static void plinth(float x, float y, float w, float h, bool snow) {
     foot(x, y, w, h, top, up);
 }
 
+// Assembled buildings: one design per building, made the first time it is drawn
+// and again only if it moves, turns or gets snow on its roof.
+struct CachedDesign { std::string key; int x, y, front; bool snow; bld::Design d; };
+static std::unordered_map<int, CachedDesign> designs;
+static std::unordered_map<int, float> doors;
+
+const bld::Design* designFor(const dw::Sim& s, const dw::Project& b) {
+    if (!bld::assembled(b.key) || !b.placed) return nullptr;
+    int front = bld::sideToward(b.x + b.w / 2.f, b.y + b.h / 2.f, s.campX + .5f, s.campY + .5f);
+    bool snow = s.season() == 3 && b.done;
+    auto it = designs.find(b.id);
+    if (it == designs.end() || it->second.key != b.key || it->second.x != b.x || it->second.y != b.y || it->second.front != front || it->second.snow != snow)
+        it = designs.insert_or_assign(b.id, CachedDesign{b.key, b.x, b.y, front, snow, bld::make(b.key, b.id, b.x, b.y, b.w, b.h, front, snow)}).first;
+    return &it->second.d;
+}
+void setDoor(int id, float open) { doors[id] = open; }
+float doorOf(int id) { auto it = doors.find(id); return it == doors.end() ? 0.f : it->second; }
+
 bool isFlat(const std::string& k) { return k == "garden" || k == "dock" || k == "herbs" || k == "bath" || k == "fields"; }
 
 void building(const Ctx& c, dw::Project& b) {
@@ -531,25 +552,29 @@ void building(const Ctx& c, dw::Project& b) {
         }
         for (int i = 0; i < std::min(5, int(std::ceil(b.dw / 6))); i++) { V2 q = P(x + w - .15f, y + h - .3f - i * .15f); poly({{q.x - 6, q.y - 2}, {q.x + 3, q.y - 6}, {q.x + 5, q.y - 4}, {q.x - 4, q.y}}, hex(0x8a5e38)); }
         for (int i = 0; i < std::min(4, int(std::ceil(b.ds / 6))); i++) { V2 q = P(x + w - .3f, y + .2f + i * .15f); circle(q.x, q.y, 3, hex(0x8a8d86)); }
-        draw::alpha = savedA * (.22f + prog * .78f);
+        if (!bld::assembled(b.key)) draw::alpha = savedA * (.22f + prog * .78f);
     }
     const std::string& k = b.key;
-    static const std::set<std::string> onPlinth = {"hut", "store", "smoke", "longhouse", "school", "forge", "loomhouse", "infirmary", "pottery", "well", "shrine"};
+    static const std::set<std::string> onPlinth = {"pottery", "well", "shrine"};
     if (b.done && onPlinth.count(k)) plinth(x + .02f, y + .02f, w - .04f, h - .04f, sn);
-    if (k == "fire") {
+    if (bld::assembled(k)) {
+        // built part by part: nothing but the marked-out plot until work starts
+        if (b.done || b.progress > 0) {
+            const bld::Design* d = designFor(S, b);
+            bool home = false;
+            for (auto* m : S.members()) if (m->bed == b.id && (m->hidden || m->sleeping)) home = true;
+            bld::draw(*d, prog, doorOf(b.id), b.done && night && home);
+            // a hearth smokes all day in the forge and smokehouse, mornings and evenings in a hall
+            bool hearth = k == "forge" || k == "smoke" || (k == "longhouse" && (c.hour >= 17 || c.hour < 8));
+            if (b.done && d->smokes && hearth) { V2 q = solid::project(d->smoke); smoke(c, q.x, q.y, 3, 1); }
+        }
+    } else if (k == "fire") {
         V2 q = P(x + .5f, y + .5f);
         for (int a = 0; a < 9; a++) circle(q.x + std::cos(a / 9.f * 6.283f) * 10, q.y + std::sin(a / 9.f * 6.283f) * 5, 3, hex(0x7d7a72));
         poly({{q.x - 8, q.y - 1}, {q.x + 8, q.y + 2}, {q.x + 8, q.y + 4}, {q.x - 8, q.y + 1}}, hex(0x5a3c22));
         poly({{q.x - 6, q.y + 3}, {q.x + 6, q.y - 3}, {q.x + 7, q.y - 1}, {q.x - 5, q.y + 5}}, hex(0x4a3020));
         if (b.done && b.fuel > 0) flame(c, q.x, q.y + 1, std::min(1.f, b.fuel / 3) * .5f + .6f);
         else if (b.done) smoke(c, q.x, q.y, 2, .6f);
-    } else if (k == "leanto") {
-        foot(x, y, w, h, rgba(40, 30, 20, .25f));
-        float hi = px(scale::LEANTO);
-        V2 A = P(x, y, hi), B2 = P(x + w, y, hi), C = P(x + w, y + h, 2), D = P(x, y + h, 2);
-        for (V2 p : {P(x, y), P(x + w, y)}) line(p.x, p.y, p.x, p.y - hi, 2, hex(0x5a3c22));
-        poly4(A, B2, C, D, sn ? hex(0xdfe5e8) : s == 2 ? hex(0x8a8a3a) : hex(0x5a8a43));
-        for (int i = 0; i <= 8; i++) { float f = i / 8.f; V2 p0 = lerpV(A, B2, f), p1 = lerpV(D, C, f); line(p0.x, p0.y, p1.x, p1.y, 1.2f, rgba(50, 30, 15, .5f)); }
     } else if (k == "rack") {
         V2 q = P(x + .5f, y + .5f);
         push(q, px(scale::RACK) / 28.f);
@@ -558,11 +583,6 @@ void building(const Ctx& c, dw::Project& b) {
         line(q.x - 13, q.y - 21, q.x + 13, q.y - 27, 2.4f, hex(0x6b4a2e));
         for (int i = 0; i < 5; i++) { float f = i / 4.f; rect(q.x - 9 + f * 18, q.y - 21 - f * 6, 2.4f, 10 + std::sin(float(t * .03 + i)) * .6f, i % 2 ? hex(0xc98a5a) : hex(0xb0704a)); }
         pop();
-    } else if (k == "hut") {
-        V2 q = roundHut(x, y, w, h, px(scale::HUT_WALL), px(scale::HUT_ROOF), sn);
-        bool occupied = false;
-        for (auto* m : S.members()) if (m->bed == b.id) occupied = true;
-        if (b.done && night && occupied) circle(q.x + 16, q.y - 10, 2.5f, rgba(255, 200, 110, .95f));
     } else if (k == "garden" || k == "herbs" || k == "fields") {
         foot(x, y, w, h, hex(0x6a4a2e));
         for (int r = 1; r < h * 3; r++) { V2 a = P(x + .1f, y + r / 3.f), e = P(x + w - .1f, y + r / 3.f); line(a.x, a.y, e.x, e.y, 1.5f, hex(0x4f3820)); }
@@ -601,35 +621,6 @@ void building(const Ctx& c, dw::Project& b) {
         line(q.x - r + 2, q.y - cu + 1, q.x - r + 2, q.y - top + 9, 2, hex(0x6b4a2e));
         line(q.x + r - 2, q.y - cu + 1, q.x + r - 2, q.y - top + 9, 2, hex(0x6b4a2e));
         poly({{q.x - r - 4, q.y - top + 10}, {q.x, q.y - top}, {q.x + r + 4, q.y - top + 10}, {q.x, q.y - top + 16}}, sn ? hex(0xe8edf0) : hex(0x8a5e38));
-    } else if (k == "store") {
-        PrismOpt o; o.planks = true; o.door = true;
-        prism(x + .1f, y + .1f, w - .2f, h - .2f, px(scale::STORE_WALL), hex(0x8a5e38), sn ? hex(0xe4e9ec) : hex(0x6b4a2e), px(scale::STORE_ROOF), o);
-    } else if (k == "smoke") {
-        PrismOpt o; o.planks = true; o.door = true;
-        prism(x + .1f, y + .1f, w - .2f, h - .2f, px(scale::SMOKE_WALL), hex(0x7a5a3a), sn ? hex(0xe4e9ec) : hex(0x5a4030), px(scale::SMOKE_ROOF), o);
-        if (b.done) { V2 q = P(x + w / 2, y + h / 2, px(scale::SMOKE_WALL + scale::SMOKE_ROOF)); smoke(c, q.x, q.y, 4, 1); }
-    } else if (k == "longhouse") {
-        PrismOpt o; o.planks = true; o.door = true; o.thatch = true; o.hasWin = true;
-        o.win = b.done && (c.hour >= 18 || c.hour < 6) ? rgba(255, 200, 110, .95f) : hex(0x3a2a1c);
-        prism(x + .1f, y + .15f, w - .2f, h - .3f, px(scale::LONGHOUSE_WALL), hex(0x9a7a52), sn ? hex(0xe8edf0) : hex(0xc9a352), px(scale::LONGHOUSE_ROOF), o);
-        if (b.done && (c.hour >= 17 || c.hour < 8)) { V2 q = P(x + w * .7f, y + h / 2, px(scale::LONGHOUSE_WALL + scale::LONGHOUSE_ROOF)); smoke(c, q.x, q.y, 3, 1); }
-    } else if (k == "school") {
-        PrismOpt o; o.planks = true; o.door = true; o.hasWin = true; o.win = hex(0x3a2a1c);
-        prism(x + .15f, y + .15f, w - .3f, h - .3f, px(scale::SCHOOL_WALL), hex(0xb98d5e), sn ? hex(0xe8edf0) : hex(0x8a4a3a), px(scale::SCHOOL_ROOF), o);
-    } else if (k == "forge") {
-        PrismOpt o; o.door = true; o.hasWin = true; o.win = b.done ? rgba(255, 140, 40, .95f) : hex(0x2e2116);
-        prism(x + .15f, y + .15f, w - .3f, h - .3f, px(scale::FORGE_WALL), hex(0x8d8f88), sn ? hex(0xe4e9ec) : hex(0x5a4a3e), px(scale::FORGE_ROOF), o);
-        // chimney from inside the roof up to its full height
-        V2 q = P(x + w * .7f, y + h * .3f, px(scale::FORGE_WALL));
-        float ch = px(scale::FORGE_CHIMNEY - scale::FORGE_WALL);
-        rect(q.x - 5, q.y - ch, 10, ch + 4, hex(0x6d6f69));
-        if (b.done) {
-            smoke(c, q.x, q.y - ch - 2, 4, 1);
-            V2 a = P(x + w + .4f, y + h * .55f);
-            rect(a.x - 6, a.y - 8, 12, 3, hex(0x333333));
-            rect(a.x - 2, a.y - 5, 4, 5, hex(0x333333));
-            if (std::sin(t * 1.3) > .8) for (int i = 0; i < 3; i++) circle(a.x + (frand(int(t) + i) - .5f) * 10, a.y - 10 - frand(int(t) * 3 + i) * 6, 1, hex(0xffb347));
-        }
     } else if (k == "mine") {
         V2 q = P(x + .5f, y + .5f);
         push(q, px(scale::MINE_HILL) / 26.f);
@@ -663,13 +654,6 @@ void building(const Ctx& c, dw::Project& b) {
         if (b.done) smoke(c, q.x, q.y - 36, 3, .8f);
         const uint32_t pc[3] = {0xb8683e, 0xa85a34, 0xc98a5a};
         for (int i = 0; i < 3; i++) { V2 pp = P(x + 1.5f + i * .15f, y + 1.6f - i * .2f); ellipse(pp.x, pp.y - 4, 3.5f, 5, hex(pc[i])); rect(pp.x - 2, pp.y - 10, 4, 2, hex(pc[i])); }
-    } else if (k == "loomhouse") {
-        PrismOpt o; o.door = true; o.planks = true;
-        prism(x + .15f, y + .15f, w - .3f, h - .3f, px(scale::LOOM_WALL), hex(0xa88a5e), sn ? hex(0xe8edf0) : hex(0x7a5a8a), px(scale::LOOM_ROOF), o);
-        if (b.done) { const uint32_t cl[4] = {0xc8553d, 0xe0b13a, 0x3d7ec8, 0x2fa39b}; for (int i = 0; i < 4; i++) { V2 q = P(x + w + .15f, y + .3f + i * .38f); rect(q.x - 2, q.y - 18, 4, 14 + std::sin(float(t * .04 + i)) * 1.5f, hex(cl[i])); } }
-    } else if (k == "infirmary") {
-        PrismOpt o; o.door = true; o.hasWin = true; o.win = hex(0x4f8a4a);
-        prism(x + .15f, y + .15f, w - .3f, h - .3f, px(scale::INFIRMARY_WALL), hex(0xd6cfbd), sn ? hex(0xe8edf0) : hex(0x6f8a5e), px(scale::INFIRMARY_ROOF), o);
     } else if (k == "dock") {
         for (int i = 0; i < 3; i++) {
             float tx = x + b.dx * i, ty = y + b.dy * i;
