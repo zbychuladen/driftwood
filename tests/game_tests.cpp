@@ -617,22 +617,36 @@ static void testBuildings() {
     struct T { const char* key; int w, h; float tall; };
     const T types[] = {{"hut", 2, 2, scale::HUT_WALL + scale::HUT_ROOF}, {"leanto", 3, 1, scale::LEANTO}, {"longhouse", 4, 2, scale::LONGHOUSE_WALL + scale::LONGHOUSE_ROOF},
                        {"store", 2, 2, scale::STORE_WALL + scale::STORE_ROOF}, {"school", 2, 2, scale::SCHOOL_WALL + scale::SCHOOL_ROOF}, {"forge", 2, 2, scale::FORGE_CHIMNEY},
-                       {"smoke", 2, 1, scale::SMOKE_WALL + scale::SMOKE_ROOF}, {"loomhouse", 2, 2, scale::LOOM_WALL + scale::LOOM_ROOF}, {"infirmary", 2, 2, scale::INFIRMARY_WALL + scale::INFIRMARY_ROOF}};
+                       {"smoke", 2, 1, scale::SMOKE_WALL + scale::SMOKE_ROOF}, {"loomhouse", 2, 2, scale::LOOM_WALL + scale::LOOM_ROOF}, {"infirmary", 2, 2, scale::INFIRMARY_WALL + scale::INFIRMARY_ROOF},
+                       {"well", 1, 1, scale::WELL_ROOF}, {"rack", 1, 1, scale::RACK}, {"tower", 1, 1, scale::TOWER}, {"lighthouse", 1, 1, scale::LIGHTHOUSE},
+                       {"signal", 1, 1, scale::SIGNAL}, {"mine", 1, 1, scale::MINE_HILL}, {"dock", 1, 3, .6f}, {"shrine", 2, 2, scale::SHRINE_STONE},
+                       {"pottery", 2, 2, scale::KILN}, {"boatyard", 2, 2, scale::MAST}};
+    // what each structure's recipe promises
+    const std::map<std::string, std::vector<std::string>> promised = {
+        {"well", {"curb", "water", "windlass", "bucket", "roof"}}, {"rack", {"posts", "crossbar", "fish"}}, {"tower", {"legs", "platform", "railing", "roof", "ladder"}},
+        {"lighthouse", {"tower", "gallery", "lantern", "roof", "door"}}, {"signal", {"ring", "crib"}}, {"mine", {"mound", "entrance", "cart"}},
+        {"dock", {"deck", "posts", "bollard"}}, {"shrine", {"stones", "altar"}}, {"pottery", {"kiln", "mouth", "flue", "pots"}}, {"boatyard", {"slip", "trestles", "hull", "mast", "sail"}}};
     std::string missing, outside, tall, front, stages, hinge;
     int made = 0;
     std::map<std::string, std::set<std::string>> variety;
     for (auto& t : types)
         for (int id = 0; id < 50; id++) {
             int side = id % 4;
-            auto d = bld::make(t.key, id, 10, 10, t.w, t.h, side, false);
+            auto d = bld::make(t.key, id, 10, 10, t.w, t.h, side, false, 0, 1);
             made++;
             auto count = [&](bld::Part p) { int n = 0; for (auto& pc : d.pieces) n += pc.part == p; return n; };
             std::string k = t.key;
             // the recipe's must-haves
             std::string lack;
-            if (!count(bld::ROOF)) lack += " roof";
-            if (!count(bld::WALL)) lack += " walls";
-            if (!d.openSide && (!count(bld::DOOR) || d.doorWidth <= 0)) lack += " door";
+            bool structure = promised.count(k) > 0;
+            if (structure) {
+                for (auto& f : promised.at(k)) if (!d.features.count(f)) lack += " " + f;
+                if (!count(bld::WALL)) lack += " body";
+            } else {
+                if (!count(bld::ROOF)) lack += " roof";
+                if (!count(bld::WALL)) lack += " walls";
+                if (!d.openSide && (!count(bld::DOOR) || d.doorWidth <= 0)) lack += " door";
+            }
             if (k == "longhouse" && (d.windows < 2 || !d.smokes)) lack += " windows or smoke outlet";
             if (k == "forge" && (!d.chimney || !d.openSide || count(bld::EXTRA) < 2)) lack += " chimney, open front or anvil";
             if (k == "store" && d.doorWidth < 1.6f) lack += " wide door";
@@ -651,7 +665,7 @@ static void testBuildings() {
             // height: the table's, plus at most the plinth and a chimney standing clear of the ridge
             if ((d.top < t.tall * .95f || d.top > t.tall + .7f) && tall.size() < 200) tall += cat("\n          ", k, " #", id, ": ", int(d.top * 100), " cm, wanted ", int(t.tall * 100));
             // the door is on the side it was asked for
-            if (d.doorPiece >= 0) {
+            if (d.doorPiece >= 0 && !structure) {
                 const solid::V3 dirs[4] = {{1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {-1, 0, 0}};
                 solid::V3 mid{(10 + t.w / 2.f) * scale::TILE_M, (10 + t.h / 2.f) * scale::TILE_M, 0};
                 solid::V3 off = d.pieces[d.doorPiece].s.c - mid;
@@ -667,7 +681,7 @@ static void testBuildings() {
             }
             if (bld::visible(d, 1) != int(d.pieces.size())) stages += cat("\n          ", k, " #", id, " not all pieces at 100%");
             // an opening door stays on its hinge: the hinge edge does not move
-            if (d.doorPiece >= 0) {
+            if (d.doorPiece >= 0 && !structure) {
                 const auto& sl = d.pieces[d.doorPiece].s;
                 solid::V3 edge = sl.c - sl.ax[0] * sl.h[0];
                 float a = -1.75f;
@@ -676,7 +690,7 @@ static void testBuildings() {
                 if (std::hypot(rel.x, rel.y) > .05f || gap > .1f) if (hinge.size() < 200) hinge += cat("\n          ", k, " #", id);
             }
         }
-    CHECK(missing.empty(), cat("every one of ", made, " buildings has its recipe's parts", missing).c_str());
+    CHECK(missing.empty(), cat("every one of ", made, " buildings and structures has its recipe's parts", missing).c_str());
     CHECK(outside.empty(), ("every part stays within the footprint, eaves and porch" + outside).c_str());
     CHECK(tall.empty(), ("buildings stand at the scale table's height" + tall).c_str());
     CHECK(front.empty(), ("the door is on the side facing camp" + front).c_str());

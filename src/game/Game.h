@@ -22,7 +22,8 @@ struct Options {
     bool allLinks = false;
     bool gallery = false;
     bool people = false;
-    bool buildings = false;           // capture a sheet of assembled buildings and their construction              // capture a sheet of settler figures, poses and facings
+    bool buildings = false;
+    bool structures = false;          // capture a sheet of the assembled structures (well, tower, dock...)           // capture a sheet of assembled buildings and their construction              // capture a sheet of settler figures, poses and facings
     int bench = 0;                    // capture: time this many frames and print the average             // capture a sheet of every tree and plant instead of the world            // draw every settler's link to their work
     bool hasCenter = false, hasPick = false;
     float centerX = 0, centerY = 0;   // tile to center the camera on
@@ -49,7 +50,7 @@ private:
     void drawInspect();
     void drawGallery();
     void drawPeopleGallery();
-    void drawBuildingGallery();
+    void drawBuildingGallery(bool structures);
     float settlerCard(dw::Person& p, float x, float y, float w, bool drawIt);
     void select(int id, bool center);
 

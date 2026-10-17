@@ -2,7 +2,7 @@
 //
 // Usage: driftwood [--seed N] [--size WxH] [--fullscreen]
 // Capture mode (for docs/CI): --screenshot file.png [--days N] [--hour H] [--zoom Z] [--select K] [--tab T]
-//                             [--center X,Y] (tile) [--pick X,Y] (screen point) [--show-journal] [--links] [--gallery] [--people] [--buildings] [--bench N]
+//                             [--center X,Y] (tile) [--pick X,Y] (screen point) [--show-journal] [--links] [--gallery] [--people] [--buildings] [--structures] [--bench N]
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -27,6 +27,7 @@ int main(int argc, char** argv) {
         else if (a == "--gallery") o.gallery = true;
         else if (a == "--people") o.people = true;
         else if (a == "--buildings") o.buildings = true;
+        else if (a == "--structures") o.structures = true;
         else if (a == "--bench") o.bench = std::atoi(next());
         else if (a == "--center" || a == "--pick") {
             std::string s = next();

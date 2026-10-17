@@ -7,6 +7,7 @@
 // Every part is its own solid with a construction stage, so a building can go
 // up piece by piece and its door can swing open.
 #pragma once
+#include <set>
 #include <string>
 #include <vector>
 #include "game/Solid.h"
@@ -42,6 +43,10 @@ struct Design {
     std::vector<int> panes;            // window panes, which glow at night
     solid::V3 smoke;                   // where chimney smoke rises from
     bool smokes = false;
+    solid::V3 flame;                   // a fire's heart (signal pyre, kiln mouth, lantern)
+    bool flames = false;
+    std::set<std::string> features;    // named parts a recipe promises, for tests
+    std::string made;                  // what it is built of, in words, when walls and roof do not say it
 };
 
 // Whether a building type is assembled from parts (the rest keep hand-drawn art).
@@ -49,7 +54,8 @@ bool assembled(const std::string& key);
 
 // Designs a building on footprint (x, y, w, h) in tiles, its door toward front.
 // Heights follow Scale.h.
-Design make(const std::string& key, int id, int x, int y, int w, int h, int front, bool snow);
+// A dock runs from (x, y) along (dx, dy) instead of covering w by h.
+Design make(const std::string& key, int id, int x, int y, int w, int h, int front, bool snow, int dx = 0, int dy = 0);
 
 // The side of a footprint that faces a point, for putting the door toward camp.
 int sideToward(float cx, float cy, float tx, float ty);

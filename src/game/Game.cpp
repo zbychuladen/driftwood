@@ -191,10 +191,10 @@ void Game::drawPeopleGallery() {
 // A sheet of assembled buildings: each type in three variants (doors toward
 // the camera on either side), then one longhouse going up stage by stage,
 // with its door open and its windows lit at the end.
-void Game::drawBuildingGallery() {
+void Game::drawBuildingGallery(bool structures) {
     ClearBackground(Color{233, 230, 218, 255});
     rlDisableBackfaceCulling();
-    const float fit = GetScreenHeight() / 1180.f;
+    const float fit = GetScreenHeight() / (structures ? 1360.f : 1180.f);
     Camera2D cam{};
     cam.zoom = 1.15f * fit;
     draw::tone = {.32f, .2f, {236, 233, 220, 255}};
@@ -205,19 +205,34 @@ void Game::drawBuildingGallery() {
         tx = int(std::floor(t.x)) - w / 2; ty = int(std::floor(t.y)) - h / 2;
     };
     struct T { const char* key; int w, h; };
-    const T types[9] = {{"hut", 2, 2}, {"leanto", 3, 1}, {"longhouse", 4, 2}, {"store", 2, 2}, {"school", 2, 2}, {"forge", 2, 2}, {"smoke", 2, 1}, {"loomhouse", 2, 2}, {"infirmary", 2, 2}};
-    for (int i = 0; i < 27; i++) {
+    const T houses[9] = {{"hut", 2, 2}, {"leanto", 3, 1}, {"longhouse", 4, 2}, {"store", 2, 2}, {"school", 2, 2}, {"forge", 2, 2}, {"smoke", 2, 1}, {"loomhouse", 2, 2}, {"infirmary", 2, 2}};
+    const T others[10] = {{"well", 1, 1}, {"rack", 1, 1}, {"tower", 1, 1}, {"lighthouse", 1, 1}, {"signal", 1, 1}, {"mine", 1, 1}, {"dock", 1, 3}, {"shrine", 2, 2}, {"pottery", 2, 2}, {"boatyard", 2, 2}};
+    const T* types = structures ? others : houses;
+    const int count = structures ? 10 : 9;
+    for (int i = 0; i < count * 3; i++) {
         const T& ty = types[i / 3];
         int col = i % 6, row = i / 6;
         int tx, tyy;
-        place(150 + col * 265, 170 + row * 175, ty.w, ty.h, tx, tyy);
+        place(150 + col * 265, (structures ? 200 : 170) + row * (structures ? 205 : 175), ty.w, ty.h, tx, tyy);
         int front = (i % 3) == 1 ? 1 : 0;
-        auto d = bld::make(ty.key, 11 + i * 7, tx, tyy, ty.w, ty.h, front, false);
+        auto d = bld::make(ty.key, 11 + i * 7, tx, tyy, ty.w, ty.h, front, false, 0, 1);
         bld::draw(d, 1, 0, false);
+    }
+    if (structures) {
+        // a watchtower and a boat going up, stage by stage
+        const float stages[6] = {.08f, .25f, .5f, .75f, .95f, 1};
+        for (int i = 0; i < 6; i++) {
+            int tx, tyy;
+            place(110 + i * 170, 1300, 1, 1, tx, tyy);
+            bld::draw(bld::make("tower", 77, tx, tyy, 1, 1, 0, false), stages[i], 0, false);
+            place(1130 + (i % 3) * 170, 1300, 2, 2, tx, tyy);
+            if (i >= 3) continue;
+            bld::draw(bld::make("boatyard", 78, tx, tyy, 2, 2, 0, false), stages[i * 2 + 1], 0, false);
+        }
     }
     // construction of one longhouse, then finished with the door open, then lit at night
     const float stages[7] = {.06f, .22f, .45f, .62f, .8f, .95f, 1};
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < 8 && !structures; i++) {
         int tx, tyy;
         place(130 + i * 200, 1090, 4, 2, tx, tyy);
         auto d = bld::make("longhouse", 501, tx, tyy, 4, 2, 0, false);
@@ -226,11 +241,11 @@ void Game::drawBuildingGallery() {
     EndMode2D();
     draw::tone = {};
     draw::ink.width = 0;
-    for (int t = 0; t < 9; t++) {
+    for (int t = 0; t < count; t++) {
         int i = t * 3, col = i % 6, row = i / 6;
-        ui::text(ui::F.bold, types[t].key, (40 + col * 265) * fit, (40 + row * 175) * fit, 13, ui::T.muted);
+        ui::text(ui::F.bold, types[t].key, (40 + col * 265) * fit, (40 + row * (structures ? 205 : 175)) * fit, 13, ui::T.muted);
     }
-    ui::text(ui::F.bold, "a longhouse going up: foundation, frame, walls rising, roof, details; then the door open, and lit at night", 30 * fit, 945 * fit, 13, ui::T.muted);
+    ui::text(ui::F.bold, structures ? "a watchtower going up, and a boat taking shape" : "a longhouse going up: foundation, frame, walls rising, roof, details; then the door open, and lit at night", 30 * fit, (structures ? 1110 : 945) * fit, 13, ui::T.muted);
 }
 
 int Game::run() {
@@ -267,8 +282,14 @@ int Game::run() {
         if (opt.showJournal) journalOpen = true;
         view.showAllLinks = opt.allLinks;
         speed = 1;
-        if (opt.gallery || opt.people || opt.buildings)
-            for (int i = 0; i < 3; i++) { BeginDrawing(); if (opt.buildings) drawBuildingGallery(); else if (opt.people) drawPeopleGallery(); else drawGallery(); EndDrawing(); }
+        if (opt.gallery || opt.people || opt.buildings || opt.structures)
+            for (int i = 0; i < 3; i++) {
+                BeginDrawing();
+                if (opt.buildings || opt.structures) drawBuildingGallery(opt.structures);
+                else if (opt.people) drawPeopleGallery();
+                else drawGallery();
+                EndDrawing();
+            }
         else for (int i = 0; i < 4; i++) frame(1.f / 60);
         if (opt.bench > 0) {
             // whole frames, sim and drawing, as the player gets them (vsync off so they are not capped)
