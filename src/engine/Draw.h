@@ -12,6 +12,21 @@ using V2 = Vector2;
 
 extern float alpha;                     // multiplies every color's alpha
 
+// Scale everything drawn until pop() about a pivot: p' = pivot + (p - pivot) * k.
+// Lets art written in absolute coordinates be resized as a whole. Nests.
+// push(at, k, from) also moves: p' = at + (p - from) * k, for art drawn around (0,0).
+void push(V2 pivot, float k);
+void push(V2 at, float k, V2 from);
+void pop();
+
+// Bounds recording: while a Box is set, primitives grow it instead of drawing,
+// so art can be measured with no window or GPU (used by the tests).
+struct Box {
+    float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
+    bool empty() const { return x1 < x0; }
+};
+void record(Box* box);                  // nullptr returns to drawing
+
 Color hex(uint32_t rgb, float a = 1.f);
 Color rgba(int r, int g, int b, float a = 1.f);
 Color shade(Color c, float f);          // brighten/darken rgb, keep alpha

@@ -105,7 +105,7 @@ int Game::run() {
                 for (auto& q : sim.people) {
                     if (q.dead || q.hidden) continue;
                     Vector2 w = iso::wp(q.x, q.y);
-                    w.y -= 14;
+                    w.y -= WorldView::bodyHeight(q);
                     Vector2 sc = GetWorldToScreen2D(w, view.cam);
                     float d = std::hypot(sc.x - opt.pickX, sc.y - opt.pickY);
                     if (d < bd) { bd = d; near = &q; at = sc; }
