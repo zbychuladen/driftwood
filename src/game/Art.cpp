@@ -3,11 +3,12 @@
 #include <cmath>
 #include "engine/Draw.h"
 #include "game/Iso.h"
-#include "rlgl.h"
+#include "game/Scale.h"
 
 using namespace draw;
 using iso::P;
 using iso::wp;
+using scale::px;
 
 namespace art {
 
@@ -17,7 +18,9 @@ static void poly4(V2 a, V2 b, V2 c, V2 d, Color col) { poly({a, b, c, d}, col); 
 static V2 lerpV(V2 a, V2 b, float t) { return {a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t}; }
 static void foot(float x, float y, float w, float h, Color c, float up = 0) { poly4(P(x, y, up), P(x + w, y, up), P(x + w, y + h, up), P(x, y + h, up), c); }
 
-static void flame(float cx, float cy, float sc, double t) {
+static void flame(const Ctx& c, float cx, float cy, float sc) {
+    if (!c.effects) return;
+    double t = c.t;
     const uint32_t cols[3] = {0xf2662a, 0xf6a531, 0xffe08a};
     for (int k = 0; k < 3; k++) {
         float ph = float(t * .4 + k * 2), hh = (12 + std::sin(ph) * 3) * sc;
@@ -30,7 +33,9 @@ static void flame(float cx, float cy, float sc, double t) {
         polyV(p1, hex(cols[k]));
     }
 }
-static void smoke(float cx, float cy, double t, int n = 3, float sz = 1) {
+static void smoke(const Ctx& c, float cx, float cy, int n = 3, float sz = 1) {
+    if (!c.effects) return;
+    double t = c.t;
     for (int k = 0; k < n; k++) {
         float ph = float(std::fmod(t * .015 + double(k) / n, 1.0));
         circle(cx + ph * 10 * sz, cy - ph * 34 * sz, (2 + ph * 5) * sz, rgba(210, 210, 210, .45f * (1 - ph)));
@@ -52,7 +57,7 @@ static void prism(float x, float y, float w, float h, float wh, Color wall, Colo
         }
     if (o.door) {
         V2 a = lerpV(L, B, .4f), b = lerpV(L, B, .6f);
-        float dh = wh * .7f;
+        float dh = doorHeight(wh);
         poly4(a, b, {b.x, b.y - dh}, {a.x, a.y - dh}, hex(0x2e2116));
     }
     if (o.hasWin) {
@@ -81,6 +86,8 @@ static void prism(float x, float y, float w, float h, float wh, Color wall, Colo
     }
 }
 
+float doorHeight(float wallPx) { return std::min(px(scale::DOOR), wallPx - px(.25f)); }
+
 static V2 roundHut(float x, float y, float w, float h, float wh, float rh, bool snow) {
     V2 c = P(x + w / 2, y + h / 2);
     float rx = w * iso::HW * .62f, ry = rx * .5f;
@@ -89,7 +96,8 @@ static V2 roundHut(float x, float y, float w, float h, float wh, float rh, bool 
     auto bottom = arc(c.x, c.y, rx, ry, 0, 3.14159f, 16);
     wall.insert(wall.end(), bottom.begin(), bottom.end());
     polyGradX(wall, c.x - rx, c.x + rx, hex(0x7c6646), hex(0xb89b6c));
-    ellipse(c.x - rx * .35f, c.y + ry * .75f - wh * .4f, 5, wh * .42f, hex(0x2e2116));
+    float dh = doorHeight(wh);
+    ellipse(c.x - rx * .35f, c.y + ry * .75f - dh / 2, 7, dh / 2, hex(0x2e2116));
     float R2 = rx * 1.22f, ay = c.y - wh - rh, by = c.y - wh + 2;
     std::vector<V2> cone = {{c.x, ay}};
     auto rim = arc(c.x, by, R2, R2 * .5f, 3.14159f, 0, 18);   // left, through the front, to right
@@ -106,7 +114,11 @@ static V2 roundHut(float x, float y, float w, float h, float wh, float rh, bool 
 void tree(const Ctx& c, const dw::Obj& o) {
     int s = c.season;
     V2 p = wp(o.x + .5f, o.y + .6f);
-    float x = p.x, y = p.y, k = o.size * 1.45f * (o.sapling ? .35f + o.grow * .6f : 1);
+    // the art below is drawn k units tall per unit of its natural height
+    bool bare = !o.palm && !o.conifer && s == 3;
+    float H = o.palm ? scale::PALM : o.conifer ? scale::CONIFER : scale::BROADLEAF;
+    float natural = o.palm ? 33.f : o.conifer ? 40.f : bare ? 29.f : 36.f;
+    float x = p.x, y = p.y, k = px(H) / natural * o.size * (o.sapling ? .35f + o.grow * .6f : 1);
     float sway = std::sin(float(c.t * .02 + o.i)) * 1.2f * k * (c.sim->weather == "storm" ? 3 : 1);
     ellipse(x + 6 * k, y + 1, 12 * k, 5 * k, rgba(20, 40, 20, .25f));
     if (o.palm) {
@@ -165,7 +177,7 @@ void stump(const Ctx&, const dw::Obj& o) {
 
 void rock(const Ctx& c, const dw::Obj& o) {
     V2 p = wp(o.x + .5f, o.y + .6f);
-    float x = p.x, y = p.y, k = o.size * 1.3f;
+    float x = p.x, y = p.y, k = px(scale::ROCK) / 12.f * o.size;
     bool sn = c.season == 3;
     ellipse(x + 3, y + 1, 11 * k, 4.5f * k, rgba(20, 30, 20, .25f));
     poly({{x - 9 * k, y}, {x - 7 * k, y - 8 * k}, {x - 1 * k, y - 12 * k}, {x + 6 * k, y - 9 * k}, {x + 9 * k, y - 2 * k}, {x + 5 * k, y + 1 * k}}, sn ? hex(0x9aa1a5) : hex(0x8a8d86));
@@ -177,19 +189,21 @@ void bush(const Ctx& c, const dw::Obj& o) {
     V2 p = wp(o.x + .5f, o.y + .6f);
     float x = p.x, y = p.y;
     int s = c.season;
+    push(p, px(scale::BUSH) / 17.f);
     ellipse(x + 3, y + 1, 10, 4, rgba(20, 40, 20, .25f));
     uint32_t c0 = s == 3 ? 0x5f6b5c : s == 2 ? 0x6e7a34 : 0x3f7a3a, c1 = s == 3 ? 0x76826f : s == 2 ? 0x8a9440 : 0x55964a;
     circle(x - 5, y - 5, 7, hex(c0));
     circle(x + 5, y - 5, 7, hex(c0));
     circle(x, y - 9, 8, hex(c1));
-    if (s == 3) { circle(x, y - 13, 4.5f, rgba(255, 255, 255, .8f)); return; }
+    if (s == 3) { circle(x, y - 13, 4.5f, rgba(255, 255, 255, .8f)); pop(); return; }
     int n = int(o.berries);
     for (int b = 0; b < n * 2; b++) circle(x + std::cos(b * 2.4f + o.i) * 6, y - 8 + std::sin(b * 1.9f + o.i) * 4, 1.8f, s == 0 ? hex(0xe8eef8) : hex(0xc0303f));
+    pop();
 }
 
 void totem(const Ctx& c, const dw::Obj& o) {
     V2 p = wp(o.x + .5f, o.y + .6f);
-    float x = p.x, y = p.y, hgt = 34 + o.v * 5.f;
+    float x = p.x, y = p.y, hgt = px(scale::TOTEM) + o.v * px(.3f);
     ellipse(x + 4, y + 1, 8, 3.5f, rgba(20, 30, 20, .28f));
     const uint32_t cols[4][2] = {{0x8a5e38, 0xb07a48}, {0x7a5434, 0xa8703f}, {0x946640, 0xc08a55}, {0x6e4b2e, 0x9a6a3e}};
     rect(x - 4, y - hgt, 8, hgt, hex(cols[o.v][0]));
@@ -209,11 +223,13 @@ void totem(const Ctx& c, const dw::Obj& o) {
 void boat(const Ctx& c) {
     V2 p = wp(c.sim->boatX + .5f, c.sim->boatY + .5f);
     float x = p.x, y = p.y;
+    push(p, scale::BOAT_LENGTH * scale::GROUND_PX_PER_M / 38.f);
     ellipse(x, y + 3, 20, 6, rgba(20, 30, 20, .25f));
     poly({{x - 20, y - 3}, {x + 18, y - 8}, {x + 14, y + 2}, {x - 14, y + 6}}, hex(0x7a5434));
     poly({{x - 20, y - 3}, {x + 18, y - 8}, {x + 16, y - 11}, {x - 17, y - 6}}, hex(0x5a3c22));
     line(x - 5, y - 6, x - 3, y + 3, 1, hex(0x3e2a18));
     line(x + 6, y - 8, x + 7, y + 1, 1, hex(0x3e2a18));
+    pop();
 }
 
 void stockpile(const Ctx& c) {
@@ -223,8 +239,10 @@ void stockpile(const Ctx& c) {
     for (int i = 0; i < logs; i++) {
         int row = i < 4 ? 0 : i < 7 ? 1 : i < 9 ? 2 : 3, col = i < 4 ? i : i < 7 ? i - 4 : i < 9 ? i - 7 : 0;
         V2 l = P(s.stockX + .2f + col * .18f + row * .09f, s.stockY + .75f, row * 4.5f);
+        push(l, 1.6f);
         poly({{l.x - 7, l.y - 3}, {l.x + 5, l.y - 8}, {l.x + 7, l.y - 5}, {l.x - 5, l.y}}, hex(0x8a5e38));
         ellipse(l.x - 6, l.y - 1.5f, 2.4f, 2.8f, hex(0xc79a62));
+        pop();
     }
     int stones = std::min(8, int(std::ceil(s.stock.stone / 4)));
     for (int i = 0; i < stones; i++) { V2 q = P(s.stockX + 1.25f + (i % 3) * .22f, s.stockY + .35f + (i / 3) * .2f, (i / 3) * 2.f); circle(q.x, q.y, 3.6f, i % 2 ? hex(0x9a9d96) : hex(0x7e817a)); }
@@ -267,22 +285,25 @@ void building(const Ctx& c, dw::Project& b) {
         for (int a = 0; a < 9; a++) circle(q.x + std::cos(a / 9.f * 6.283f) * 10, q.y + std::sin(a / 9.f * 6.283f) * 5, 3, hex(0x7d7a72));
         poly({{q.x - 8, q.y - 1}, {q.x + 8, q.y + 2}, {q.x + 8, q.y + 4}, {q.x - 8, q.y + 1}}, hex(0x5a3c22));
         poly({{q.x - 6, q.y + 3}, {q.x + 6, q.y - 3}, {q.x + 7, q.y - 1}, {q.x - 5, q.y + 5}}, hex(0x4a3020));
-        if (b.done && b.fuel > 0) flame(q.x, q.y + 1, std::min(1.f, b.fuel / 3) * .5f + .6f, t);
-        else if (b.done) smoke(q.x, q.y, t, 2, .6f);
+        if (b.done && b.fuel > 0) flame(c, q.x, q.y + 1, std::min(1.f, b.fuel / 3) * .5f + .6f);
+        else if (b.done) smoke(c, q.x, q.y, 2, .6f);
     } else if (k == "leanto") {
         foot(x, y, w, h, rgba(40, 30, 20, .25f));
-        V2 A = P(x, y, 26), B2 = P(x + w, y, 26), C = P(x + w, y + h, 2), D = P(x, y + h, 2);
-        for (V2 p : {P(x, y), P(x + w, y)}) line(p.x, p.y, p.x, p.y - 26, 2, hex(0x5a3c22));
+        float hi = px(scale::LEANTO);
+        V2 A = P(x, y, hi), B2 = P(x + w, y, hi), C = P(x + w, y + h, 2), D = P(x, y + h, 2);
+        for (V2 p : {P(x, y), P(x + w, y)}) line(p.x, p.y, p.x, p.y - hi, 2, hex(0x5a3c22));
         poly4(A, B2, C, D, sn ? hex(0xdfe5e8) : s == 2 ? hex(0x8a8a3a) : hex(0x5a8a43));
         for (int i = 0; i <= 8; i++) { float f = i / 8.f; V2 p0 = lerpV(A, B2, f), p1 = lerpV(D, C, f); line(p0.x, p0.y, p1.x, p1.y, 1.2f, rgba(50, 30, 15, .5f)); }
     } else if (k == "rack") {
         V2 q = P(x + .5f, y + .5f);
+        push(q, px(scale::RACK) / 28.f);
         line(q.x - 12, q.y + 2, q.x - 11, q.y - 22, 2.4f, hex(0x6b4a2e));
         line(q.x + 12, q.y - 4, q.x + 11, q.y - 28, 2.4f, hex(0x6b4a2e));
         line(q.x - 13, q.y - 21, q.x + 13, q.y - 27, 2.4f, hex(0x6b4a2e));
         for (int i = 0; i < 5; i++) { float f = i / 4.f; rect(q.x - 9 + f * 18, q.y - 21 - f * 6, 2.4f, 10 + std::sin(float(t * .03 + i)) * .6f, i % 2 ? hex(0xc98a5a) : hex(0xb0704a)); }
+        pop();
     } else if (k == "hut") {
-        V2 q = roundHut(x, y, w, h, 20, 30, sn);
+        V2 q = roundHut(x, y, w, h, px(scale::HUT_WALL), px(scale::HUT_ROOF), sn);
         bool occupied = false;
         for (auto* m : S.members()) if (m->bed == b.id) occupied = true;
         if (b.done && night && occupied) circle(q.x + 16, q.y - 10, 2.5f, rgba(255, 200, 110, .95f));
@@ -315,36 +336,39 @@ void building(const Ctx& c, dw::Project& b) {
         if (s == 3 && b.done) foot(x, y, w, h, rgba(255, 255, 255, .55f));
     } else if (k == "well") {
         V2 q = P(x + .5f, y + .5f);
-        ellipse(q.x + 3, q.y + 3, 14, 7, rgba(30, 30, 20, .25f));
-        ellipse(q.x, q.y, 12, 6, hex(0x8a8d86));
-        rect(q.x - 12, q.y - 7, 24, 7, hex(0x8a8d86));
-        ellipse(q.x, q.y - 7, 12, 6, hex(0xa3a69f));
-        ellipse(q.x, q.y - 7, 8.5f, 4, hex(0x26404c));
-        line(q.x - 10, q.y - 6, q.x - 10, q.y - 26, 2, hex(0x6b4a2e));
-        line(q.x + 10, q.y - 6, q.x + 10, q.y - 26, 2, hex(0x6b4a2e));
-        poly({{q.x - 15, q.y - 24}, {q.x, q.y - 34}, {q.x + 15, q.y - 24}, {q.x, q.y - 18}}, sn ? hex(0xe8edf0) : hex(0x8a5e38));
+        float cu = px(scale::WELL_CURB), top = px(scale::WELL_ROOF), r = 16;
+        ellipse(q.x + 3, q.y + 3, r + 2, r / 2 + 1, rgba(30, 30, 20, .25f));
+        ellipse(q.x, q.y, r, r / 2, hex(0x8a8d86));
+        rect(q.x - r, q.y - cu, r * 2, cu, hex(0x8a8d86));
+        ellipse(q.x, q.y - cu, r, r / 2, hex(0xa3a69f));
+        ellipse(q.x, q.y - cu, r * .7f, r * .33f, hex(0x26404c));
+        line(q.x - r + 2, q.y - cu + 1, q.x - r + 2, q.y - top + 9, 2, hex(0x6b4a2e));
+        line(q.x + r - 2, q.y - cu + 1, q.x + r - 2, q.y - top + 9, 2, hex(0x6b4a2e));
+        poly({{q.x - r - 4, q.y - top + 10}, {q.x, q.y - top}, {q.x + r + 4, q.y - top + 10}, {q.x, q.y - top + 16}}, sn ? hex(0xe8edf0) : hex(0x8a5e38));
     } else if (k == "store") {
         PrismOpt o; o.planks = true; o.door = true;
-        prism(x + .1f, y + .1f, w - .2f, h - .2f, 26, hex(0x8a5e38), sn ? hex(0xe4e9ec) : hex(0x6b4a2e), 18, o);
+        prism(x + .1f, y + .1f, w - .2f, h - .2f, px(scale::STORE_WALL), hex(0x8a5e38), sn ? hex(0xe4e9ec) : hex(0x6b4a2e), px(scale::STORE_ROOF), o);
     } else if (k == "smoke") {
         PrismOpt o; o.planks = true; o.door = true;
-        prism(x + .1f, y + .1f, w - .2f, h - .2f, 18, hex(0x7a5a3a), sn ? hex(0xe4e9ec) : hex(0x5a4030), 14, o);
-        if (b.done) { V2 q = P(x + w / 2, y + h / 2, 36); smoke(q.x, q.y, t, 4, 1); }
+        prism(x + .1f, y + .1f, w - .2f, h - .2f, px(scale::SMOKE_WALL), hex(0x7a5a3a), sn ? hex(0xe4e9ec) : hex(0x5a4030), px(scale::SMOKE_ROOF), o);
+        if (b.done) { V2 q = P(x + w / 2, y + h / 2, px(scale::SMOKE_WALL + scale::SMOKE_ROOF)); smoke(c, q.x, q.y, 4, 1); }
     } else if (k == "longhouse") {
         PrismOpt o; o.planks = true; o.door = true; o.thatch = true; o.hasWin = true;
         o.win = b.done && (c.hour >= 18 || c.hour < 6) ? rgba(255, 200, 110, .95f) : hex(0x3a2a1c);
-        prism(x + .1f, y + .15f, w - .2f, h - .3f, 24, hex(0x9a7a52), sn ? hex(0xe8edf0) : hex(0xc9a352), 30, o);
-        if (b.done && (c.hour >= 17 || c.hour < 8)) { V2 q = P(x + w * .7f, y + h / 2, 58); smoke(q.x, q.y, t, 3, 1); }
+        prism(x + .1f, y + .15f, w - .2f, h - .3f, px(scale::LONGHOUSE_WALL), hex(0x9a7a52), sn ? hex(0xe8edf0) : hex(0xc9a352), px(scale::LONGHOUSE_ROOF), o);
+        if (b.done && (c.hour >= 17 || c.hour < 8)) { V2 q = P(x + w * .7f, y + h / 2, px(scale::LONGHOUSE_WALL + scale::LONGHOUSE_ROOF)); smoke(c, q.x, q.y, 3, 1); }
     } else if (k == "school") {
         PrismOpt o; o.planks = true; o.door = true; o.hasWin = true; o.win = hex(0x3a2a1c);
-        prism(x + .15f, y + .15f, w - .3f, h - .3f, 22, hex(0xb98d5e), sn ? hex(0xe8edf0) : hex(0x8a4a3a), 20, o);
+        prism(x + .15f, y + .15f, w - .3f, h - .3f, px(scale::SCHOOL_WALL), hex(0xb98d5e), sn ? hex(0xe8edf0) : hex(0x8a4a3a), px(scale::SCHOOL_ROOF), o);
     } else if (k == "forge") {
         PrismOpt o; o.door = true; o.hasWin = true; o.win = b.done ? rgba(255, 140, 40, .95f) : hex(0x2e2116);
-        prism(x + .15f, y + .15f, w - .3f, h - .3f, 18, hex(0x8d8f88), sn ? hex(0xe4e9ec) : hex(0x5a4a3e), 12, o);
-        V2 q = P(x + w * .7f, y + h * .3f, 34);
-        rect(q.x - 4, q.y - 16, 8, 20, hex(0x6d6f69));
+        prism(x + .15f, y + .15f, w - .3f, h - .3f, px(scale::FORGE_WALL), hex(0x8d8f88), sn ? hex(0xe4e9ec) : hex(0x5a4a3e), px(scale::FORGE_ROOF), o);
+        // chimney from inside the roof up to its full height
+        V2 q = P(x + w * .7f, y + h * .3f, px(scale::FORGE_WALL));
+        float ch = px(scale::FORGE_CHIMNEY - scale::FORGE_WALL);
+        rect(q.x - 5, q.y - ch, 10, ch + 4, hex(0x6d6f69));
         if (b.done) {
-            smoke(q.x, q.y - 18, t, 4, 1);
+            smoke(c, q.x, q.y - ch - 2, 4, 1);
             V2 a = P(x + w + .4f, y + h * .55f);
             rect(a.x - 6, a.y - 8, 12, 3, hex(0x333333));
             rect(a.x - 2, a.y - 5, 4, 5, hex(0x333333));
@@ -352,16 +376,20 @@ void building(const Ctx& c, dw::Project& b) {
         }
     } else if (k == "mine") {
         V2 q = P(x + .5f, y + .5f);
+        push(q, px(scale::MINE_HILL) / 26.f);
         poly({{q.x - 22, q.y + 4}, {q.x - 15, q.y - 14}, {q.x, q.y - 26}, {q.x + 17, q.y - 14}, {q.x + 22, q.y + 4}}, s == 3 ? hex(0xa4aaae) : hex(0x7d7f78));
         poly({{q.x, q.y - 26}, {q.x + 17, q.y - 14}, {q.x + 22, q.y + 4}, {q.x + 4, q.y + 4}}, s == 3 ? hex(0xb9bfc2) : hex(0x8f918a));
         rect(q.x - 8, q.y - 14, 16, 17, hex(0x1d1b18));
         rect(q.x - 10, q.y - 16, 3, 19, hex(0x6b4a2e));
         rect(q.x + 7, q.y - 16, 3, 19, hex(0x6b4a2e));
         rect(q.x - 11, q.y - 18, 22, 3, hex(0x6b4a2e));
+        pop();
         V2 kc = P(x + 1.25f, y + .9f);
+        push(kc, 1.6f);
         rect(kc.x - 6, kc.y - 8, 12, 6, hex(0x5a3c22));
         circle(kc.x - 4, kc.y - 1, 2, hex(0x222222)); circle(kc.x + 4, kc.y - 1, 2, hex(0x222222));
         circle(kc.x - 2, kc.y - 9, 2.2f, hex(0x9a9d96)); circle(kc.x + 2, kc.y - 9.5f, 2, hex(0x8a8d86));
+        pop();
     } else if (k == "pottery") {
         foot(x + .1f, y + .1f, w - .2f, h - .2f, rgba(150, 110, 70, .35f));
         V2 q = P(x + .9f, y + .9f);
@@ -376,16 +404,16 @@ void building(const Ctx& c, dw::Project& b) {
         auto mouth = arc(q.x - 6, q.y + 2, 5, 6, 3.14159f, 6.283f, 10);
         mouth.insert(mouth.begin(), {q.x - 6, q.y});
         polyV(mouth, b.done ? rgba(255, 130, 40, .9f) : hex(0x2e2116));
-        if (b.done) smoke(q.x, q.y - 36, t, 3, .8f);
+        if (b.done) smoke(c, q.x, q.y - 36, 3, .8f);
         const uint32_t pc[3] = {0xb8683e, 0xa85a34, 0xc98a5a};
         for (int i = 0; i < 3; i++) { V2 pp = P(x + 1.5f + i * .15f, y + 1.6f - i * .2f); ellipse(pp.x, pp.y - 4, 3.5f, 5, hex(pc[i])); rect(pp.x - 2, pp.y - 10, 4, 2, hex(pc[i])); }
     } else if (k == "loomhouse") {
         PrismOpt o; o.door = true; o.planks = true;
-        prism(x + .15f, y + .15f, w - .3f, h - .3f, 22, hex(0xa88a5e), sn ? hex(0xe8edf0) : hex(0x7a5a8a), 18, o);
+        prism(x + .15f, y + .15f, w - .3f, h - .3f, px(scale::LOOM_WALL), hex(0xa88a5e), sn ? hex(0xe8edf0) : hex(0x7a5a8a), px(scale::LOOM_ROOF), o);
         if (b.done) { const uint32_t cl[4] = {0xc8553d, 0xe0b13a, 0x3d7ec8, 0x2fa39b}; for (int i = 0; i < 4; i++) { V2 q = P(x + w + .15f, y + .3f + i * .38f); rect(q.x - 2, q.y - 18, 4, 14 + std::sin(float(t * .04 + i)) * 1.5f, hex(cl[i])); } }
     } else if (k == "infirmary") {
         PrismOpt o; o.door = true; o.hasWin = true; o.win = hex(0x4f8a4a);
-        prism(x + .15f, y + .15f, w - .3f, h - .3f, 22, hex(0xd6cfbd), sn ? hex(0xe8edf0) : hex(0x6f8a5e), 18, o);
+        prism(x + .15f, y + .15f, w - .3f, h - .3f, px(scale::INFIRMARY_WALL), hex(0xd6cfbd), sn ? hex(0xe8edf0) : hex(0x6f8a5e), px(scale::INFIRMARY_ROOF), o);
     } else if (k == "dock") {
         for (int i = 0; i < 3; i++) {
             float tx = x + b.dx * i, ty = y + b.dy * i;
@@ -396,6 +424,7 @@ void building(const Ctx& c, dw::Project& b) {
     } else if (k == "tower") {
         V2 q = P(x + .5f, y + .5f);
         Color wd = hex(0x6b4a2e);
+        push(q, px(scale::TOWER) / 92.f);
         ellipse(q.x + 4, q.y + 2, 12, 5, rgba(30, 30, 20, .28f));
         line(q.x - 10, q.y, q.x - 7, q.y - 64, 2.6f, wd); line(q.x + 10, q.y, q.x + 7, q.y - 64, 2.6f, wd); line(q.x, q.y + 5, q.x, q.y - 62, 2.6f, wd);
         for (int i = 0; i < 5; i++) line(q.x - 10 + i * .6f, q.y - i * 12, q.x + 9 - i * .6f, q.y - i * 12 - 12, 1.2f, wd);
@@ -403,13 +432,17 @@ void building(const Ctx& c, dw::Project& b) {
         poly({{q.x - 15, q.y - 78}, {q.x, q.y - 92}, {q.x + 15, q.y - 78}, {q.x, q.y - 72}}, sn ? hex(0xe8edf0) : wd);
         line(q.x - 12, q.y - 65, q.x - 12, q.y - 78, 1.2f, wd); line(q.x + 12, q.y - 65, q.x + 12, q.y - 78, 1.2f, wd);
         if (b.done && night) circle(q.x + 10, q.y - 72, 2.5f, hex(0xffd27a));
+        pop();
     } else if (k == "signal") {
         V2 q = P(x + .5f, y + .5f);
+        push(q, px(scale::SIGNAL) / 26.f);
         ellipse(q.x + 3, q.y + 2, 14, 6, rgba(30, 30, 20, .28f));
         for (int l = 0; l < 5; l++) { float ww = 14 - l * 2.4f; poly({{q.x - ww, q.y - l * 5}, {q.x + ww, q.y - l * 5 - 3}, {q.x + ww, q.y - l * 5 - 6}, {q.x - ww, q.y - l * 5 - 3}}, l % 2 ? hex(0x6b4a2e) : hex(0x8a5e38)); }
-        if (b.done) { flame(q.x, q.y - 24, 1.3f, t); smoke(q.x, q.y - 36, t, 5, 1.6f); }
+        if (b.done) { flame(c, q.x, q.y - 24, 1.3f); smoke(c, q.x, q.y - 36, 5, 1.6f); }
+        pop();
     } else if (k == "lighthouse") {
         V2 q = P(x + .5f, y + .5f);
+        push(q, px(scale::LIGHTHOUSE) / 103.f);
         ellipse(q.x + 4, q.y + 2, 14, 6, rgba(30, 30, 20, .28f));
         poly({{q.x - 11, q.y}, {q.x - 7, q.y - 80}, {q.x + 7, q.y - 80}, {q.x + 11, q.y}}, hex(0xe9e6dc));
         rect(q.x - 9.5f, q.y - 30, 19, 8, hex(0xb8434a));
@@ -418,24 +451,29 @@ void building(const Ctx& c, dw::Project& b) {
         rect(q.x - 9, q.y - 84, 18, 4, hex(0x3a3a3a));
         circle(q.x, q.y - 89, 6, b.done ? hex(0xffd27a) : hex(0x666666));
         tri({q.x - 9, q.y - 94}, {q.x, q.y - 103}, {q.x + 9, q.y - 94}, hex(0x3a3a3a));
+        pop();
     } else if (k == "shrine") {
         std::vector<std::pair<float, float>> st = {{.3f, .3f}, {1.7f, .3f}, {1.7f, 1.7f}, {.3f, 1.7f}, {1, .15f}, {1.85f, 1}, {1, 1.85f}, {.15f, 1}};
         std::sort(st.begin(), st.end(), [](auto& a, auto& b2) { return a.first + a.second < b2.first + b2.second; });
         foot(x + .3f, y + .3f, 1.4f, 1.4f, s == 3 ? rgba(255, 255, 255, .4f) : rgba(120, 140, 100, .4f));
         for (auto [sx, sy] : st) {
             V2 q = P(x + sx, y + sy);
+            push(q, px(scale::SHRINE_STONE) / 20.f);
             poly({{q.x - 4, q.y}, {q.x - 3.5f, q.y - 18}, {q.x + 3, q.y - 20}, {q.x + 4, q.y}}, hex(0x8d918a));
             poly({{q.x, q.y}, {q.x + .5f, q.y - 19}, {q.x + 3, q.y - 20}, {q.x + 4, q.y}}, hex(0xa7aba3));
+            pop();
         }
         if (b.done) { V2 q = P(x + 1, y + 1); radial(q.x, q.y - 6, 18, 18, rgba(190, 150, 255, .55f), rgba(190, 150, 255, 0)); }
     } else if (k == "boatyard") {
         foot(x, y, w, h, rgba(120, 90, 50, .3f));
         V2 q = P(x + 1, y + 1);
         Color wd = hex(0x6b4a2e);
+        push(q, px(scale::MAST) / 34.f);
         line(q.x - 18, q.y + 2, q.x - 18, q.y - 14, 2, wd); line(q.x + 18, q.y - 6, q.x + 18, q.y - 22, 2, wd); line(q.x - 19, q.y - 13, q.x + 19, q.y - 21, 2, wd);
         poly({{q.x - 16, q.y - 2}, {q.x + 14, q.y - 10}, {q.x + 10, q.y - 2}, {q.x - 12, q.y + 4}}, hex(0x7a5434));
         line(q.x - 1, q.y - 4, q.x, q.y - 34, 1.5f, hex(0x5a3c22));
         if (b.done) tri({q.x, q.y - 33}, {q.x + 12, q.y - 12}, {q.x, q.y - 10}, hex(0xefe8d6));
+        pop();
     } else if (k == "bath") {
         foot(x + .15f, y + .15f, w - .3f, h - .3f, hex(0x8d918a));
         foot(x + .4f, y + .4f, w - .8f, h - .8f, s == 3 ? hex(0x7fb3c4) : hex(0x5fa7b8), 2);
@@ -443,7 +481,7 @@ void building(const Ctx& c, dw::Project& b) {
     }
     draw::alpha = savedA;
     if (!b.done && b.progress > 0) {
-        V2 q = P(x + w / 2, y + h / 2, std::max(30.f, w * 16));
+        V2 q = P(x + w / 2, y + h / 2, std::max(px(5.5f), w * 16));
         rect(q.x - 16, q.y - 3, 32, 5, rgba(20, 20, 20, .45f));
         rect(q.x - 16, q.y - 3, 32 * prog, 5, hex(0xf2b84b));
     }
@@ -456,16 +494,19 @@ void poi(const Ctx& c, const dw::Poi& p) {
     if (p.type == "hermit" && !p.joined) {
         ellipse(x + 4, y + 2, 16, 6, rgba(30, 30, 20, .28f));
         PrismOpt o; o.door = true;
-        prism(p.x + .15f, p.y + .2f, .7f, .6f, 12, hex(0x7a6546), s == 3 ? hex(0xdfe5e8) : hex(0x5a7a40), 12, o);
-        V2 sm = P(p.x + .5f, p.y + .5f, 30);
-        smoke(sm.x, sm.y, c.t, 2, .7f);
+        prism(p.x + .15f, p.y + .2f, .7f, .6f, px(scale::HERMIT_WALL), hex(0x7a6546), s == 3 ? hex(0xdfe5e8) : hex(0x5a7a40), px(scale::HERMIT_ROOF), o);
+        V2 sm = P(p.x + .5f, p.y + .5f, px(scale::HERMIT_WALL + scale::HERMIT_ROOF));
+        smoke(c, sm.x, sm.y, 2, .7f);
     } else if (p.type == "cave") {
+        push(q, px(scale::MINE_HILL) / 24.f);
         poly({{x - 20, y + 2}, {x - 14, y - 16}, {x, y - 24}, {x + 16, y - 16}, {x + 20, y + 2}}, s == 3 ? hex(0xa4aaae) : hex(0x7d7f78));
         auto m = arc(x, y - 2, 8, 10, 3.14159f, 6.283f, 10);
         m.insert(m.begin(), {x, y});
         polyV(m, hex(0x1d1b18));
         rect(x - 8, y - 2, 16, 3, hex(0x1d1b18));
+        pop();
     } else if (p.type == "ruins") {
+        push(q, 1.6f);
         float cols[4][3] = {{-.3f, -.3f, 18}, {.3f, -.2f, 10}, {-.2f, .3f, 24}, {.35f, .35f, 7}};
         for (auto& cc : cols) {
             V2 pp = P(p.x + .5f + cc[0], p.y + .5f + cc[1]);
@@ -473,10 +514,13 @@ void poi(const Ctx& c, const dw::Poi& p) {
             rect(pp.x - 4, pp.y - cc[2] - 2, 8, 3, hex(0xd0cbbd));
         }
         rect(x - 14, y - 4, 8, 3, rgba(80, 120, 60, .6f));
+        pop();
     } else if (p.type == "wreck") {
+        push(q, 2.f);
         poly({{x - 22, y}, {x + 18, y - 12}, {x + 14, y - 2}, {x - 16, y + 6}}, hex(0x5a4030));
         poly({{x - 22, y}, {x + 18, y - 12}, {x + 16, y - 18}, {x - 18, y - 6}}, hex(0x3e2c1f));
         line(x - 2, y - 6, x + 6, y - 34, 2, hex(0x3e2c1f));
+        pop();
     }
 }
 
@@ -488,10 +532,9 @@ static void note(float x, float y, Color c) {
 void person(const Ctx& c, const dw::Person& p, bool selected) {
     if (p.hidden || p.dead) return;
     V2 o = wp(p.x, p.y);
-    float k = p.child ? .72f : 1.05f;
-    rlPushMatrix();
-    rlTranslatef(o.x, o.y, 0);
-    rlScalef(k, k, 1);
+    // drawn around the feet at (0,0); the art is 25.2 units from feet to the top of the hair
+    float k = px(p.child ? scale::CHILD : scale::PERSON) / 25.2f;
+    push(o, k, {0, 0});
     Color tunic = hex(p.tunic), skin = hex(p.skin), hair = hex(p.hair);
     if (selected) ring(0, 0, 12, 6, 1.8f, hex(0xffd27a));
     if (p.sleeping) {
@@ -502,7 +545,7 @@ void person(const Ctx& c, const dw::Person& p, bool selected) {
         auto h = arc(-7.5f, .5f, 3.9f, 3.9f, 1.25f, 4.4f, 10);
         h.insert(h.begin(), {-7.5f, .5f});
         polyV(h, hair);
-        rlPopMatrix();
+        pop();
         return;
     }
     ellipse(0, 0, 7, 3, rgba(20, 30, 20, .3f));
@@ -574,14 +617,14 @@ void person(const Ctx& c, const dw::Person& p, bool selected) {
     }
     if (p.sick > 0) circle(0, hy - 9, 1.5f, hex(0x7fbf6a));
     if (p.whisper && p.whisper->until > c.sim->tMin) poly({{0, hy - 12}, {2, hy - 9}, {0, hy - 6}, {-2, hy - 9}}, rgba(185, 154, 230, .9f));
-    rlPopMatrix();
+    pop();
 }
 
 void wolf(const Ctx&, const dw::Wolf& w) {
     V2 o = wp(w.x, w.y);
     float f = float(w.face), l = std::sin(w.ph) * 2.5f;
-    rlPushMatrix();
-    rlTranslatef(o.x, o.y, 0);
+    // drawn around the paws at (0,0); the back is 12.5 units up
+    push(o, px(scale::WOLF) / 12.5f, {0, 0});
     Color fur = hex(0x6b6b73), dark = hex(0x4f4f55);
     ellipse(0, 0, 11, 3.5f, rgba(10, 10, 10, .3f));
     line(-6, -6, -6 + l, 0, 2, dark); line(6, -6, 6 - l, 0, 2, dark);
@@ -591,7 +634,7 @@ void wolf(const Ctx&, const dw::Wolf& w) {
     tri({f * 13, -11}, {f * 17, -10}, {f * 13, -8.5f}, fur);
     curve({-f * 8, -9}, {-f * 14, -12}, {-f * 15, -6}, 3, fur);
     circle(f * 12, -12, .9f, hex(0xffd27a));
-    rlPopMatrix();
+    pop();
 }
 
 } // namespace art
