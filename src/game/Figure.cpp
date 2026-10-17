@@ -5,6 +5,7 @@
 #include "engine/Draw.h"
 #include "game/Iso.h"
 #include "game/Scale.h"
+#include "game/Solid.h"
 
 namespace figure {
 
@@ -12,18 +13,12 @@ using draw::V2;
 
 namespace {
 
-struct V3 { float x, y, z; };   // metres: x and y along the tile axes, z up
-V3 operator+(V3 a, V3 b) { return {a.x + b.x, a.y + b.y, a.z + b.z}; }
-V3 operator-(V3 a, V3 b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
-V3 operator*(V3 a, float k) { return {a.x * k, a.y * k, a.z * k}; }
-float dot(V3 a, V3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
-V3 cross(V3 a, V3 b) { return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x}; }
-V3 unit(V3 a) { float l = std::sqrt(dot(a, a)); return l > 1e-6f ? a * (1 / l) : V3{0, 0, 1}; }
-
-// Toward the camera, in metres: the direction that projects to a single pixel.
-const V3 VIEW = unit({1, 1, 16.f / 17.f});
-// Light from the upper left of the screen: tops brightest, left faces next.
-const V3 LIGHT = unit({.2f, .6f, 1.f});
+using solid::V3;
+using solid::dot;
+using solid::cross;
+using solid::unit;
+using solid::VIEW;
+using solid::project;
 
 Color tone(Color c, float k) { return draw::shade(c, k); }
 
@@ -55,27 +50,9 @@ struct Rig {
     }
 };
 
-V2 project(V3 p) { return iso::P(p.x / scale::TILE_M, p.y / scale::TILE_M, p.z * scale::PX_PER_M); }
 
-void drawBox(const Box& bx, const Rig& rig) {
-    V3 len = bx.b - bx.a, ax = unit(len);
-    // keep the box square to the body: its width runs along the figure's side
-    V3 sd = unit(rig.side - ax * dot(rig.side, ax)), dp = cross(ax, sd);
-    if (dot(len, len) < 1e-8f) { ax = {0, 0, 1}; sd = rig.side; dp = rig.fwd; }
-    V3 c = (bx.a + bx.b) * .5f;
-    float hl = std::sqrt(dot(len, len)) / 2, hw = bx.w / 2, hd = bx.d / 2;
-    struct Face { V3 n; V3 u, v; float hu, hv, hn; };
-    Face faces[6] = {{ax, sd, dp, hw, hd, hl}, {ax * -1, sd, dp, hw, hd, hl}, {sd, ax, dp, hl, hd, hw},
-                     {sd * -1, ax, dp, hl, hd, hw}, {dp, ax, sd, hl, hw, hd}, {dp * -1, ax, sd, hl, hw, hd}};
-    for (auto& f : faces) {
-        V3 n = rig.turn(f.n);
-        if (dot(n, VIEW) <= 0) continue;
-        V3 o = c + f.n * f.hn;
-        auto P = [&](V3 p) { return project(rig.place(p)); };
-        V2 q[4] = {P(o + f.u * f.hu + f.v * f.hv), P(o - f.u * f.hu + f.v * f.hv), P(o - f.u * f.hu - f.v * f.hv), P(o + f.u * f.hu - f.v * f.hv)};
-        float k = .72f + .34f * std::max(0.f, dot(n, LIGHT));
-        draw::poly(q, 4, tone(bx.c, k));
-    }
+void drawBox(const Box& bx, const Rig& rig, const solid::Warp& warp) {
+    solid::draw(solid::along(bx.a, bx.b, bx.w, bx.d, rig.side, bx.c), &warp);
 }
 
 // A flat patch on a box face, for eyes, brows and the mouth: offsets in metres
@@ -394,9 +371,11 @@ void draw(float x, float y, Facing f, const Look& L, const Pose& P, int detail) 
     draw::Ink inkWas = draw::ink;
     draw::ink.width = 0;
     // far parts first: sort by how close each box's middle is to the camera
+    solid::Warp warp;
+    if (rig.lying) { warp.place = [&rig](V3 p) { return rig.place(p); }; warp.turn = [&rig](V3 n) { return rig.turn(n); }; }
     std::stable_sort(boxes.begin(), boxes.end(), [&](const Box& a, const Box& b) { return dot(rig.place((a.a + a.b) * .5f), VIEW) < dot(rig.place((b.a + b.b) * .5f), VIEW); });
     for (auto& b : boxes) {
-        drawBox(b, rig);
+        drawBox(b, rig, warp);
         if (b.decal == 0 && detail && dot(rig.turn(rig.fwd), VIEW) > 0) {
             // the face, on the front of the head
             V3 c = (b.a + b.b) * .5f + rig.fwd * (hd / 2);
