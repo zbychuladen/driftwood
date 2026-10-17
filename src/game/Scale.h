@@ -43,6 +43,7 @@ constexpr float FORGE_WALL = 2.5f, FORGE_ROOF = 1.3f, FORGE_CHIMNEY = 5.f;
 constexpr float LOOM_WALL = 2.5f, LOOM_ROOF = 1.6f;
 constexpr float INFIRMARY_WALL = 2.5f, INFIRMARY_ROOF = 1.8f;
 constexpr float HERMIT_WALL = 2.2f, HERMIT_ROOF = 1.4f;
+constexpr float COOK_WALL = 2.5f, COOK_ROOF = 1.8f;
 constexpr float KILN = 2.f;
 constexpr float TOWER = 8.5f;         // to the roof peak
 constexpr float LIGHTHOUSE = 11.f;

@@ -247,7 +247,7 @@ void Sim::newWorld(uint32_t s) {
     pondShore = shoreTiles(true);
     seaShore = shoreTiles(false);
     if (pondShore.empty()) pondShore = seaShore;
-    for (auto& k : {"fire","leanto","rack","hut","garden","hut","well","store","forge","hut","dock","herbs","mine","longhouse","pottery","loomhouse","fields","tower"})
+    for (auto& k : {"fire","leanto","rack","hut","garden","hut","well","store","cookhouse","forge","hut","dock","herbs","mine","longhouse","pottery","loomhouse","fields","tower"})
         mkProj(*projectDef(k));
 
     // the castaways

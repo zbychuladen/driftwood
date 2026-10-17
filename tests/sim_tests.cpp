@@ -1,6 +1,7 @@
 // Headless simulation tests. No framework needed: each check prints and
 // counts failures; the process exit code is the number of failures.
 #include <cmath>
+#include <algorithm>
 #include <cstdio>
 #include <set>
 #include <string>
@@ -173,6 +174,149 @@ static void testSaving() {
     CHECK(newer, "a save from a newer version is refused with a reason");
 }
 
+// ---------------------------------------------------------------- building sites
+static Project* projectNamed(Sim& s, const char* key) { for (auto& b : s.plan) if (b.key == key) return &b; return nullptr; }
+
+// Every legal spot for a building within a radius of camp, with its report.
+static std::vector<std::pair<std::pair<int, int>, SiteReport>> sites(Sim& s, const ProjectDef& d, int radius) {
+    std::vector<std::pair<std::pair<int, int>, SiteReport>> out;
+    for (int y = s.campY - radius; y <= s.campY + radius; y++) for (int x = s.campX - radius; x <= s.campX + radius; x++) {
+        SiteReport r = s.evaluateSite(d, x, y);
+        if (r.legal) out.push_back({{x, y}, r});
+    }
+    return out;
+}
+
+static bool mentions(const SiteReport& r, const char* id) { for (auto& f : r.factors) if (f.id == id) return true; return false; }
+
+static void testSites() {
+    std::printf("building sites\n");
+    Sim s;
+    s.newWorld(20261017);
+    runDays(s, 45);
+    // the forge: a spot beside the huts against one with stone and no homes near
+    Project* forge = projectNamed(s, "forge");
+    auto forgeSites = sites(s, *forge, 22);
+    const SiteReport *byHomes = nullptr, *byStone = nullptr;
+    for (auto& [at, r] : forgeSites) {
+        if (!byHomes && mentions(r, "homes")) byHomes = &r;
+        if (!byStone && mentions(r, "stone") && !mentions(r, "homes")) byStone = &r;
+    }
+    CHECK(byHomes && byStone && byStone->quality > byHomes->quality, "a forge with stone at hand beats one beside the homes");
+    // the well: by fresh water against by the sea
+    Project* well = projectNamed(s, "well");
+    const SiteReport *sweet = nullptr, *salty = nullptr;
+    for (auto& [at, r] : sites(s, *well, 25)) {
+        if (!sweet && mentions(r, "easydig") && !mentions(r, "brackish")) sweet = &r;
+        if (!salty && mentions(r, "brackish")) salty = &r;
+    }
+    CHECK(sweet && salty && sweet->quality > salty->quality, "a well by fresh water beats one by the sea");
+    // spots that are not allowed: in the sea, on another building, unexplored
+    int seaX = 0, seaY = 0, darkX = -1, darkY = -1;
+    for (int y = 0; y < GH && darkX < 0; y++) for (int x = 0; x < GW; x++) if (s.tt[Sim::idx(x, y)] >= 3 && !s.explored[Sim::idx(x, y)]) { darkX = x; darkY = y; break; }
+    Project* someBuilt = nullptr;
+    for (auto& b : s.plan) if (b.done && b.w >= 2) { someBuilt = &b; break; }
+    CHECK(!s.evaluateSite(*forge, seaX, seaY).legal && (darkX < 0 || !s.evaluateSite(*forge, darkX, darkY).legal) && someBuilt && !s.evaluateSite(*forge, someBuilt->x, someBuilt->y).legal,
+          "the sea, an unexplored tile and another building's ground are refused");
+    bool allNamed = true;
+    for (auto& [at, r] : forgeSites) for (auto& f : r.factors) if (f.text.size() < 6) allNamed = false;
+    CHECK(allNamed && !forgeSites.empty(), "every reason a spot is good or bad is put in words");
+
+    // judgement: a master smith reads forge sites better than someone who knows nothing of smithing
+    auto m = s.members();
+    Person *expert = m[0], *novice = m[1];
+    expert->gifts["smith"] = 9; expert->sk["build"] = 6;
+    novice->gifts.erase("smith"); novice->sk["build"] = 1;
+    double errE = 0, errN = 0;
+    int n = 0;
+    for (size_t i = 0; i < forgeSites.size() && n < 200; i += std::max<size_t>(1, forgeSites.size() / 200), n++) {
+        auto [x, y] = forgeSites[i].first;
+        float truth = forgeSites[i].second.quality;
+        for (auto& o : s.opinions(*forge, x, y)) {
+            if (o.pid == expert->id) errE += std::abs(o.perceived - truth);
+            if (o.pid == novice->id) errN += std::abs(o.perceived - truth);
+        }
+    }
+    CHECK(n > 50 && errE * 3 < errN, cat("a master smith misjudges forge sites far less than a novice (", int(errE / n * 1000), " vs ", int(errN / n * 1000), " thousandths)").c_str());
+    // the settlers' own choice is never a poor one
+    std::string poor;
+    for (const char* key : {"forge", "well", "store", "pottery", "school", "cookhouse"}) {
+        Project* b = projectNamed(s, key);
+        if (!b) continue;
+        auto all = sites(s, *b, 20);
+        auto pickIt = s.suggestSite(*b);
+        if (all.empty() || !pickIt) continue;
+        std::vector<float> qs;
+        for (auto& [at, r] : all) qs.push_back(r.quality);
+        std::sort(qs.begin(), qs.end());
+        float chosen = s.evaluateSite(*b, pickIt->first, pickIt->second).quality;
+        if (chosen < qs[qs.size() / 2]) poor += std::string(" ") + key;
+    }
+    CHECK(poor.empty(), ("the settlers' own pick is never below the median spot" + poor).c_str());
+}
+
+static void testPlacementPause() {
+    std::printf("placing a building\n");
+    Sim s;
+    s.newWorld(20261017);
+    s.askPlacement = true;
+    int guard = 0;
+    while (!s.pendingPlacement && guard++ < 24 * 120) { s.step(60); if (!s.pendingFate.empty()) { auto f = s.pendingFate[0]; s.pendingFate.clear(); s.applyFate(f); } }
+    CHECK(s.pendingPlacement.has_value(), "a specialist building comes up for the narrator to place");
+    if (!s.pendingPlacement) return;
+    double t = s.tMin;
+    s.step(600);
+    CHECK(s.tMin == t, "the game stands still while the spot is chosen");
+    // the choice survives saving
+    Sim copy;
+    copy.load(s.save());
+    CHECK(copy.pendingPlacement && copy.pendingPlacement->project == s.pendingPlacement->project, "a pending placement survives a save");
+    int id = s.pendingPlacement->project;
+    CHECK(!s.placeAt(id, 0, 0), "a spot in the sea is refused");
+    Project* b = s.projectById(id);
+    // choose the worst legal spot on purpose, then see it recorded
+    auto all = sites(s, *b, 20);
+    auto worst = std::min_element(all.begin(), all.end(), [](auto& a, auto& c) { return a.second.quality < c.second.quality; });
+    CHECK(worst != all.end() && s.placeAt(id, worst->first.first, worst->first.second) && b->placed && b->sited && std::abs(b->siteQuality - worst->second.quality) < 1e-4f,
+          "the narrator's spot is used, and its quality kept");
+    s.step(120);
+    CHECK(!s.pendingPlacement && s.tMin > t, "the game goes on once the spot is chosen");
+}
+
+// Two runs from the same point, one with a building in a good spot and one in a bad spot.
+template <class F> static void paired(const char* key, float good, float bad, int days, F measure, float& g, float& b) {
+    for (int pass = 0; pass < 2; pass++) {
+        Sim s;
+        s.newWorld(20261017);
+        runDays(s, 25);
+        Project* p = projectNamed(s, key);
+        if (!p) return;
+        if (!p->placed) { auto at = s.suggestSite(*p); if (!at) return; s.placeAt(p->id, at->first, at->second); }
+        p->done = true;
+        p->progress = float(p->work);
+        if (s.active == p->id) s.active = -1;
+        p->siteQuality = pass == 0 ? good : bad;
+        float total = 0;
+        for (int h = 0; h < days * 24; h++) {
+            s.step(60);
+            if (!s.pendingFate.empty()) { auto f = s.pendingFate[0]; s.pendingFate.clear(); s.applyFate(f); }
+            total += measure(s);
+        }
+        (pass == 0 ? g : b) = total / (days * 24);
+    }
+}
+
+static void testSiteEffects() {
+    std::printf("good and bad spots\n");
+    float g = 0, b = 0;
+    paired("cookhouse", 1.2f, .7f, 20, [](Sim& s) { float h = 0; int n = 0; for (auto* p : s.members()) { h += p->needs.hunger; n++; } return n ? h / n : 0; }, g, b);
+    CHECK(g > 0 && g < b, cat("people are less hungry with a well-placed cookhouse (", int(g), " vs ", int(b), ")").c_str());
+    paired("store", 1.2f, .7f, 30, [](Sim& s) { return s.stock.food; }, g, b);
+    CHECK(g > b, cat("a well-placed store keeps more food (", int(g), " vs ", int(b), " on average)").c_str());
+    paired("well", 1.2f, .7f, 20, [](Sim& s) { float t = 0; int n = 0; for (auto* p : s.members()) { t += p->needs.thirst; n++; } return n ? t / n : 0; }, g, b);
+    CHECK(g < b, cat("people are less thirsty with a well in a good spot (", int(g), " vs ", int(b), ")").c_str());
+}
+
 int main() {
     for (uint32_t seed : {20261017u, 777u, 4242u}) testSurvival(seed);
     testNoSmithNoForge();
@@ -182,6 +326,9 @@ int main() {
     testFocus(20261017);
     testFocus(777);
     testSaving();
+    testSites();
+    testPlacementPause();
+    testSiteEffects();
     std::printf(failures ? "\n%d check(s) failed\n" : "\nall checks passed\n", failures);
     return failures;
 }

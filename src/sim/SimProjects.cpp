@@ -40,6 +40,7 @@ float Sim::needOf(const std::string& k) {
     if (k == "infirmary") return pop > 10 ? .5f : .2f;
     if (k == "signal" || k == "boatyard") return .3f;
     if (k == "smoke") return .35f;
+    if (k == "cookhouse") return pop >= 6 ? .55f : .2f;
     return .25f;
 }
 
@@ -96,18 +97,27 @@ Project* Sim::currentProject() {
         int i = 0;
         for (auto& b : plan) { float sc = projScore(b, i++); if (sc > bs) { bs = sc; best = &b; } }
         if (!best) { active = -1; return nullptr; }
+        if (!best->placed && specialist(*best)) {
+            // a specialist building: the narrator chooses the spot when asked to, otherwise the settlers do
+            auto s = suggestSite(*best);
+            if (!s) {
+                if (!best->waitNoted) { best->waitNoted = true; note(cat("There is no good spot for the ", lower(best->name), " yet. It will have to wait until more land is cleared or explored.")); }
+                best->wait = day() + 3;
+                continue;
+            }
+            if (askPlacement) {
+                if (!pendingPlacement) pendingPlacement = PendingPlacement{best->id, s->first, s->second};
+                return nullptr;   // nothing to build until the spot is chosen
+            }
+            placeAt(best->id, s->first, s->second);
+            return best;
+        }
         if (!best->placed && !place(*best)) {
             if (!best->waitNoted) { best->waitNoted = true; note(cat("There is no good spot for the ", lower(best->name), " yet. It will have to wait until more land is cleared or explored.")); }
             best->wait = day() + 3;
             continue;
         }
-        active = best->id;
-        auto ch = champion(*best);
-        float nd = needOf(best->key) * 2;
-        if (ch && ch->push > nd && ch->push > .9f)
-            note(cat(ch->p->name, ", our ", lower(giftInfo().at(best->gift).n), ", talked everyone into starting a ", lower(best->name), " next. When ", ch->p->name, " speaks, people listen."));
-        else if (ch)
-            note(cat("Work began on a ", lower(best->name), ", with ", ch->p->name, " leading the way."));
+        startProject(*best);
         return best;
     }
     return nullptr;
@@ -238,8 +248,19 @@ float Sim::giftBuild(Person& p, Project& b) {
     return f;
 }
 
+void Sim::startProject(Project& b) {
+    active = b.id;
+    auto ch = champion(b);
+    float nd = needOf(b.key) * 2;
+    if (ch && ch->push > nd && ch->push > .9f)
+        note(cat(ch->p->name, ", our ", lower(giftInfo().at(b.gift).n), ", talked everyone into starting a ", lower(b.name), " next. When ", ch->p->name, " speaks, people listen."));
+    else if (ch)
+        note(cat("Work began on a ", lower(b.name), ", with ", ch->p->name, " leading the way."));
+}
+
 void Sim::finish(Project& b) {
     b.done = true;
+    if (specialist(b)) siteJudged(b, true);
     if (active == b.id) active = -1;
     b.holderAtFinish = giftOk(b);
     std::vector<Person*> ws;
@@ -268,7 +289,8 @@ void Sim::finish(Project& b) {
         {"mine", " opened a mine into the hillside, propped up with timbers. Good stone, and plenty of it."},
         {"pottery", " built a beehive kiln. Soon there will be pots, jars and bowls."},
         {"loomhouse", " finished the loom house. Bundles of fiber hang from every rafter."},
-        {"infirmary", " finished the infirmary: clean beds, dried herbs, and quiet."}};
+        {"infirmary", " finished the infirmary: clean beds, dried herbs, and quiet."},
+        {"cookhouse", " finished the cookhouse. A proper hearth, a long table, and something always simmering."}};
     if (b.key == "fire") b.fuel = 3;
     if (b.key == "signal" || b.key == "lighthouse") b.fuel = 99;
     if (b.key == "longhouse") {

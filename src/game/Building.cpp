@@ -211,7 +211,7 @@ V3 cross2(V3 v) { return {-v.y, v.x, 0}; }
 } // namespace
 
 bool assembled(const std::string& k) {
-    static const char* keys[] = {"hut", "leanto", "longhouse", "store", "school", "forge", "smoke", "loomhouse", "infirmary",
+    static const char* keys[] = {"hut", "leanto", "longhouse", "store", "school", "forge", "smoke", "loomhouse", "infirmary", "cookhouse",
                                  "well", "rack", "tower", "lighthouse", "signal", "mine", "dock", "shrine", "pottery", "boatyard"};
     for (auto s : keys) if (k == s) return true;
     return false;
@@ -571,6 +571,7 @@ Design make(const std::string& key, int id, int x, int y, int w, int h, int fron
         else if (key == "smoke") R = {scale::SMOKE_WALL, scale::SMOKE_ROOF, {&BOARDS, &PLANKS}, {&PLANKROOF, &THATCH}, 0, 0, 2, false, true, false, false};
         else if (key == "loomhouse") R = {scale::LOOM_WALL, scale::LOOM_ROOF, {&TIMBER, &DAUB, &PLANKS}, {&THATCH, &SHINGLE}, 2, 3, 0, false, false, false, true};
         else if (key == "infirmary") R = {scale::INFIRMARY_WALL, scale::INFIRMARY_ROOF, {&DAUB, &TIMBER}, {&SHINGLE, &SLATE}, 2, 4, 0, false, false, false, true};
+        else if (key == "cookhouse") R = {scale::COOK_WALL, scale::COOK_ROOF, {&PLANKS, &TIMBER, &STONE}, {&SHINGLE, &THATCH, &PLANKROOF}, 1, 3, -1, false, false, false, true};
         else R = {scale::HUT_WALL, scale::HUT_ROOF, {&DAUB, &BOARDS}, {&THATCH}, 1, 2, 1, false, false, false, false};   // a square cottage hut
         const Mat& wm = *R.walls[r.pick(int(R.walls.size()))];
         const Mat& rm = *R.roofs[r.pick(int(R.roofs.size()))];
@@ -602,7 +603,7 @@ Design make(const std::string& key, int id, int x, int y, int w, int h, int fron
         b.roof(kind, rm, R.roofH, rm.tex == solid::THATCH ? .45f : .32f, wm);
         if (R.chimney) b.chimney(scale::FORGE_CHIMNEY - R.wall, r.chance(.5f) ? -.55f : .55f);
         else if (R.holeOk && (key == "smoke" || r.chance(.5f))) b.smokeHole(R.roofH);
-        else if (key == "longhouse") b.chimney(R.roofH + .15f, r.chance(.5f) ? -.6f : .6f);
+        else if (key == "longhouse" || key == "cookhouse") b.chimney(R.roofH + .15f, r.chance(.5f) ? -.6f : .6f);
         if (R.porchOk && r.chance(.55f)) b.porch(front, along, doorW);
         // a few things outside, beside the walls and clear of the door
         int extras = key == "store" ? 2 + r.pick(2) : r.pick(3);
@@ -611,7 +612,7 @@ Design make(const std::string& key, int id, int x, int y, int w, int h, int fron
             if (side == 3 - front) side = front;
             float a = (r.chance(.5f) ? -1 : 1) * (b.across(side) - .35f);
             if (side == front && std::abs(a - along) < doorW / 2 + .6f) a = -a;
-            int kind2 = key == "store" ? r.pick(2) : key == "longhouse" || key == "smoke" ? 2 * r.pick(2) : r.pick(4);
+            int kind2 = key == "store" || key == "cookhouse" ? r.pick(3) : key == "longhouse" || key == "smoke" ? 2 * r.pick(2) : r.pick(4);
             b.extra(kind2, side, a, kind2 == 3 ? 0 : .3f);
         }
     }

@@ -44,6 +44,10 @@ void Game::frame(float dt) {
     const bool title = screen == Screen::TITLE;
     const bool overlay = title || menuOpen || picker != Picker::NONE;
     bool fate = !sim.pendingFate.empty();
+    // the narrator places specialist buildings (unless the settlers have been left to it)
+    sim.askPlacement = !title && !settlersPlace;
+    const bool placing = !title && sim.pendingPlacement.has_value();
+    if (placing && !overlay) ui::block({float(GetScreenWidth()) / 2 - 290, rTop.height + 12, 580, placeH});
     if (overlay) ui::block({0, 0, float(GetScreenWidth()), float(GetScreenHeight())});
     else {
         ui::block(rTop);
@@ -55,8 +59,9 @@ void Game::frame(float dt) {
     if (!overlay) view.handleInput(dt, rMap, !ui::mouseOverUi() && !fate);
     else view.handleInput(0, rMap, false);   // keeps the camera framed to the map, ignores the pointer
     if (IsKeyPressed(KEY_ESCAPE) && !sandFocus) {
-        // Esc backs out one step: the picker, the info card, then the menu
+        // Esc backs out one step: the picker, a building waiting for its spot (the settlers choose), the info card, then the menu
         if (picker != Picker::NONE) { picker = Picker::NONE; confirmSlot = -1; }
+        else if (placing && !menuOpen) sim.placeSuggested(sim.pendingPlacement->project);
         else if (!title && inspected.ok) inspected = {};
         else if (!title) menuOpen = !menuOpen;
     }
@@ -84,7 +89,20 @@ void Game::frame(float dt) {
     // what the pointer is over, for name tags
     Vector2 mouse = GetMousePosition();
     view.hovered = !overlay && !fate && !ui::mouseOverUi() && CheckCollisionPointRec(mouse, rMap) ? view.pickAt(sim, mouse) : Pick{};
-    if (!overlay && view.clickedMap()) {
+    // where the building under the pointer would go, and what that spot is like
+    view.ghost.on = false;
+    if (sim.pendingPlacement && !title) {
+        dw::Project* b = sim.projectById(sim.pendingPlacement->project);
+        if (b) {
+            int gx, gy;
+            // captures aim at a given point, or at the middle of the map (known only once laid out)
+            Vector2 aim = !placingOverride ? GetMousePosition() : placingAt.x < 0 ? Vector2{rMap.x + rMap.width / 2, rMap.y + rMap.height / 2} : placingAt;
+            view.footprintAt(aim, b->w, b->h, gx, gy);
+            dw::SiteReport r = sim.evaluateSite(*b, gx, gy);
+            view.ghost = {true, r.legal, gx, gy, b->w, b->h, sim.pendingPlacement->sx, sim.pendingPlacement->sy, r.quality};
+            if (!overlay && view.clickedMap() && r.legal) sim.placeAt(b->id, gx, gy);
+        }
+    } else if (!overlay && view.clickedMap()) {
         // a settler opens their card in the sidebar; anything else gets the info card
         Pick p = view.pickAt(sim, view.clickPos());
         select(p.ok && p.kind == Drawable::PERSON ? p.id : -1, false);
@@ -101,8 +119,9 @@ void Game::frame(float dt) {
         view.draw(sim, all, -1, dt, 1, {});
         drawTitle();
     } else {
-        view.draw(sim, rMap, selected, dt, sim.pendingFate.empty() && !overlay ? speed : 0, inspected);
+        view.draw(sim, rMap, selected, dt, sim.pendingFate.empty() && !overlay && !sim.pendingPlacement ? speed : 0, inspected);
         drawHud();
+        if (sim.pendingPlacement && !menuOpen) drawPlacement();
         if (menuOpen) drawMenu();
     }
     if (picker != Picker::NONE) drawPicker();
@@ -312,7 +331,17 @@ int Game::run() {
             sim.step(60);
             if (!sim.pendingFate.empty()) { auto f = sim.pendingFate[0]; sim.pendingFate.clear(); sim.applyFate(f); }
         }
-        if (opt.hour >= 0) {
+        if (opt.placement) {
+            // keep going until a specialist building waits for its spot
+            sim.askPlacement = true;
+            int guard = 0;
+            while (!sim.pendingPlacement && guard++ < 24 * 200) {
+                sim.step(60);
+                if (!sim.pendingFate.empty()) { auto f = sim.pendingFate[0]; sim.pendingFate.clear(); sim.applyFate(f); }
+            }
+            if (sim.pendingPlacement) view.centerOnTile(sim.pendingPlacement->sx + 1.f, sim.pendingPlacement->sy + 1.f);
+        }
+        if (opt.hour >= 0 && !sim.pendingPlacement) {
             double now = sim.hour(), add = opt.hour - now;
             if (add < 0) add += 24;
             sim.step(add * 60);
@@ -321,7 +350,12 @@ int Game::run() {
         sim.flash = 0;
         tab = opt.tab;
         if (opt.selectFirst) { auto m = sim.members(); if (!m.empty()) select(m[std::min<int>(opt.selectFirst - 1, int(m.size()) - 1)]->id, true); }
-        else view.centerOnTile(sim.campX + 1.f, sim.campY + 1.f);
+        else if (!sim.pendingPlacement) view.centerOnTile(sim.campX + 1.f, sim.campY + 1.f);
+        if (opt.placement && sim.pendingPlacement) {
+            // aim at the suggestion, or at a given point (--pick X,Y) to show another spot
+            placingOverride = true;
+            placingAt = opt.hasPick ? Vector2{opt.pickX, opt.pickY} : Vector2{-1, -1};
+        }
         if (opt.hasCenter) view.centerOnTile(opt.centerX, opt.centerY);
         if (opt.zoom > 0) view.cam.zoom = opt.zoom;
         if (opt.showJournal) journalOpen = true;
@@ -347,7 +381,7 @@ int Game::run() {
             for (int i = 0; i < opt.bench; i++) { double f0 = GetTime(); frame(1.f / 60); worst = std::max(worst, GetTime() - f0); }
             std::printf("bench: %d frames, %.2f ms average, %.2f ms worst, zoom %.2f\n", opt.bench, (GetTime() - t0) * 1000 / opt.bench, worst * 1000, view.cam.zoom);
         }
-        if (opt.hasPick) {
+        if (opt.hasPick && !opt.placement) {
             // Report what a click at this screen point would select (for scripted checks).
             Pick p = view.pickAt(sim, {opt.pickX, opt.pickY});
             Info in = describe(sim, p);

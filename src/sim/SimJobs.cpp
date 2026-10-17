@@ -134,10 +134,28 @@ std::deque<Action> Sim::drinkQ(Person& p, Focus* where) {
     if (opts.empty()) return {};
     auto o = *std::min_element(opts.begin(), opts.end(), [](const O& a, const O& b) { return a.d < b.d; });
     if (where) *where = o.well >= 0 ? onProject(*projectById(o.well)) : onSpot(o.x, o.y);
-    return {walkA(o.x, o.y), workA(12, "Drinking", "drink", [this](Person& p) { p.needs.thirst = 0; if (rnd() < .12f) bubble(p, "ahh"); })};
+    // a well dug in a good spot gives sweet water; a poor one leaves people thirsty sooner
+    float left = o.well >= 0 ? std::max(0.f, (1.1f - siteQ("well")) * 40) : 0;
+    return {walkA(o.x, o.y), workA(12, "Drinking", "drink", [this, left](Person& p) { p.needs.thirst = left; if (rnd() < .12f) bubble(p, "ahh"); })};
 }
 
 std::deque<Action> Sim::eatQ(Person& p) {
+    if (auto* ck = built("cookhouse")) {
+        // a cooked meal at the cookhouse; how much it fills depends on where it was put
+        float q = ck->siteQuality;
+        auto [sx, sy] = workSpot(*ck);
+        return {walkA(stockX + 1 + (rnd() - .5f), stockY + 1.3f),
+                workA(4, "Taking food", "take", [this](Person& p) { if (stock.food >= 1) { stock.food -= 1; p.carry = Carry{"meal", 1}; } }),
+                walkA(sx, sy),
+                workA(25, "Eating at the cookhouse", "eat", [this, q](Person& p) {
+                    if (p.carry && p.carry->t == "meal") {
+                        p.needs.hunger = std::max(0.f, p.needs.hunger - 60 * q);
+                        if (q > 1.05f) { p.mood += 2; if (rnd() < .15f) bubble(p, "now that's a meal"); }
+                        else if (q < .85f && rnd() < .2f) bubble(p, "it's gone cold again");
+                    }
+                    p.carry.reset();
+                })};
+    }
     auto* f = fire();
     float cx = (f ? f->x : campX) + .5f, cy = (f ? f->y : campY) + .5f, a = rnd() * 6.283f;
     return {walkA(stockX + 1 + (rnd() - .5f), stockY + 1.3f),
@@ -444,7 +462,7 @@ void Sim::foodJob(Person& p) {
         if (weather == "storm") n *= .4f;
         if (dock && onDock) n *= 1.6f;
         if (built("boatyard")) n *= 1.4f;
-        if (built("smoke")) n *= 1.15f;
+        if (built("smoke")) n *= 1 + .15f * siteQ("smoke");
         if (inventions.count("trap")) n *= 1.25f;
         if (p.gifts.count("sailor")) n *= 1 + p.gifts["sailor"] * .05f;
         if (mods.count("calm") && mods["calm"] >= day()) n *= 1.3f;
@@ -504,7 +522,7 @@ void Sim::farmJob(Person& p, Project& g, const std::string& job) {
             if (!firsts.count("plant")) { firsts.insert("plant"); note(cat(p.name, " sowed the garden: beans, squash and something nobody can name.")); }
         })}, onProject(g));
     auto q = std::deque<Action>{walkA(sx, sy), workA(70 / skillF(p, "farm"), "Harvesting", "farm", [this, gp](Person& p) {
-        int n = int(std::lround(((gp->key == "fields" ? 30 : 14) + p.sk["farm"] * .8f) * (1 + (p.gifts.count("farmer") ? p.gifts["farmer"] : 0) * .06f)));
+        int n = int(std::lround(((gp->key == "fields" ? 30 : 14) + p.sk["farm"] * .8f) * (1 + (p.gifts.count("farmer") ? p.gifts["farmer"] : 0) * .06f) * gp->siteQuality));
         gp->state = "empty"; gp->growth = 0;
         p.carry = Carry{"food", n};
         gain(p, "farm");
@@ -573,11 +591,11 @@ void Sim::craftJob(Person& p, const std::string& kind) {
     auto w = workA(120, LAB.at(kind), kind == "smith" ? "build" : "sit", [this, kind](Person& p) {
         int lv = p.gifts.count(kind) ? p.gifts[kind] : 1;
         if (kind == "smith") {
-            toolWear = std::max(0.f, toolWear - 30 - lv * 3);
+            toolWear = std::max(0.f, toolWear - (30 + lv * 3) * siteQ("forge"));
             if (!ironTools) { ironTools = true; note(cat(p.name, " forged the first iron tools on the island. Axes that hold an edge! Everyone chops, digs and builds faster now."), "big"); }
         }
-        if (kind == "potter") { pots = std::min(20.f, pots + 1 + lv / 5.f); if (!firsts.count("pots")) { firsts.insert("pots"); note(cat(p.name, " fired the first batch of clay pots. Sealed with wax, they keep food from spoiling."), "big"); } }
-        if (kind == "weaver") { cloth = std::min(20.f, cloth + 1 + lv / 5.f); if (!firsts.count("cloth")) { firsts.insert("cloth"); note(cat(p.name, " wove the first blankets from grass fiber. Nights are warmer already."), "big"); } }
+        if (kind == "potter") { pots = std::min(20.f, pots + (1 + lv / 5.f) * siteQ("pottery")); if (!firsts.count("pots")) { firsts.insert("pots"); note(cat(p.name, " fired the first batch of clay pots. Sealed with wax, they keep food from spoiling."), "big"); } }
+        if (kind == "weaver") { cloth = std::min(20.f, cloth + (1 + lv / 5.f) * siteQ("loomhouse")); if (!firsts.count("cloth")) { firsts.insert("cloth"); note(cat(p.name, " wove the first blankets from grass fiber. Nights are warmer already."), "big"); } }
         if (kind == "herbalist") herbs = std::min(20.f, herbs + 3);
         p.esteemPts = std::min(100.f, p.esteemPts + 3);
     });

@@ -19,7 +19,8 @@ add_library(driftwood_sim STATIC
   src/sim/SimJobs.cpp
   src/sim/SimNarrator.cpp
   src/sim/SimTick.cpp
-  src/sim/SimSave.cpp)
+  src/sim/SimSave.cpp
+  src/sim/SimSites.cpp)
 target_include_directories(driftwood_sim PUBLIC src)
 if(MSVC)
   target_compile_options(driftwood_sim PRIVATE /W3 /utf-8)

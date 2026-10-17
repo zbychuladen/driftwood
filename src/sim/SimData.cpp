@@ -41,6 +41,7 @@ const std::vector<ProjectDef>& allProjects() {
         add(P("herbs", "Herb garden", 2, 1, 6, 4, 260), 3, 7, true, "herbalist", 3);
         add(P("pottery", "Pottery kiln", 2, 2, 14, 20, 480), 4, 8, true, "potter", 3);
         add(P("loomhouse", "Loom house", 2, 2, 30, 6, 480), 4, 8, true, "weaver", 3);
+        add(P("cookhouse", "Cookhouse", 2, 2, 30, 12, 560), 2.5f, 6, true, "cook", 3);
         // proposals (narrator)
         auto o = [&](ProjectDef d, std::string desc, std::vector<std::string> like, std::vector<std::string> dislike, float r0, float r1, std::string gift = "", int min = 0, std::string req = "") {
             d.desc = desc; d.like = like; d.dislike = dislike; return add(d, r0, r1, false, gift, min, req);
@@ -81,7 +82,8 @@ const std::map<std::string, GiftInfo>& giftInfo() {
     static std::map<std::string, GiftInfo> m = {
         {"farmer", {"Farmer", "farming", "farm"}}, {"smith", {"Smith", "smithing", "stone"}}, {"mason", {"Mason", "masonry", "stone"}},
         {"carpenter", {"Carpenter", "carpentry", "wood"}}, {"herbalist", {"Herbalist", "herb lore", "food"}}, {"sailor", {"Sailor", "seafaring", "food"}},
-        {"potter", {"Potter", "pottery", "stone"}}, {"weaver", {"Weaver", "weaving", "food"}}};
+        {"potter", {"Potter", "pottery", "stone"}}, {"weaver", {"Weaver", "weaving", "food"}},
+        {"cook", {"Cook", "cooking", "food"}}};
     return m;
 }
 
