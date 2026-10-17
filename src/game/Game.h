@@ -17,6 +17,10 @@ struct Options {
     int selectFirst = 0;
     int tab = 0;
     bool fullscreen = false;
+    bool hideJournal = false;
+    bool hasCenter = false, hasPick = false;
+    float centerX = 0, centerY = 0;   // tile to center the camera on
+    float pickX = 0, pickY = 0;       // screen point to click, result printed to stdout
 };
 
 class Game {
