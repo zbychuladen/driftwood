@@ -18,7 +18,9 @@ struct Options {
     int selectFirst = 0;
     int narrate = 0;
     bool question = false;           // a settler asks the narrator something, shown open
-    bool kit = false;                // one of each thing the narrator can build by hand, finished, near camp                 // narrate the selected settler this many times before the capture
+    bool kit = false;                // one of each thing the narrator can build by hand, finished, near camp
+    bool review = false;             // the last year in review card
+    std::string ending;              // end the run this way and show the ending screen                 // narrate the selected settler this many times before the capture
     int tab = 0;
     bool fullscreen = false;
     bool showJournal = false;
@@ -68,6 +70,8 @@ private:
     void loadFrom(int slot);
     void drawPlacement();
     void drawDecisions();
+    void drawYearReview();
+    void drawEnding();
     float drawLedger(float x, float y, float w);
     void drawBuild(Rectangle area);
     float settlerCard(dw::Person& p, float x, float y, float w, bool drawIt);
@@ -99,6 +103,9 @@ private:
     bool settlersPlace = false;           // the settlers choose every building's spot themselves
     bool pauseQuestions = false;          // pause the game when a settler asks the narrator something
     int openQuestion = -1, seenQuestion = 0, openPetition = -1;
+    int yearsShown = 0;                   // year reviews the player has seen
+    bool endingSeen = false;              // the ending screen has been closed (keep playing)
+    ui::Scroll storyScroll;
     std::string ledgerNote;               // what came of the last nudge from the Ledger
     int renaming = -1;                    // the building whose name is being typed
     std::string renameText;

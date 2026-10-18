@@ -40,6 +40,7 @@ std::string Sim::clock() const {
 
 void Sim::note(const std::string& text, const std::string& cls) {
     journal.push_front({day(), SEASONS[season()], text, cls});
+    if (!cls.empty() && chronicle.size() < 4000) chronicle.push_back({day(), SEASONS[season()], text, cls});   // the story, for the book at the end
     if (journal.size() > 250) journal.pop_back();
     journalVersion++;
 }

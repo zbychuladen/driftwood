@@ -28,7 +28,8 @@ add_library(driftwood_sim STATIC
   src/sim/SimBlueprints.cpp
   src/sim/SimVillage.cpp
   src/sim/SimTrials.cpp
-  src/sim/SimRival.cpp)
+  src/sim/SimRival.cpp
+  src/sim/SimEndings.cpp)
 target_include_directories(driftwood_sim PUBLIC src)
 if(MSVC)
   target_compile_options(driftwood_sim PRIVATE /W3 /utf-8)

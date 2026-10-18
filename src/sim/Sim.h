@@ -193,6 +193,9 @@ struct Petition { int id = 0, hh = -1, pid = -1; std::string kind, key, text; in
 // A trial foreseen for a year: when it starts, how ready the village was then,
 // and whether it is under way or over.
 struct Trial { std::string kind; int year = 1, start = 0; float ready = 0; bool active = false, over = false; };
+// A year in review: homes by level, people, births and deaths, petitions met
+// and lapsed, the trial and how ready the village was, the rival, the buy-in.
+struct YearSummary { int year = 1; int homes[5] = {0, 0, 0, 0, 0}; int people = 0, births = 0, deaths = 0, met = 0, lapsed = 0; std::string trial; float ready = 0, rival = -1, buyIn = 0; };
 struct VoteRow { int pid; bool yes; std::string why; };
 struct Vote { std::string name; std::vector<VoteRow> rows; bool pass = false; int y = 0, n = 0; };
 struct Wolf { float x, y, sx, sy; std::string state; int face = 1; float ph = 0; };
@@ -264,7 +267,7 @@ public:
     // The whole game as bytes, and back. Settlers' half-done actions are not
     // kept: after a load everyone picks their next task. load() leaves the sim
     // as it was and returns false, with a reason, for anything it cannot read.
-    static constexpr int SAVE_VERSION = 15;   // 2: site quality and pending placement; 3: rapport, contrariness, the story circle; 4: lines, questions; 5: deaths this season; 6: the narrator's rapport and buy-in; 7: duties and roles; 8: households; 9: gift practice; 10: goods and food kinds; 11: status and work; 12: blueprints and workmanship; 13: paths, names, looks; 14: petitions and trials; 15: the rival
+    static constexpr int SAVE_VERSION = 16;   // 2: site quality and pending placement; 3: rapport, contrariness, the story circle; 4: lines, questions; 5: deaths this season; 6: the narrator's rapport and buy-in; 7: duties and roles; 8: households; 9: gift practice; 10: goods and food kinds; 11: status and work; 12: blueprints and workmanship; 13: paths, names, looks; 14: petitions and trials; 15: the rival; 16: endings, years, chronicle
     struct SaveInfo { std::string village; int day = 0, year = 0, season = 0, people = 0; uint32_t seed = 0; };
     std::string save() const;
     bool load(const std::string& data, std::string* error = nullptr);
@@ -391,6 +394,18 @@ public:
     float rivalStanding();                       // the village's average following of the rival
     bool overruled() const;                      // the rival plans: blueprints and appointments do not work
     void rivalCools(float n, const Household* h = nullptr);   // followers drift back (all, or one household)
+
+    // Endings and the run (SimEndings.cpp). ending is empty until the run ends:
+    // haven, homeward, awakening (good) or overruled, lost, divided.
+    std::string ending;
+    int endedDay = 0;
+    std::vector<YearSummary> years;
+    int yBirths = 0, yDeaths = 0, yMet = 0, yLapsed = 0, lastDeathDay = 0, dividedDays = 0;
+    std::vector<Entry> chronicle;                 // the story so far: every journal entry that matters, kept whole
+    static const char* endingTitle(const std::string& e);
+    static const char* endingLine(const std::string& e);
+    static bool goodEnding(const std::string& e);
+    void endWith(const std::string& e);
     std::string writeSand(const std::string& text);
     std::vector<const ProjectDef*> proposalList();
     void propose(const std::string& key);
@@ -483,6 +498,7 @@ private:
     void petitionsDaily();
     void trialsDaily();
     void rivalDaily();
+    void endingsDaily();
     void finishByHand(Project& b);            // a clearing felled, an orchard planted
     // Specialists get better with practice: each piece of gifted work adds to it,
     // and enough of it raises the gift a level (to 10).

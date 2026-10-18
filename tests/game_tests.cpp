@@ -625,12 +625,12 @@ static void testBuildings() {
                        {"cookhouse", 2, 2, scale::COOK_WALL + scale::COOK_ROOF}, {"workshop", 2, 2, scale::WORKSHOP_WALL + scale::WORKSHOP_ROOF},
                        {"well", 1, 1, scale::WELL_ROOF}, {"rack", 1, 1, scale::RACK}, {"tower", 1, 1, scale::TOWER}, {"lighthouse", 1, 1, scale::LIGHTHOUSE},
                        {"signal", 1, 1, scale::SIGNAL}, {"mine", 1, 1, scale::MINE_HILL}, {"dock", 1, 3, .6f}, {"circle", 2, 2, scale::CIRCLE_SEAT},
-                       {"pottery", 2, 2, scale::KILN}, {"boatyard", 2, 2, scale::MAST}, {"monument", 1, 1, scale::MONUMENT}};
+                       {"pottery", 2, 2, scale::KILN}, {"boatyard", 2, 2, scale::MAST}, {"monument", 1, 1, scale::MONUMENT}, {"ship", 3, 2, scale::SHIP_MAST}};
     // what each structure's recipe promises
     const std::map<std::string, std::vector<std::string>> promised = {
         {"well", {"curb", "water", "windlass", "bucket", "roof"}}, {"rack", {"posts", "crossbar", "fish"}}, {"tower", {"legs", "platform", "railing", "roof", "ladder"}},
         {"lighthouse", {"tower", "gallery", "lantern", "roof", "door"}}, {"signal", {"ring", "crib"}}, {"mine", {"mound", "entrance", "cart"}},
-        {"dock", {"deck", "posts", "bollard"}}, {"circle", {"seats", "firepit"}}, {"pottery", {"kiln", "mouth", "flue", "pots"}}, {"boatyard", {"slip", "trestles", "hull", "mast", "sail"}}, {"monument", {"plinth", "column"}}};
+        {"dock", {"deck", "posts", "bollard"}}, {"circle", {"seats", "firepit"}}, {"pottery", {"kiln", "mouth", "flue", "pots"}}, {"boatyard", {"slip", "trestles", "hull", "mast", "sail"}}, {"monument", {"plinth", "column"}}, {"ship", {"hull", "masts", "sails", "cabin"}}};
     std::string missing, outside, tall, front, stages, hinge;
     int made = 0;
     std::map<std::string, std::set<std::string>> variety;

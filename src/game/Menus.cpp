@@ -40,6 +40,8 @@ void Game::loadFrom(int slot) {
     view.reset(sim);
     selected = -1;
     inspected = {};
+    yearsShown = int(sim.years.size());
+    endingSeen = !sim.ending.empty();
     journalVersionCached = -1;
     sandText.clear();
     sandNote.clear();
@@ -188,4 +190,54 @@ void Game::drawPlacement() {
     }
     if (button({x + pad, y + h - pad - 34, 170, 34}, "Let them choose", true, false, 14)) sim.placeSuggested(b->id);
     text(F.body, "The dashed outline is their choice.", x + pad + 186, y + h - pad - 25, 13, T.muted);
+}
+
+// The year in review: what the village made of the year just gone.
+void Game::drawYearReview() {
+    const YearSummary& y = sim.years[size_t(yearsShown)];
+    Rectangle r = card(520, 420);
+    float x = r.x + 30, w = r.width - 60, yy = r.y + 26;
+    text(F.head, cat("Year ", y.year, " in review"), x, yy, 28, T.text);
+    yy += 46;
+    static const char* LV[5] = {"without homes of their own", "in huts", "in cottages", "in houses", "in manors"};
+    std::string homes;
+    for (int i = 4; i >= 0; i--) if (y.homes[i]) homes += (homes.empty() ? "" : ", ") + cat(y.homes[i], y.homes[i] == 1 ? " household " : " households ", LV[i]);
+    std::vector<std::string> lines = {
+        cat(y.people, " people now. ", y.births, y.births == 1 ? " born, " : " born, ", y.deaths, y.deaths == 1 ? " lost." : " lost."),
+        homes.empty() ? "No households yet." : homes + ".",
+        cat(y.met, y.met == 1 ? " petition met, " : " petitions met, ", y.lapsed, " let lapse."),
+        y.trial.empty() ? "No trial this year." : cat("The trial: ", Sim::trialName(y.trial), ", and the village was ", int(y.ready * 100), "% ready."),
+        y.rival < 0 ? "Nobody speaks against the narrator." : cat("The rival's following stands at ", int(y.rival), " against the narrator's buy-in of ", int(y.buyIn), "."),
+    };
+    for (auto& l : lines) yy += wrapped(F.body, l, x, yy, w, 15, T.text) + 10;
+    std::vector<std::string> next;
+    for (auto& k : Sim::trialKinds(y.year + 1)) next.push_back(Sim::trialName(k));
+    yy += 6;
+    wrapped(F.hand, cat("Next year the narrator sees ", next[0], next.size() > 1 ? " and " + next[1] : std::string(), " coming."), x, yy, w, 22, T.narrator);
+    if (button({r.x + r.width - 30 - 140, r.y + r.height - 30 - 40, 140, 40}, "Carry on", true, true, 15)) yearsShown++;
+}
+
+// The ending: what became of them, and the story read back year by year.
+void Game::drawEnding() {
+    float W = float(GetScreenWidth()), H = float(GetScreenHeight());
+    DrawRectangle(0, 0, int(W), int(H), Color{233, 230, 218, 235});
+    float w = std::min(760.f, W - 60), x = (W - w) / 2, y = 40;
+    bool good = Sim::goodEnding(sim.ending);
+    text(F.head, Sim::endingTitle(sim.ending), x, y, 44, good ? T.ok : T.berry);
+    y += 62;
+    y += wrapped(F.body, Sim::endingLine(sim.ending), x, y, w, 17, T.text) + 8;
+    y += wrapped(F.body, cat(sim.villageName.empty() ? std::string("The camp") : sim.villageName, ", ", sim.yearN(), sim.yearN() == 1 ? " year" : " years", " after the wreck."), x, y, w, 14, T.muted) + 16;
+    Rectangle story{x, y, w, H - y - 90};
+    DrawRectangleRounded(story, .02f, 6, T.panel);
+    beginScroll(story, storyScroll);
+    float sy = story.y + 14 - storyScroll.y;
+    int year = 0;
+    for (auto& e : sim.chronicle) {
+        int ey = (e.d - 1) / 40 + 1;
+        if (ey != year) { year = ey; sy += 6; text(F.bold, cat("Year ", year), story.x + 18, sy, 16, T.accent); sy += 26; }
+        sy += wrapped(F.hand, e.text, story.x + 18, sy, story.width - 36, 19, e.cls == "sad" ? T.berry : e.cls == "narrator" ? T.narrator : T.text) + 6;
+    }
+    endScroll(story, storyScroll, sy + storyScroll.y - story.y + 14);
+    if (button({x, H - 66, 180, 42}, "Keep playing", true, true, 15)) endingSeen = true;
+    if (button({x + 192, H - 66, 180, 42}, "Back to title", true, false, 15)) { endingSeen = true; screen = Screen::TITLE; titleClock = 0; }
 }

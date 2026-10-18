@@ -76,6 +76,7 @@ void Sim::announceGifts(Person& p) {
 }
 
 void Sim::birth(Person& a, Person& b, bool twin) {
+    yBirths++;
     std::string nm = newName();
     auto& c = makePerson(nm, rnd() < .5f ? a.tunic : b.tunic, a.x, a.y, true);
     c.parents = {a.id, b.id};
@@ -118,6 +119,8 @@ void Sim::bubble(Person& p, const std::string& text, double mins) { p.bubble = B
 void Sim::die(Person& p) {
     p.dead = true;
     lostThisSeason++;
+    yDeaths++;
+    lastDeathDay = day();
     earn(-5);
     clearQ(p);
     note(cat(p.name, " did not wake this morning. There was not enough food. We buried them on the hill above the sea."), "sad");

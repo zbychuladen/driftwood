@@ -43,12 +43,14 @@ void Sim::petitionsDaily() {
         std::string who = householdName(*h);
         if (met) {
             earn(6);
+            yMet++;
             rivalCools(10, h);
             for (int m : h->members) if (auto* q = person(m)) { q->buyIn = std::min(100.f, q->buyIn + 5); q->mood = std::min(100.f, q->mood + 4); }
             if (p.kind == "feast") { stock.food -= members().size() * 4.f; for (auto* q : members()) q->mood = std::min(100.f, q->mood + 10); }
             note(p.kind == "feast" ? cat("The feast ", who, " asked for: a long night of food and songs by the fire.") : cat(who, " got what they asked the narrator for: ", petitionNeed(p), ". They will not forget it."), "narrator");
         } else {
             earn(-4);
+            yLapsed++;
             for (int m : h->members) if (auto* q = person(m)) q->buyIn = std::max(0.f, q->buyIn - 4);
             note(cat(who, " asked for ", petitionNeed(p), ", and the time ran out. They feel the narrator did not listen."), "sad");
         }

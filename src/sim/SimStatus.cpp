@@ -86,6 +86,13 @@ void Sim::statusDaily() {
         note(cat(n->name, " commissioned a monument, to stand where everyone will see it."), "big");
     }
 
+    // notables with a boatyard and timber to spare commission the ship home
+    bool shipPlanned = false;
+    for (auto& b : plan) shipPlanned |= b.key == "ship" && !b.skip;
+    if (!notables.empty() && built("boatyard") && !shipPlanned && stock.wood >= 60) {
+        mkProj(*projectDef("ship"));
+        note(cat(notables[0]->name, " has paid for a ship, big enough for everyone. It will take all of us to build it, and then we could sail home."), "big");
+    }
     // inequality: those well below the top resent it; it fades when the gap closes
     int top = topStatus();
     for (auto* p : m) {
