@@ -21,6 +21,8 @@ void Game::newGame(uint32_t seed) {
     sandText.clear();
     sandNote.clear();
     journalVersionCached = -1;
+    yearsShown = 0;
+    endingSeen = false;
 }
 
 void Game::select(int id, bool center) {
@@ -42,8 +44,10 @@ void Game::frame(float dt) {
     ui::beginFrame();
     layout();
     const bool title = screen == Screen::TITLE;
-    const bool overlay = title || menuOpen || picker != Picker::NONE;
-    bool fate = !sim.pendingFate.empty();
+    const bool ended = !title && !sim.ending.empty() && !endingSeen;   // the ending screen
+    const bool overlay = title || menuOpen || picker != Picker::NONE || ended;
+    // a year in review pauses the island like a fate card
+    bool fate = !sim.pendingFate.empty() || (!title && int(sim.years.size()) > yearsShown);
     // the narrator places specialist buildings (unless the settlers have been left to it)
     sim.askPlacement = !title && !settlersPlace;
     const bool placing = !title && sim.pendingPlacement.has_value();
@@ -131,7 +135,9 @@ void Game::frame(float dt) {
         view.draw(sim, rMap, selected, dt, sim.pendingFate.empty() && !overlay && !sim.pendingPlacement ? speed : 0, inspected);
         drawHud();
         if (sim.pendingPlacement && !menuOpen) drawPlacement();
+        if (int(sim.years.size()) > yearsShown && sim.pendingFate.empty() && !ended) drawYearReview();
         if (menuOpen) drawMenu();
+        if (ended) drawEnding();
     }
     if (picker != Picker::NONE) drawPicker();
     drawToast();
@@ -367,6 +373,9 @@ int Game::run() {
             sim.pendingFate.clear();
         }
         sim.flash = 0;
+        yearsShown = opt.review && !sim.years.empty() ? int(sim.years.size()) - 1 : int(sim.years.size());
+        if (!opt.ending.empty()) sim.endWith(opt.ending);
+        endingSeen = opt.ending.empty();
         tab = opt.tab;
         if (opt.selectFirst) { auto m = sim.members(); if (!m.empty()) select(m[std::min<int>(opt.selectFirst - 1, int(m.size()) - 1)]->id, true); }
         else if (!sim.pendingPlacement) view.centerOnTile(sim.campX + 1.f, sim.campY + 1.f);

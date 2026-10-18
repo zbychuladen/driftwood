@@ -49,7 +49,7 @@ bool Sim::siteLegal(const ProjectDef& d, int x, int y) const {
         return water > 0;
     }
     if (!self->footprintOk(x, y, d.w, d.h)) return false;
-    if (d.key == "boatyard") {
+    if (d.key == "boatyard" || d.key == "ship") {
         for (int yy = y; yy < y + d.h; yy++) for (int xx = x; xx < x + d.w; xx++) if (distSea[idx(xx, yy)] <= 1) return true;
         return false;
     }

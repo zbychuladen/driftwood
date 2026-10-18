@@ -167,6 +167,7 @@ void Sim::daily() {
     petitionsDaily();
     trialsDaily();
     rivalDaily();
+    endingsDaily();
     homesDaily();
     statusDaily();
     for (auto* p : m) if (p->contraryUntil > 0 && !contrary(*p)) { p->contraryUntil = 0; note(cat(p->name, " has stopped bristling at the narrator, and will hear a line again.")); }

@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <cstdio>
 #include <regex>
+#include <memory>
+#include <functional>
 #include <set>
 #include <string>
 #include "sim/Sim.h"
@@ -1315,6 +1317,86 @@ static void testRival() {
     CHECK(c.rival == s.rival && c.overruledDays == s.overruledDays, "the rival survives a save");
 }
 
+// Endings: each comes about from its own conditions, and only its own.
+static Project& addBuilt(Sim& s, const char* key, int x, int y) {
+    Project b;
+    static_cast<ProjectDef&>(b) = *projectDef(key);
+    b.id = s.nextProjId++; b.done = b.placed = true; b.x = x; b.y = y;
+    s.plan.push_back(b);
+    return s.plan.back();
+}
+
+static std::string endingAfter(Sim& s, int days, const std::function<void(Sim&)>& each = {}) {
+    for (int d = 0; d < days && s.ending.empty(); d++) { untilMidnight(s); if (each) each(s); pastMidnight(s); }
+    return s.ending;
+}
+
+static void testEndings() {
+    std::printf("endings\n");
+    auto fresh = [] { auto s = std::make_unique<Sim>(); s->newWorld(20261017); runDays(*s, 30); return s; };
+    {
+        auto s = fresh();
+        for (auto* p : s->members()) p->dead = true;
+        CHECK(endingAfter(*s, 2) == "lost", "with everyone gone, the story ends: Lost");
+    }
+    {
+        auto s = fresh();
+        while (s->day() < 45) s->step(240);
+        s->pendingFate.clear();
+        s->rival = s->members()[0]->id;
+        s->overruledSince = s->day() - 41;
+        std::string e = endingAfter(*s, 2, [](Sim& t) { for (auto* p : t.members()) { p->buyIn = 10; p->follow = 95; } });
+        CHECK(e == "overruled", ("a year under the rival's planning ends it: Overruled (" + e + ")").c_str());
+    }
+    {
+        auto s = fresh();
+        int before = int(s->members().size());
+        std::string e = endingAfter(*s, 12, [](Sim& t) { for (auto* p : t.members()) if (!p->child) p->resentment = 80; });
+        CHECK(e == "divided" && int(s->members().size()) < before, ("the bitter walk out to found their own camp: Divided (" + e + ")").c_str());
+    }
+    {
+        auto s = fresh();
+        addBuilt(*s, "ship", s->campX + 8, s->campY + 8);
+        CHECK(endingAfter(*s, 2) == "homeward", "the ship built, everyone sails: Homeward");
+    }
+    {
+        auto s = fresh();
+        while (s->yearN() < 2) s->step(240);
+        s->pendingFate.clear();
+        bool hasRuins = false;
+        for (auto& p : s->pois) if (p.type == "ruins") { p.found = true; hasRuins = true; }
+        addBuilt(*s, "circle", s->campX + 5, s->campY + 5);
+        std::string e = endingAfter(*s, 2, [](Sim& t) { t.members()[0]->calling = "philosopher"; });
+        CHECK(hasRuins && e == "awakening", ("a philosopher, the ruins found and a story circle: Awakening (" + e + ")").c_str());
+    }
+    {
+        auto s = fresh();
+        while (s->yearN() < 3) s->step(240);
+        s->pendingFate.clear();
+        s->lastDeathDay = 0;
+        std::string e = endingAfter(*s, 2, [](Sim& t) {
+            for (auto& h : t.households) {
+                Project* home = t.projectById(h.home);
+                if (!home) continue;
+                home->key = "cottage";
+                bool served = false;
+                for (auto* w : t.builtAll("well")) served |= std::abs(w->x - home->x) <= 2 && std::abs(w->y - home->y) <= 2;
+                if (!served) { addBuilt(t, "well", home->x + 2, home->y); addBuilt(t, "monument", home->x - 1, home->y + 2); addBuilt(t, "flowers", home->x + 1, home->y + 2); addBuilt(t, "flowers", home->x + 2, home->y + 2); }
+            }
+            for (auto* p : t.members()) { p->buyIn = 80; p->resentment = 0; p->calling = p->calling == "philosopher" ? "" : p->calling; }
+        });
+        CHECK(e == "haven", ("a year with nobody lost, everyone housed, served and at peace: Haven (" + e + ")").c_str());
+    }
+    {
+        auto s = fresh();
+        runDays(*s, 12);
+        CHECK(s->years.size() == 1 && s->years[0].year == 1 && s->years[0].people > 0 && s->ending.empty(), "each year ends with a review, and an ordinary year ends nothing");
+        Sim c;
+        c.load(s->save());
+        CHECK(c.years.size() == 1 && c.chronicle.size() == s->chronicle.size() && !c.chronicle.empty(), "the years and the chronicle survive a save");
+    }
+}
+
 int main() {
     for (uint32_t seed : {20261017u, 777u, 4242u}) testSurvival(seed);
     testNoSmithNoForge();
@@ -1335,6 +1417,7 @@ int main() {
     testVillageByHand();
     testPetitionsAndTrials();
     testRival();
+    testEndings();
     testDeterminism();
     testFocus(20261017);
     testFocus(777);

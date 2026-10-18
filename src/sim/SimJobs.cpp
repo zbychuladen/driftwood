@@ -293,7 +293,7 @@ void Sim::plan_(Person& p) {
         return setQ(p, "arrive", "Walking toward the camp", {walkA(campX + 1.5f, campY + 1.5f), w});
     }
     if (p.status == "leaving")
-        return setQ(p, "leave", "Leaving", {walkA(boatX + .5f, boatY + .5f), workA(5, "Leaving", "idle", [this](Person& q) { q.dead = true; q.gone = true; lostThisSeason++; })});
+        return setQ(p, "leave", "Leaving", {walkA(boatX + .5f, boatY + .5f), workA(5, "Leaving", "idle", [this](Person& q) { q.dead = true; q.gone = true; lostThisSeason++; yDeaths++; lastDeathDay = day(); })});
     auto& n = p.needs;
     double h = hour();
     // a night owl sleeps through the middle of the day and works through the night

@@ -213,7 +213,7 @@ V3 cross2(V3 v) { return {-v.y, v.x, 0}; }
 
 bool assembled(const std::string& k) {
     static const char* keys[] = {"hut", "leanto", "longhouse", "store", "school", "forge", "smoke", "loomhouse", "infirmary", "cookhouse",
-                                 "well", "rack", "tower", "lighthouse", "signal", "mine", "dock", "circle", "pottery", "boatyard", "cottage", "house", "manor", "workshop", "monument"};
+                                 "well", "rack", "tower", "lighthouse", "signal", "mine", "dock", "circle", "pottery", "boatyard", "cottage", "house", "manor", "workshop", "monument", "ship"};
     for (auto s : keys) if (k == s) return true;
     return false;
 }
@@ -579,6 +579,38 @@ Design make(const std::string& key, int id, int x, int y, int w, int h, int fron
         d.walls = tall ? "tall" : "squat";
         d.roof = cat(pots, " pots");
         d.features = {"kiln", "mouth", "flue", "pots"};
+    } else if (key == "ship") {
+        // a ship big enough for everyone: a long hull on its cradle, a cabin aft, two masts under sail
+        V3 c = b.centre;
+        bool alongX = b.W >= b.D;
+        V3 fn = alongX ? V3{1, 0, 0} : V3{0, 1, 0}, ft{-fn.y, fn.x, 0};
+        Color hull = hex(r.chance(.5f) ? 0x6a4a30 : 0x5a3e2a), paint = hex(SHUTTERS[r.pick(5)]);
+        for (float s : {-1.6f, 0.f, 1.6f}) {
+            V3 p = c + fn * s;
+            for (float k : {-.7f, .7f}) b.add(upright(solid::BOX, p + ft * k, .14f, .14f, .7f, 0, FRAMEWOOD), POST, FRAME);
+        }
+        V3 keel = c + V3{0, 0, .8f};
+        b.add(solid::along(keel - fn * 2.4f, keel + fn * 2.4f, .2f, .2f, V3{0, 0, 1}, hull), WALL, WALLS);
+        for (float s : {-1.f, 1.f}) {
+            Solid side = solid::along(keel - fn * 2.2f + ft * (s * .62f) + V3{0, 0, .45f}, keel + fn * 1.9f + ft * (s * .62f) + V3{0, 0, .45f}, .09f, .9f, ft, hull);
+            side.tex = solid::PLANKS;
+            b.add(side, WALL, WALLS, true);
+            b.add(solid::along(keel - fn * 2.2f + ft * (s * .68f) + V3{0, 0, .86f}, keel + fn * 1.9f + ft * (s * .68f) + V3{0, 0, .86f}, .08f, .07f, ft, paint), BEAM, DETAILS);
+        }
+        b.add(solid::along(keel + fn * 1.9f + V3{0, 0, .45f}, keel + fn * 2.7f + V3{0, 0, .9f}, .9f, .9f, ft, hull), WALL, WALLS);
+        b.add(upright(solid::BOX, keel - fn * 1.6f + V3{0, 0, .9f}, 1.1f, 1.1f, .7f, std::atan2(fn.y, fn.x), hex(0x8a6440), solid::PLANKS), ROOF, ROOFING);   // the cabin
+        for (float at : {-.5f, 1.f}) {
+            V3 foot = keel + fn * at;
+            float top = at < 0 ? scale::SHIP_MAST - .6f : scale::SHIP_MAST;
+            b.add(solid::along(foot, c + fn * at + V3{0, 0, top}, .14f, .14f, ft, hex(0x5a3c22)), POST, ROOFING);
+            Solid sail = solid::along(foot + V3{0, 0, 1.7f}, c + fn * at + V3{0, 0, top - .4f}, .04f, 1.8f, ft, hex(0xefe8d6));
+            sail.c = sail.c - fn * .05f;
+            b.add(sail, EXTRA, DETAILS);
+        }
+        d.made = std::string(hull.r > 0x60 ? "a dark" : "a darker") + " plank hull on its cradle, with a cabin aft and two masts under sail";
+        d.walls = hull.r > 0x60 ? "dark hull" : "darker hull";
+        d.roof = cat("trim ", int(paint.r));
+        d.features = {"hull", "masts", "sails", "cabin"};
     } else if (key == "boatyard") {
         // a slipway of planks, a hull on trestles, a mast and sail once it is done
         V3 c = b.centre;

@@ -42,6 +42,7 @@ const std::vector<ProjectDef>& allProjects() {
         hand(P("bench", "Bench", 1, 1, 6, 0, 110), "Somewhere to sit and talk. A little more pleasant to live near.");
         hand(P("banner", "Banner", 1, 1, 5, 0, 120), "A banner in the village colours, for all to see.");
         // raised when a notable commissions it (SimStatus)
+        { auto d = P("ship", "Ship", 3, 2, 120, 30, 2400); d.commissioned = true; d.desc = "A ship big enough for everyone, paid for by the notables and built by all. When it is done, they can sail home."; add(d, 0, 0, false, "sailor", 5, "boatyard"); }
         { auto d = P("monument", "Monument", 1, 1, 10, 30, 600); d.commissioned = true; d.desc = "A carved stone raised by a notable household, for everyone to see. The village is more beautiful for it."; add(d, 2, 6, false); }
         add(P("dock", "Fishing dock", 1, 3, 31, 0, 580), 0, 0, true);
         add(P("tower", "Watchtower", 1, 1, 48, 11, 810), 6, 11, true);

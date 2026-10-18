@@ -48,6 +48,7 @@ float Sim::needOf(const std::string& k) {
     if (k == "smoke") return .35f;
     if (k == "cookhouse") return pop >= 6 ? .55f : .2f;
     if (k == "monument") return .6f;
+    if (k == "ship") return .9f;
     if (k == "clearing" || k == "orchard" || k == "bridge" || k == "flowers" || k == "lantern" || k == "bench" || k == "banner") return .3f;
     if (k == "workshop") { int better = 0; for (auto& h : households) better += h.home >= 0 && projectById(h.home) && homeLevel(projectById(h.home)->key) >= 2; return better ? .55f : .2f; }
     return .25f;

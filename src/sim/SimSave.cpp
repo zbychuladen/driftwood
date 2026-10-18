@@ -65,6 +65,7 @@ template <class A> void io(A& a, Duty& v);
 template <class A> void io(A& a, Household& v);
 template <class A> void io(A& a, Petition& v);
 template <class A> void io(A& a, Trial& v);
+template <class A> void io(A& a, YearSummary& v);
 
 // ---- plain values
 template <class A> void io(A& a, int& v) { a.pod(v); }
@@ -144,6 +145,9 @@ template <class A> void io(A& a, Question& v) {
 template <class A> void io(A& a, Fib& v) { io(a, v.pid); io(a, v.due); io(a, v.reveal); }
 template <class A> void io(A& a, Petition& v) { io(a, v.id); io(a, v.hh); io(a, v.pid); io(a, v.kind); io(a, v.key); io(a, v.text); io(a, v.due); }
 template <class A> void io(A& a, Trial& v) { io(a, v.kind); io(a, v.year); io(a, v.start); io(a, v.ready); io(a, v.active); io(a, v.over); }
+template <class A> void io(A& a, YearSummary& v) {
+    io(a, v.year); for (int& h : v.homes) io(a, h); io(a, v.people); io(a, v.births); io(a, v.deaths); io(a, v.met); io(a, v.lapsed); io(a, v.trial); io(a, v.ready); io(a, v.rival); io(a, v.buyIn);
+}
 template <class A> void io(A& a, Duty& v) { io(a, v.job); io(a, v.until); io(a, v.role); }
 template <class A> void io(A& a, Household& v) { io(a, v.id); io(a, v.members); io(a, v.home); io(a, v.rising); io(a, v.falling); io(a, v.noRoom); io(a, v.toil); }
 template <class A> void io(A& a, Focus& v) {
@@ -201,6 +205,7 @@ template <class A> void body(A& a, Sim& s) {
     io(a, s.fuelRes); io(a, s.dockRes); io(a, s.toolWear); io(a, s.goods); io(a, s.foodSeen); io(a, s.ironTools);
     io(a, s.hasHerb); io(a, s.agenda); io(a, s.lastToldName); io(a, s.lastReply); io(a, s.pendingPlacement);
     io(a, s.questions); io(a, s.fibs); io(a, s.nextQuestion); io(a, s.lastSaid); io(a, s.lostThisSeason); io(a, s.rapport); io(a, s.households); io(a, s.nextHousehold); io(a, s.nextShip); io(a, s.wear); io(a, s.petitions); io(a, s.nextPetition); io(a, s.trials); io(a, s.rival); io(a, s.rivalAhead); io(a, s.overruledSince); io(a, s.overruledDays);
+    io(a, s.ending); io(a, s.endedDay); io(a, s.years); io(a, s.yBirths); io(a, s.yDeaths); io(a, s.yMet); io(a, s.yLapsed); io(a, s.lastDeathDay); io(a, s.dividedDays); io(a, s.chronicle);
     // the behaviour random generator, so a loaded game goes on the same way every time
     std::string rng;
     if constexpr (!A::reading) { std::ostringstream o; o << s.gen; rng = o.str(); }
