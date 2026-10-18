@@ -67,6 +67,7 @@ private:
     void loadFrom(int slot);
     void drawPlacement();
     void drawDecisions();
+    float drawLedger(float x, float y, float w);
     float settlerCard(dw::Person& p, float x, float y, float w, bool drawIt);
     void select(int id, bool center);
 
@@ -96,6 +97,7 @@ private:
     bool settlersPlace = false;           // the settlers choose every building's spot themselves
     bool pauseQuestions = false;          // pause the game when a settler asks the narrator something
     int openQuestion = -1, seenQuestion = 0;
+    std::string ledgerNote;               // what came of the last nudge from the Ledger
     Rectangle decisionsR{};               // the pending-decisions list, as last drawn
     float placeH = 0;                     // the placement panel's height last frame, to keep clicks off the map
     bool placingOverride = false;         // captures: aim the footprint at a fixed screen point

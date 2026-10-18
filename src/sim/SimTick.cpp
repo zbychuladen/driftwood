@@ -158,6 +158,7 @@ void Sim::daily() {
     int d = day(), s = season(), prevS = ((d - 2) / 10) % 4;
     auto m = members();
     earn(rapportIncome());   // the day's rapport, from how much they buy in
+    dutiesDaily();
     for (auto* p : m) if (p->contraryUntil > 0 && !contrary(*p)) { p->contraryUntil = 0; note(cat(p->name, " has stopped bristling at the narrator, and will hear a line again.")); }
     // a well-placed store or smokehouse keeps food better; a damp or out-of-the-way one worse
     float rate = (built("smoke") ? .006f * (2 - siteQ("smoke")) : built("store") ? .01f * (2 - siteQ("store")) : built("rack") ? .035f : .07f) * (1 - std::min(.6f, pots * .04f));

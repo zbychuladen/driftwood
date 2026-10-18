@@ -44,6 +44,9 @@ struct Bubble { std::string text; double until = 0; };
 // What the narrator last said a settler would do: the job holds from `from`
 // (later when they haggled) until `until`. Contrary: they are doing the opposite.
 struct Narration { std::string job; double until = 0; bool contrary = false; double from = 0; };
+// Work a settler agreed to take on for longer than a day: for the season
+// (until is when it ends) or as an appointed role (role, until 0: until revoked).
+struct Duty { std::string job; double until = 0; bool role = false; };
 
 // What a person is busy with, so front ends can show the link between them
 // and the thing they are working on. fromStock: they fetch materials from the
@@ -89,6 +92,7 @@ struct Person {
     std::optional<Carry> carry;
     std::optional<Bubble> bubble;
     std::optional<Narration> told;
+    std::optional<Duty> duty;
     bool dead = false, gone = false;
     std::vector<int> parents;
     int lastTold = -9, lastAsked = -9;        // days they were last narrated, and last asked the narrator something
@@ -155,13 +159,18 @@ struct Fate { std::string id, title, desc; };
 // A line the narrator can say about a settler: what they do next. job is what
 // it sets them doing (rest, food, wood, build, calling, explore, hermit, peace,
 // talk); target is the other person in a peace or talk line.
-struct Line { std::string job, text; int target = -1, cost = 8; };   // cost: the narrator's rapport it takes if they go along
+struct Line { std::string job, text; int target = -1, cost = 8; float fit = 1; };   // cost: the narrator's rapport it takes if they go along
 // A settler's question to the narrator, with three replies in a fixed order:
 // honest, teasing, misleading. truth is what an honest reply says.
 struct Reply { std::string kind, text; };
 struct Question { int id = 0, pid = -1, about = -1; std::string topic, text; std::vector<Reply> replies; double asked = 0, expires = 0; bool truth = false; };
 // A misleading reply that may yet come out.
 struct Fib { int pid = -1; double due = 0; std::string reveal; };
+// The Narrator's Ledger: something going wrong, who could fix it and at what
+// price (cheapest first), and a longer-term fix. job is what a candidate would
+// be asked to do; empty when no one can simply be asked (a missing herbalist).
+struct Candidate { int pid = -1; int cost = 0; std::string why; };
+struct Gap { std::string id, text, job, fix; std::vector<Candidate> candidates; };
 struct VoteRow { int pid; bool yes; std::string why; };
 struct Vote { std::string name; std::vector<VoteRow> rows; bool pass = false; int y = 0, n = 0; };
 struct Wolf { float x, y, sx, sy; std::string state; int face = 1; float ph = 0; };
@@ -221,7 +230,7 @@ public:
     // The whole game as bytes, and back. Settlers' half-done actions are not
     // kept: after a load everyone picks their next task. load() leaves the sim
     // as it was and returns false, with a reason, for anything it cannot read.
-    static constexpr int SAVE_VERSION = 6;   // 2: site quality and pending placement; 3: rapport, contrariness, the story circle; 4: lines, questions; 5: deaths this season; 6: the narrator's rapport and buy-in
+    static constexpr int SAVE_VERSION = 7;   // 2: site quality and pending placement; 3: rapport, contrariness, the story circle; 4: lines, questions; 5: deaths this season; 6: the narrator's rapport and buy-in; 7: duties and roles
     struct SaveInfo { std::string village; int day = 0, year = 0, season = 0, people = 0; uint32_t seed = 0; };
     std::string save() const;
     bool load(const std::string& data, std::string* error = nullptr);
@@ -267,7 +276,7 @@ public:
     // narrator (called by the player)
     // Two or three lines that fit a settler right now. Reading them never
     // changes the game.
-    std::vector<Line> linesFor(const Person& p);
+    std::vector<Line> linesFor(const Person& p, bool all = false);   // all: every line that fits, not just the best three
     // Says a line. The settler goes along ("agreed"), haggles ("haggled": later),
     // refuses ("refused"), is irritated at a second line in a day ("pushed") or is
     // contrary and does the opposite ("contrary"). lastReply holds the result and
@@ -281,6 +290,21 @@ public:
     bool answer(int questionId, int reply);      // false if the question or reply is gone
     void ask(Person& p, const std::string& topic, int about = -1);   // tests and captures: put a question now
     std::string lastSaid;
+
+    // The Narrator's Ledger. Reading it never changes the game. Work gaps show in
+    // working hours only (7 to 18), when who is doing what means something.
+    std::vector<Gap> ledger();
+    // The four sizes of nudge, smallest first: a day's line is narrate(); the
+    // others cost more and last longer. Each returns "agreed", "refused" or
+    // "unaffordable" (appeal: how many went along, as "agreed N of M").
+    int seasonCost(const Person& p, const std::string& job);
+    int roleCost(const Person& p, const std::string& job);
+    int appealCost(const std::string& job);
+    std::string askSeason(Person& p, const std::string& job);
+    std::string appoint(Person& p, const std::string& job);
+    void revoke(Person& p);
+    std::string appeal(const std::string& job);
+    static const char* roleName(const std::string& job);   // woodcutter, forager, builder, explorer
     std::string writeSand(const std::string& text);
     std::vector<const ProjectDef*> proposalList();
     void propose(const std::string& key);
@@ -337,7 +361,8 @@ private:
     bool siteLegal(const ProjectDef& d, int x, int y) const;
     void startProject(Project& b);
     void siteJudged(Project& b, bool finished);
-    void talkHourly();                        // new questions, lapsed ones, fibs coming out
+    void talkHourly();
+    void dutiesDaily();                       // seasons ending, roles' upkeep                        // new questions, lapsed ones, fibs coming out
 
     // world gen
     void placePOI(const std::string& type, std::function<bool(int)> ok, float minD);

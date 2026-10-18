@@ -195,6 +195,7 @@ float Game::settlerCard(Person& p, float x, float y, float w, bool d) {
         if (partner) desc += " Partner: " + partner->name + ".";
         else if (friendP) desc += " Closest to " + friendP->name + ".";
         desc += cat("\nGifts: ", p.gifts.empty() ? "none, a jack of all trades" : sim.giftText(p), ". Charisma ", p.charisma, "/10 (", Sim::charWord(p.charisma), "). Buys into the narrator ", Sim::buyInWord(p.buyIn), ".");
+        if (p.duty) desc += p.duty->role ? cat("\nThe camp's ", Sim::roleName(p.duty->job), ", by the narrator's choosing.") : cat("\nSpending the season on ", Sim::roleName(p.duty->job), "'s work.");
         if (sim.contrary(p)) desc += "\nContrary: narrated once too often, and doing the opposite for now.";
         else if (p.weary) desc += "\nTired of being narrated.";
         if (sim.agenda && sim.agenda->by == p.id) desc += "\nCurrently setting the camp's agenda.";
@@ -225,6 +226,7 @@ void Game::drawSettlers(Rectangle a) {
 void Game::drawNarrator(Rectangle a) {
     beginScroll(a, sideScroll);
     float x = a.x, w = a.width - 10, y = a.y - sideScroll.y;
+    y = drawLedger(x, y, w);
     // how much they buy in, on average: a feel, not a number (the rapport to spend is in the top bar)
     y += sectionTitle("How much they buy in", x, y);
     float f = sim.avgBuyIn();
@@ -235,7 +237,7 @@ void Game::drawNarrator(Rectangle a) {
     y += sectionTitle("Narrate", x, y);
     Person* p = sim.person(selected);
     if (!p || p->status != "member" || p->child) {
-        y += wrapped(F.body, "Select an adult settler on the map or in the Settlers tab, then narrate what they do next. Lines land more often with those you get on with.", x, y, w, 14, T.muted) + 16;
+        y += wrapped(F.body, "Select an adult settler on the map or in the Settlers tab, then narrate what they do next. Lines land with those who buy in.", x, y, w, 14, T.muted) + 16;
     } else {
         y += wrapped(F.body, cat(p->name, " buys in ", Sim::buyInWord(p->buyIn), ". ", sim.contrary(*p) ? "Contrary right now: they will do the opposite." : p->lastTold == sim.day() ? "Already narrated today. Push too often and they turn contrary." : "Once a day is welcome."), x, y, w, 14, T.text) + 8;
         y += wrapped(F.body, "Choose what happens next. If they go along, the line's price comes out of your rapport. The less they buy in, the more it costs and the likelier they say no.", x, y, w, 14, T.muted) + 6;
@@ -517,4 +519,74 @@ void Game::drawDecisions() {
     panel({x, y, w, h}, draw::withA(T.panel, .97f), T.line, .06f);
     for (auto& f : paint) f();
     for (auto& r : rows) if (clicked(r.r)) openQuestion = openQuestion == r.id ? -1 : r.id;
+}
+
+// The Narrator's Ledger: what is going wrong, who could fix it and what each
+// size of nudge would cost, and the roles and seasons already given out.
+float Game::drawLedger(float x, float y, float w) {
+    y += sectionTitle("Ledger", x, y);
+    auto gaps = sim.ledger();
+    bool night = sim.hour() < 7 || sim.hour() >= 18;
+    if (gaps.empty()) y += wrapped(F.body, night ? "Evening. The Ledger picks up again in the morning, when the work starts." : "Nothing pressing. The village is managing on its own.", x, y, w, 14, T.muted) + 12;
+    auto small = [&](float bx, float by, const std::string& label, int cost, bool ok) {
+        std::string t = cat(label, " ", cost);
+        float bw = measure(F.bold, t, 12).x + 18;
+        bool r = button({bx, by, bw, 26}, t, ok && float(cost) <= sim.rapport, false, 12);
+        return std::pair<bool, float>{r, bw};
+    };
+    for (auto& g : gaps) {
+        DrawCircle(int(x + 4), int(y + 9), 4, T.ember);
+        y += wrapped(F.bold, g.text, x + 16, y, w - 16, 14, T.text) + 2;
+        y += wrapped(F.body, g.fix, x + 16, y, w - 16, 13, T.muted) + 6;
+        for (auto& c : g.candidates) {
+            Person* p = sim.person(c.pid);
+            if (!p) continue;
+            text(F.bold, p->name, x + 16, y + 1, 13, T.text);
+            text(F.body, c.why, x + 16 + measure(F.bold, p->name, 13).x + 8, y + 2, 12, T.muted);
+            y += 20;
+            float bx = x + 16;
+            auto [d, w1] = small(bx, y, "Today", c.cost, true);
+            bx += w1 + 6;
+            if (d) {
+                Line l{g.job, cat(p->name, " decided to help."), -1, c.cost};
+                for (auto& o : sim.linesFor(*p, true)) if (o.job == g.job) l = o;
+                ledgerNote = p->name + ": " + sim.narrate(*p, l);
+            }
+            if (g.job != "rest") {
+                auto [s, w2] = small(bx, y, "Season", sim.seasonCost(*p, g.job), true);
+                bx += w2 + 6;
+                if (s) ledgerNote = p->name + ": " + sim.askSeason(*p, g.job);
+                auto [r, w3] = small(bx, y, cat("Make ", Sim::roleName(g.job)), sim.roleCost(*p, g.job), !p->duty);
+                if (r) ledgerNote = p->name + ": " + sim.appoint(*p, g.job);
+            }
+            y += 32;
+        }
+        if (!g.job.empty()) {
+            auto [e, we] = small(x + 16, y, "Ask everyone", sim.appealCost(g.job), true);
+            if (e) ledgerNote = sim.appeal(g.job);
+            y += 34;
+        }
+        y += 6;
+    }
+    if (!ledgerNote.empty()) {
+        std::string n = ledgerNote;
+        for (auto [k, v] : std::vector<std::pair<std::string, std::string>>{{"agreed", "agreed"}, {"haggled", "will, later"}, {"refused", "said no"}, {"unaffordable", "not enough rapport"}, {"pushed", "twice in a day, rolled their eyes"}, {"contrary", "is doing the opposite"}})
+            if (auto at = n.find(k); at != std::string::npos) { n.replace(at, k.size(), v); break; }
+        y += wrapped(F.body, n + (sim.lastSaid.empty() ? "" : " \"" + sim.lastSaid + "\""), x, y, w, 14, T.narrator) + 8;
+    }
+    // roles and seasons already given out
+    bool any = false;
+    for (auto* p : sim.members()) if (p->duty) any = true;
+    if (any) {
+        text(F.bold, "Roles and seasons", x, y, 13, T.muted);
+        y += 20;
+        for (auto* p : sim.members()) {
+            if (!p->duty) continue;
+            std::string s = p->duty->role ? cat(p->name, ", the ", Sim::roleName(p->duty->job), " (1 rapport a day)") : cat(p->name, ", ", Sim::roleName(p->duty->job), " until the season turns");
+            text(F.body, s, x, y + 5, 13, T.text);
+            if (button({x + w - 74, y, 74, 26}, p->duty->role ? "Revoke" : "Let off", true, false, 12)) sim.revoke(*p);
+            y += 30;
+        }
+    }
+    return y + 14;
 }
