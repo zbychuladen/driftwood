@@ -39,7 +39,7 @@ int Sim::price(const Person& p, const std::string& job, float fit) {
     return std::max(2, int(std::lround(c)));
 }
 
-std::vector<Line> Sim::linesFor(const Person& p) {
+std::vector<Line> Sim::linesFor(const Person& p, bool all) {
     struct Cand { float fit; Line l; };
     std::vector<Cand> c;
     uint32_t h = mix(uint32_t(p.id), uint32_t(day()));
@@ -74,12 +74,13 @@ std::vector<Line> Sim::linesFor(const Person& p) {
     // the best three, ties broken the same way all day
     for (size_t i = 0; i < c.size(); i++) {
         c[i].l.cost = price(p, c[i].l.job, c[i].fit);
+        c[i].l.fit = c[i].fit;
         if (c[i].l.job == p.kind || (c[i].l.job == "rest" && p.kind == "idle")) c[i].fit -= 3;
         c[i].fit += float(mix(h, uint32_t(i)) % 100) / 400.f;
     }
     std::stable_sort(c.begin(), c.end(), [](const Cand& a, const Cand& b) { return a.fit > b.fit; });
     std::vector<Line> out;
-    for (size_t i = 0; i < c.size() && out.size() < 3; i++) out.push_back(c[i].l);
+    for (size_t i = 0; i < c.size() && (all || out.size() < 3); i++) out.push_back(c[i].l);
     return out;
 }
 

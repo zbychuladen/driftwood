@@ -598,6 +598,115 @@ static void testRapportCurrency() {
     CHECK(change[0] > 0 && change[0] > change[1], cat("a well-chosen spot earns rapport when it is finished, a bad one less (", change[0], " vs ", change[1], ")").c_str());
 }
 
+// The Narrator's Ledger: each gap shows when it should and clears once fixed;
+// candidates are people who could actually do it; the bigger nudges last.
+static void testLedger() {
+    std::printf("the ledger\n");
+    Sim s;
+    s.newWorld(20261017);
+    runDays(s, 4);
+    while (s.hour() < 10 || s.hour() >= 11) s.step(30);
+    s.pendingFate.clear();
+    auto adults = s.members();
+    auto has = [&](const char* id) { for (auto& g : s.ledger()) if (g.id == id) return true; return false; };
+    auto idle = [&] { for (auto* p : adults) { p->kind = "idle"; p->sick = 0; p->needs.fatigue = 30; } };
+    std::string bad;
+    auto expect = [&](const char* id, bool want, const char* when) { if (has(id) != want && bad.size() < 300) bad += cat("\n          ", id, want ? " missing " : " still there ", when); };
+    std::string before = s.save();
+    idle();
+    s.stock.wood = 0; expect("wood", true, "with no wood and nobody cutting");
+    adults[0]->kind = "wood"; expect("wood", false, "once someone cuts wood");
+    idle(); s.stock.food = 0; expect("food", true, "with no food");
+    adults[0]->kind = "food"; adults[1]->kind = "farm"; expect("food", false, "with two gathering");
+    idle(); s.stock.food = 200;
+    if (auto* pr = s.currentProject()) {
+        pr->progress = std::max(pr->progress, 1.f);
+        expect("builder", true, "with a project and no builder");
+        adults[2]->kind = "build"; expect("builder", false, "with a builder");
+    }
+    idle();
+    for (auto* p : adults) p->gifts.erase("herbalist");
+    adults[3]->sick = 20; expect("herbalist", true, "with someone sick and no herbalist");
+    adults[0]->gifts["herbalist"] = 4; expect("herbalist", false, "with a herbalist");
+    idle(); for (auto* p : adults) p->needs.fatigue = 90; expect("tired", true, "with everyone worn out");
+    idle(); expect("tired", false, "once rested");
+    expect("explore", true, "with the island unknown and nobody exploring");
+    adults[1]->kind = "explore"; expect("explore", false, "with someone exploring");
+    idle(); s.stock.wood = 0;
+    double day = s.tMin;
+    s.tMin = std::floor(s.tMin / 1440) * 1440 + 22 * 60;
+    expect("wood", false, "at night, when everyone sleeps");
+    s.tMin = day;
+    if (auto* f = s.fire(); f && f->done) {
+        s.stock.wood = 50;
+        f->fuel = 0;
+        s.tMin = 30 * 1440 + 10 * 60;   // a winter morning
+        expect("fire", true, "with the fire out in winter");
+        f->fuel = 5; expect("fire", false, "once the fire is fed");
+        s.tMin = day;
+    }
+    CHECK(bad.empty(), ("every ledger gap shows when it should and clears once fixed" + bad).c_str());
+
+    // candidates: never someone already at it, contrary or sick; those likely to agree rank above those who would refuse
+    idle(); s.stock.wood = 0;
+    adults[1]->contraryUntil = s.tMin + 600;
+    adults[2]->sick = 10;
+    adults[3]->buyIn = 1;   // would refuse anything
+    bool sane = true, order = true;
+    for (auto& g : s.ledger()) {
+        bool seenRefuser = false;
+        for (auto& c : g.candidates) {
+            Person* p = s.person(c.pid);
+            if (!p || p == adults[1] || p == adults[2] || p->kind == g.job) sane = false;
+            bool refuses = s.likely(*p, Line{g.job, "", -1, c.cost}) == "refused";
+            if (!refuses && seenRefuser) order = false;
+            seenRefuser |= refuses;
+        }
+    }
+    CHECK(sane, "candidates are never already at it, contrary or sick");
+    CHECK(order, "those likely to agree are listed before those who would refuse");
+    adults[1]->contraryUntil = 0; adults[2]->sick = 0; adults[3]->buyIn = 40;
+    s.load(before);
+
+    // an appointed role holds until revoked, and costs a little rapport each day
+    Sim r;
+    r.newWorld(777);
+    runDays(r, 3);
+    Person* p = nullptr;
+    for (auto* q : r.members()) if (!q->child && (!p || q->buyIn > p->buyIn)) p = q;
+    p->buyIn = 90;
+    r.rapport = 100;
+    int cost = r.roleCost(*p, "wood");
+    CHECK(r.appoint(*p, "wood") == "agreed" && std::abs(r.rapport - (100 - cost)) < .01f && p->duty && p->duty->role, "a settler who buys in takes a role, and it costs its price");
+    int chopping = 0;
+    float before2 = r.rapport;
+    for (int h = 0; h < 24 * 4; h++) { r.step(60); r.pendingFate.clear(); chopping += p->kind == "wood"; }
+    CHECK(p->duty && chopping >= 8, cat("the woodcutter keeps cutting wood day after day (", chopping, " hours in 4 days)").c_str());
+    CHECK(r.rapport < before2 + 4 * r.rapportIncome() - 3, "a role costs a little rapport every day");
+    r.revoke(*p);
+    CHECK(!p->duty, "a role ends when revoked");
+    // a season's work lasts until the season turns
+    r.rapport = 100;
+    CHECK(r.askSeason(*p, "food") == "agreed" && p->duty && !p->duty->role, "a settler agrees to a season's work");
+    int turn = ((r.day() - 1) / 10 + 1) * 10 + 1;
+    while (r.day() < turn) { r.step(60); r.pendingFate.clear(); }
+    r.step(120);
+    CHECK(!p->duty, "a season's work ends when the season turns");
+    // an appeal to everyone
+    r.rapport = 100;
+    int ac = r.appealCost("wood");
+    auto res = r.appeal("wood");
+    int told = 0;
+    for (auto* q : r.members()) told += q->told && q->told->job == "wood" && q->told->until > r.tMin;
+    CHECK(res.rfind("agreed", 0) == 0 && told >= 1 && std::abs(r.rapport - (100 - ac)) < .01f, cat("an appeal costs its price and moves those who buy in (", res, ")").c_str());
+    r.rapport = 1;
+    CHECK(r.appeal("wood") == "unaffordable" && r.rapport == 1, "an appeal the narrator cannot afford does nothing");
+    // reading the ledger never changes the game
+    std::string a1 = r.save();
+    r.ledger();
+    CHECK(r.save() == a1, "reading the ledger never changes the game");
+}
+
 int main() {
     for (uint32_t seed : {20261017u, 777u, 4242u}) testSurvival(seed);
     testNoSmithNoForge();
@@ -608,6 +717,7 @@ int main() {
     testLines();
     testQuestions();
     testRapportCurrency();
+    testLedger();
     testDeterminism();
     testFocus(20261017);
     testFocus(777);

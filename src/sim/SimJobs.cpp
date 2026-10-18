@@ -285,6 +285,14 @@ void Sim::plan_(Person& p) {
         if (w == "wood") return chopJob(p);
         if (w == "build") if (auto* pr = currentProject()) return buildJob(p, *pr);
     }
+    // a season's work or a role they took on: daytime only, after their own needs
+    if (p.duty && (p.duty->until <= 0 || p.duty->until > tMin) && h >= 7 && h < 18) {
+        auto w = p.duty->job;
+        if (w == "explore") return exploreJob(p);
+        if (w == "food") return foodJob(p);
+        if (w == "wood") return chopJob(p);
+        if (w == "build") if (auto* pr = currentProject()) return buildJob(p, *pr);
+    }
     workQ(p);
 }
 

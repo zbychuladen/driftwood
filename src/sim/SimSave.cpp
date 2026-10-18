@@ -61,6 +61,7 @@ template <class A> void io(A& a, PendingPlacement& v);
 template <class A> void io(A& a, Reply& v);
 template <class A> void io(A& a, Question& v);
 template <class A> void io(A& a, Fib& v);
+template <class A> void io(A& a, Duty& v);
 
 // ---- plain values
 template <class A> void io(A& a, int& v) { a.pod(v); }
@@ -138,6 +139,7 @@ template <class A> void io(A& a, Question& v) {
     io(a, v.id); io(a, v.pid); io(a, v.about); io(a, v.topic); io(a, v.text); io(a, v.replies); io(a, v.asked); io(a, v.expires); io(a, v.truth);
 }
 template <class A> void io(A& a, Fib& v) { io(a, v.pid); io(a, v.due); io(a, v.reveal); }
+template <class A> void io(A& a, Duty& v) { io(a, v.job); io(a, v.until); io(a, v.role); }
 template <class A> void io(A& a, Focus& v) {
     int k = int(v.kind);
     io(a, k);
@@ -150,7 +152,7 @@ template <class A> void io(A& a, Person& p) {
     io(a, p.sk); io(a, p.gifts); io(a, p.charisma); io(a, p.buyIn); io(a, p.aff); io(a, p.partner); io(a, p.child);
     io(a, p.age); io(a, p.bornDay); io(a, p.bed); io(a, p.hidden); io(a, p.sleeping); io(a, p.sleepIn); io(a, p.sick);
     io(a, p.starve); io(a, p.phase); io(a, p.moving); io(a, p.face); io(a, p.anim); io(a, p.carry); io(a, p.bubble);
-    io(a, p.told); io(a, p.dead); io(a, p.gone); io(a, p.parents); io(a, p.lastTold); io(a, p.lastAsked); io(a, p.tiers); io(a, p.gates);
+    io(a, p.told); io(a, p.dead); io(a, p.gone); io(a, p.parents); io(a, p.lastTold); io(a, p.lastAsked); io(a, p.duty); io(a, p.tiers); io(a, p.gates);
     io(a, p.seeking); io(a, p.calling); io(a, p.callingNeed); io(a, p.esteemPts); io(a, p.titles); io(a, p.goodDays);
     io(a, p.inspired); io(a, p.trust); io(a, p.inventProg); io(a, p.lastBaby); io(a, p.weary); io(a, p.pressure); io(a, p.contraryUntil);
 }
