@@ -45,7 +45,7 @@ Person& Sim::makePerson(const std::string& name, uint32_t tunic, float x, float 
         p.sk[k] = s;
     }
     p.needs = {15 + rnd() * 15, 30 + rnd() * 10, 30, 0, 20};
-    p.rapport = p.has("easygoing") ? 62 : p.has("obstinate") ? 14 : 34 + rnd() * 14;
+    p.buyIn = p.has("easygoing") ? 62 : p.has("obstinate") ? 14 : 34 + rnd() * 14;
     p.child = child;
     p.age = child ? 0 : 18 + ri(30);
     p.bornDay = child ? day() : 0;
@@ -81,7 +81,7 @@ void Sim::birth(Person& a, Person& b, bool twin) {
     c.parents = {a.id, b.id};
     c.skin = rnd() < .5f ? a.skin : b.skin;
     c.hair = rnd() < .5f ? a.hair : b.hair;
-    c.status = "member"; c.rapport = 50;
+    c.status = "member"; c.buyIn = 50;
     for (auto* q : members()) { c.aff[q->id] = 50; q->aff[c.id] = 50; }
     assignBeds();
     note(twin ? cat("And then a second baby! We named them ", nm, ".") : cat(a.name, " and ", b.name, " welcomed a baby. We named them ", nm, ". The island feels less lonely."), "big");
@@ -105,11 +105,13 @@ void Sim::bubble(Person& p, const std::string& text, double mins) { p.bubble = B
 
 void Sim::die(Person& p) {
     p.dead = true;
+    lostThisSeason++;
+    earn(-5);
     clearQ(p);
     note(cat(p.name, " did not wake this morning. There was not enough food. We buried them on the hill above the sea."), "sad");
     for (auto* q : members()) {
         q->mood = std::max(0.f, q->mood - 25);
-        q->rapport = std::max(0.f, q->rapport - 6);
+        q->buyIn = std::max(0.f, q->buyIn - 6);
         if (q->partner == p.id) q->partner = -1;
     }
     assignBeds();
@@ -138,7 +140,7 @@ float Sim::computeTiers(Person& p) {
     float mastery = 0;
     for (auto& [k, v] : p.sk) mastery = std::max(mastery, v * 10);
     float esteem = clampf(p.esteemPts * .45f + mastery * .3f + resp * .25f + (p.titles.empty() ? 0 : 8), 0, 100);
-    float purpose = !p.calling.empty() ? clampf(100 - p.callingNeed, 0, 100) : clampf(8 + p.rapport * .12f, 0, 100);
+    float purpose = !p.calling.empty() ? clampf(100 - p.callingNeed, 0, 100) : clampf(8 + p.buyIn * .12f, 0, 100);
     p.tiers = {body, safety, belonging, esteem, purpose};
     float g1 = clampf((body - 40) / 30, 0, 1), g2 = g1 * clampf((safety - 40) / 30, 0, 1), g3 = g2 * clampf((belonging - 40) / 30, 0, 1), g4 = g3 * clampf((esteem - 35) / 30, 0, 1);
     p.gates = {1, g1, g2, g3, g4};

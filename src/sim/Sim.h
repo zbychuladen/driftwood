@@ -70,7 +70,8 @@ struct Person {
     std::map<std::string, float> sk;          // basic survival skills 1..10
     std::map<std::string, int> gifts;         // specialist talents 1..10
     int charisma = 5;
-    float rapport = 40;                       // how willing they are to go along with the narrator, 0..100
+    float buyIn = 40;                         // how much they buy into the narrator, 0..100: sets prices and whether they go along
+                    // how willing they are to go along with the narrator, 0..100
     float pressure = 0;                       // narration they have had lately; fades by one a day
     double contraryUntil = 0;                 // contrary until then: narrate them and they do the opposite
     std::unordered_map<int, float> aff;       // affinity toward other people
@@ -102,7 +103,7 @@ struct Person {
     std::function<void()> release;
     float trust = 0;
     int inventProg = 0, lastBaby = -99;
-    bool weary = false;                       // tired of being narrated (rapport ran out once)
+    bool weary = false;                       // tired of being narrated (their buy-in ran out once)
     bool has(const char* trait) const;
 };
 
@@ -154,7 +155,7 @@ struct Fate { std::string id, title, desc; };
 // A line the narrator can say about a settler: what they do next. job is what
 // it sets them doing (rest, food, wood, build, calling, explore, hermit, peace,
 // talk); target is the other person in a peace or talk line.
-struct Line { std::string job, text; int target = -1; };
+struct Line { std::string job, text; int target = -1, cost = 8; };   // cost: the narrator's rapport it takes if they go along
 // A settler's question to the narrator, with three replies in a fixed order:
 // honest, teasing, misleading. truth is what an honest reply says.
 struct Reply { std::string kind, text; };
@@ -199,6 +200,7 @@ public:
     std::vector<Poi> pois;
     std::map<std::string, int> mods;          // season-limited modifiers: value = last day active
     std::map<std::string, double> boost;      // words-in-the-sand boosts: value = expiry minute
+    int lostThisSeason = 0;                   // deaths since the season turned
     int lastProposal = 0, lastSand = 0, newcomerDay = 0, lastRaid = 0, lastSick = 0, lastFeast = 0, totems = 0;
     std::optional<Vote> vote;
     std::vector<Fate> pendingFate;            // non-empty: the front end should pause and ask
@@ -219,7 +221,7 @@ public:
     // The whole game as bytes, and back. Settlers' half-done actions are not
     // kept: after a load everyone picks their next task. load() leaves the sim
     // as it was and returns false, with a reason, for anything it cannot read.
-    static constexpr int SAVE_VERSION = 4;   // 2: site quality and pending placement; 3: rapport, contrariness, the story circle; 4: lines, questions
+    static constexpr int SAVE_VERSION = 6;   // 2: site quality and pending placement; 3: rapport, contrariness, the story circle; 4: lines, questions; 5: deaths this season; 6: the narrator's rapport and buy-in
     struct SaveInfo { std::string village; int day = 0, year = 0, season = 0, people = 0; uint32_t seed = 0; };
     std::string save() const;
     bool load(const std::string& data, std::string* error = nullptr);
@@ -283,7 +285,21 @@ public:
     std::vector<const ProjectDef*> proposalList();
     void propose(const std::string& key);
     void applyFate(const Fate& f);
-    float avgRapport();
+    float avgBuyIn();
+    // The narrator's rapport: what every request is paid from. It comes in each
+    // day from how much the settlers buy in, and when the narrator's plans work
+    // out; it goes on requests and when plans backfire.
+    static constexpr float RAPPORT_MAX = 100;
+    float rapport = 30;
+    float rapportIncome();
+    // How a settler would answer a line now: "agreed", "haggled" or "refused"
+    // (contrariness and a second line in a day aside). narrate() uses the same rule.
+    std::string likely(const Person& p, const Line& line) const;
+    static const char* buyInWord(float b);       // "readily", "grudgingly"...                       // a day's income, from the average buy-in
+    void earn(float n);                          // add (or, negative, lose) rapport, kept within 0..RAPPORT_MAX
+    // What a day's request costs: cheap when it fits what they want (fit is how
+    // well, as linesFor scores it), dear when it does not or they hardly buy in.
+    static int price(const Person& p, const std::string& job, float fit);
     // How much narrating a person takes before they turn contrary: easygoing
     // settlers put up with more, obstinate ones with less.
     static float tolerance(const Person& p);
@@ -292,8 +308,9 @@ public:
 
     // building sites
     static bool specialist(const ProjectDef& d) { return !d.gift.empty(); }
-    SiteReport evaluateSite(const ProjectDef& d, int x, int y) const;
-    std::vector<Opinion> opinions(const ProjectDef& d, int x, int y) const;
+    // self: the id of a project already standing there, judged in its own place
+    SiteReport evaluateSite(const ProjectDef& d, int x, int y, int self = -1) const;
+    std::vector<Opinion> opinions(const ProjectDef& d, int x, int y, int self = -1) const;
     std::optional<std::pair<int, int>> suggestSite(const ProjectDef& d);
     bool placeAt(int projectId, int x, int y);   // the player's choice; false if the spot is not allowed
     bool placeSuggested(int projectId);          // "let them choose"

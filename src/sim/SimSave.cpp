@@ -147,7 +147,7 @@ template <class A> void io(A& a, Focus& v) {
 template <class A> void io(A& a, Person& p) {
     io(a, p.id); io(a, p.name); io(a, p.tunic); io(a, p.skin); io(a, p.hair); io(a, p.hairStyle); io(a, p.x); io(a, p.y);
     io(a, p.kind); io(a, p.doing); io(a, p.status); io(a, p.focus); io(a, p.needs); io(a, p.mood); io(a, p.traits);
-    io(a, p.sk); io(a, p.gifts); io(a, p.charisma); io(a, p.rapport); io(a, p.aff); io(a, p.partner); io(a, p.child);
+    io(a, p.sk); io(a, p.gifts); io(a, p.charisma); io(a, p.buyIn); io(a, p.aff); io(a, p.partner); io(a, p.child);
     io(a, p.age); io(a, p.bornDay); io(a, p.bed); io(a, p.hidden); io(a, p.sleeping); io(a, p.sleepIn); io(a, p.sick);
     io(a, p.starve); io(a, p.phase); io(a, p.moving); io(a, p.face); io(a, p.anim); io(a, p.carry); io(a, p.bubble);
     io(a, p.told); io(a, p.dead); io(a, p.gone); io(a, p.parents); io(a, p.lastTold); io(a, p.lastAsked); io(a, p.tiers); io(a, p.gates);
@@ -190,7 +190,7 @@ template <class A> void body(A& a, Sim& s) {
     io(a, s.totems); io(a, s.vote); io(a, s.pendingFate); io(a, s.nextProjId); io(a, s.nextPid); io(a, s.active);
     io(a, s.fuelRes); io(a, s.dockRes); io(a, s.toolWear); io(a, s.pots); io(a, s.cloth); io(a, s.herbs); io(a, s.ironTools);
     io(a, s.hasHerb); io(a, s.agenda); io(a, s.lastToldName); io(a, s.lastReply); io(a, s.pendingPlacement);
-    io(a, s.questions); io(a, s.fibs); io(a, s.nextQuestion); io(a, s.lastSaid);
+    io(a, s.questions); io(a, s.fibs); io(a, s.nextQuestion); io(a, s.lastSaid); io(a, s.lostThisSeason); io(a, s.rapport);
     // the behaviour random generator, so a loaded game goes on the same way every time
     std::string rng;
     if constexpr (!A::reading) { std::ostringstream o; o << s.gen; rng = o.str(); }

@@ -251,7 +251,7 @@ void Sim::plan_(Person& p) {
         return setQ(p, "arrive", "Walking toward the camp", {walkA(campX + 1.5f, campY + 1.5f), w});
     }
     if (p.status == "leaving")
-        return setQ(p, "leave", "Leaving", {walkA(boatX + .5f, boatY + .5f), workA(5, "Leaving", "idle", [](Person& q) { q.dead = true; q.gone = true; })});
+        return setQ(p, "leave", "Leaving", {walkA(boatX + .5f, boatY + .5f), workA(5, "Leaving", "idle", [this](Person& q) { q.dead = true; q.gone = true; lostThisSeason++; })});
     auto& n = p.needs;
     double h = hour();
     bool night = h >= 22 || h < 6;
@@ -705,8 +705,8 @@ void Sim::callingJob(Person& p) {
         auto* sh = built("circle");
         float sx = sh ? sh->x + 2.3f : pondX + 2.6f, sy = sh ? sh->y + 1.f : pondY + .5f;
         return setQ(p, "calling", "Turning the story over", {walkA(sx, sy), workA(120, "Thinking", "sit", done([this](Person& q) {
-            q.rapport = std::min(100.f, q.rapport + 5);
-            for (auto* o : members()) o->rapport = std::min(100.f, o->rapport + .8f);
+            q.buyIn = std::min(100.f, q.buyIn + 5);
+            for (auto* o : members()) o->buyIn = std::min(100.f, o->buyIn + .8f);
             if (rnd() < .2f) {
                 auto fr = frontier();
                 if (!fr.empty()) {
