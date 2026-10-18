@@ -196,6 +196,7 @@ float Game::settlerCard(Person& p, float x, float y, float w, bool d) {
         else if (friendP) desc += " Closest to " + friendP->name + ".";
         desc += cat("\nGifts: ", p.gifts.empty() ? "none, a jack of all trades" : sim.giftText(p), ". Charisma ", p.charisma, "/10 (", Sim::charWord(p.charisma), "). Buys into the narrator ", Sim::buyInWord(p.buyIn), ".");
         if (auto* hh = sim.householdOf(p.id)) desc += cat("\nHousehold: ", sim.householdName(*hh), ", ", Sim::statusName(sim.status(*hh)), "s", hh->home >= 0 && sim.projectById(hh->home) ? cat(", in a ", lower(sim.projectById(hh->home)->name)) : std::string(", no home of their own"), ".");
+        if (p.resentment >= 20) desc += p.resentment >= 50 ? "\nBitter about how much better others live." : "\nA little resentful of those doing better.";
         if (p.duty) desc += p.duty->role ? cat("\nThe camp's ", Sim::roleName(p.duty->job), ", by the narrator's choosing.") : cat("\nSpending the season on ", Sim::roleName(p.duty->job), "'s work.");
         if (sim.contrary(p)) desc += "\nContrary: narrated once too often, and doing the opposite for now.";
         else if (p.weary) desc += "\nTired of being narrated.";

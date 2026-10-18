@@ -87,6 +87,14 @@ std::vector<Gap> Sim::ledger() {
         gap("goods", cat("A ", home, " needs ", what, ", and nobody is making any."), "", fix);
     }
     if (sameFood) gap("variety", cat("The same food day after day: ", foodVariety(), foodVariety() == 1 ? " kind" : " kinds", " lately."), "food", "A garden, fields, a dock or a smokehouse add kinds of food.");
+    // resentment at how much better others live
+    {
+        std::vector<std::string> bitter;
+        for (auto* p : adults) if (p->resentment >= 40) bitter.push_back(p->name);
+        if (!bitter.empty())
+            gap("resentment", bitter.size() == 1 ? cat(bitter[0], " resents how much better others live.") : cat(bitter.size(), " settlers resent how much better others live: ", listNames([&] { std::vector<Person*> v; for (auto* p : adults) if (p->resentment >= 40) v.push_back(p); return v; }()), "."), "",
+                "Help the lower households rise (goods, a service within reach), or ask a notable to share the common work.");
+    }
     // who could do it, cheapest first: the price, their skill, and the gap their going would leave
     for (auto& g : out) {
         if (g.job.empty()) continue;

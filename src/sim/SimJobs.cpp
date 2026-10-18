@@ -84,6 +84,7 @@ float Sim::skillF(Person& p, const std::string& k) {
     float f = (.6f + p.sk[k] * .08f) * (p.has("hardworking") ? 1.15f : 1) * (p.mood < 30 ? .8f : 1)
             * (mods.count("tools") && mods["tools"] >= day() ? 1.25f : 1) * (firsts.count("ruinTools") ? 1.12f : 1) * (p.inspired ? 1.15f : 1);
     if (k == "chop" || k == "mine" || k == "build") f *= (1 - toolWear / 260) * (ironTools ? 1.2f : 1);
+    f *= alongside(p, k);
     return f;
 }
 
@@ -223,7 +224,7 @@ std::deque<Action> Sim::sleepQ(Person& p, bool sick) {
     auto s = bedSpot(p);
     double h = hour();
     float dur = h >= 20 ? float((24 - h + 6.5) * 60) : h < 6.5 ? float((6.5 - h) * 60) : sick ? (built("herbs") ? 150.f : 240.f) : 150.f;
-    if (!sick && p.has("nightowl") && h >= 9 && h < 16) dur = std::max(90.f, float((16 - h) * 60));   // a night owl's day of sleep
+    if (!sick && p.has("nightowl") && h >= 7 && h < 15) dur = std::max(90.f, float((15 - h) * 60));   // a night owl's day of sleep
     float ax = s.x, ay = s.y, lx = s.lieX, ly = s.lieY;
     auto w = workA(dur, sick ? "Resting" : "Sleeping", "sleep", [ax, ay, lx](Person& p) { p.sleeping = false; p.hidden = false; if (lx >= 0) { p.x = ax; p.y = ay; } });
     std::string where = s.b ? s.b->key : "ground";
@@ -296,7 +297,7 @@ void Sim::plan_(Person& p) {
     double h = hour();
     // a night owl sleeps through the middle of the day and works through the night
     bool owl = p.has("nightowl") && !p.child;
-    bool night = owl ? h >= 9 && h < 16 : h >= 22 || h < 6;
+    bool night = owl ? h >= 7 && h < 15 : h >= 22 || h < 6;   // an owl turns in after the night's work
     Focus bed = projectById(p.bed) ? onProject(*projectById(p.bed)) : Focus{};
     Focus atFire = fire() ? onProject(*fire()) : Focus{};
     Focus mealAt = fire() ? onProject(*fire(), true) : onStock();
@@ -406,15 +407,18 @@ void Sim::workQ(Person& p) {
     if (boosted("wood")) dWood += .5f;
     std::map<std::string, int> cnt;
     for (auto* q : alive) if (q != &p) cnt[q->kind]++;
+    // householders and notables direct the work on a project under way, one at a time
+    int st = statusOf(p);
+    float dLead = st >= 3 && proj && proj->progress > 0 && !cnt["lead"] ? .9f : 0;
     float fs = std::max(p.sk["forage"], p.sk["fish"]);
     struct Opt { const char* k; float d, sk; };
     Opt opts[] = {{"food", dFood, fs}, {"wood", dWood, p.sk["chop"]}, {"stone", dStone, p.sk["mine"]}, {"build", dBuild, p.sk["build"]},
                   {"farm", cnt["farm"] ? 0 : dFarm, p.sk["farm"]}, {"explore", cnt["explore"] ? dExplore * .2f : dExplore, 3},
-                  {"visit", cnt["visit"] ? 0 : dVisit, 3}, {"friend", cnt["friend"] > 1 ? 0 : dFriend, 3}, {"craft", dCraft, 6}};
+                  {"visit", cnt["visit"] ? 0 : dVisit, 3}, {"friend", cnt["friend"] > 1 ? 0 : dFriend, 3}, {"craft", dCraft, 6}, {"lead", dLead, 6}};
     std::string best;
     float bs = .12f;
     for (auto& o : opts) {
-        float s = o.d / (1 + cnt[o.k] * .85f) * (.78f + o.sk * .045f * (1 + (100 - p.tiers[ESTEEM]) / 150)) + rnd() * .07f;
+        float s = o.d / (1 + cnt[o.k] * .85f) * (.78f + o.sk * .045f * (1 + (100 - p.tiers[ESTEEM]) / 150)) * willing(st, o.k) + rnd() * .07f;
         if (s > bs) { bs = s; best = o.k; }
     }
     if (best == "food") return foodJob(p);
@@ -426,10 +430,18 @@ void Sim::workQ(Person& p) {
     if (best == "visit") return visitJob(p, *hp);
     if (best == "friend") return friendJob(p);
     if (best == "craft") return craftJob(p, craftKind);
+    if (best == "lead") { leadJob(p, *proj); return; }
     setQ(p, "idle", "Taking a breather", wanderQ(p));
 }
 
 // ---------------------------------------------------------------- jobs
+// A householder or notable directing the work on a project: builders there go faster.
+std::string Sim::leadJob(Person& p, Project& b) {
+    auto [sx, sy] = workSpot(b);
+    setQ(p, "lead", cat("Directing the work on the ", lower(b.name)), {walkA(sx + .4f, sy + .4f), workA(90, "Directing the work", "idle")}, onProject(b));
+    return "lead";
+}
+
 void Sim::chopJob(Person& p) {
     Obj* t = nearestObj([&](const Obj& o) { return o.type == "tree" && !o.palm && !o.sapling && o.res < 0 && explored[idx(o.x, o.y)]; }, p.x, p.y);
     if (!t) return setQ(p, "idle", "No trees nearby", wanderQ(p));
@@ -563,7 +575,9 @@ void Sim::buildJob(Person& p, Project& b) {
     }
     auto w = workA(60, cat("Building the ", lower(b.name)), "build", [this, bp](Person& p) {
         if (bp->done) return;
-        bp->progress += 60 * BUILD_PACE * skillF(p, "build") * giftBuild(p, *bp);
+        bool led = false;
+        for (auto* q : members()) led |= q->kind == "lead" && q->focus.kind == Focus::PROJECT && q->focus.id == bp->id;
+        bp->progress += 60 * BUILD_PACE * skillF(p, "build") * giftBuild(p, *bp) * (led ? 1.25f : 1);
         if (!bp->gift.empty() && p.gifts.count(bp->gift)) practise(p, bp->gift);
         if (p.gifts.count("carpenter") && bp->wood >= bp->stone) practise(p, "carpenter");
         if (p.gifts.count("mason") && bp->stone > bp->wood) practise(p, "mason");

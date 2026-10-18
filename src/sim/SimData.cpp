@@ -32,6 +32,8 @@ const std::vector<ProjectDef>& allProjects() {
         { auto d = P("cottage", "Cottage", 2, 2, 20, 8, 1); d.beds = 3; d.upgrade = true; add(d, 0, 0, false); }
         { auto d = P("house", "House", 2, 2, 30, 20, 1); d.beds = 4; d.upgrade = true; add(d, 0, 0, false); }
         { auto d = P("manor", "Manor", 3, 3, 50, 40, 1); d.beds = 6; d.upgrade = true; add(d, 0, 0, false); }
+        // raised when a notable commissions it (SimStatus)
+        { auto d = P("monument", "Monument", 1, 1, 10, 30, 600); d.commissioned = true; d.desc = "A carved stone raised by a notable household, for everyone to see. The village is more beautiful for it."; add(d, 2, 6, false); }
         add(P("dock", "Fishing dock", 1, 3, 31, 0, 580), 0, 0, true);
         add(P("tower", "Watchtower", 1, 1, 48, 11, 810), 6, 11, true);
         // specialist projects
