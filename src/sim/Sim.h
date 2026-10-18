@@ -141,6 +141,7 @@ struct ProjectDef {
 struct Project : ProjectDef {
     int id = 0;
     float siteQuality = 1;                    // how good its spot is, 0.6..1.25; scales what it does
+    float craft = 1, craftW = 0;              // workmanship, 0.75..1.25 (how well it was built), and the work it is averaged over
     bool sited = false;                       // placed by the player rather than the settlers
     float dw = 0, ds = 0, progress = 0, fuel = 0, growth = 0;
     bool done = false, placed = false, skip = false, voiced = false, waitNoted = false;
@@ -156,7 +157,7 @@ struct SiteReport { bool legal = false; float quality = 1; std::vector<SiteFacto
 // What one settler thinks of a spot. The more of a specialist they are, the
 // closer perceived is to the truth and the more specific what they say.
 struct Opinion { int pid; float perceived, expertise; std::string say; };
-struct PendingPlacement { int project = -1, sx = 0, sy = 0; };
+struct PendingPlacement { int project = -1, sx = 0, sy = 0; bool chosen = false; };   // chosen: from the build menu, so Esc cancels it
 
 struct Poi { std::string type; int x = 0, y = 0; bool found = false, joined = false, mentioned = false; int who = -1; };
 struct Entry { int d; std::string season, text, cls; };
@@ -253,7 +254,7 @@ public:
     // The whole game as bytes, and back. Settlers' half-done actions are not
     // kept: after a load everyone picks their next task. load() leaves the sim
     // as it was and returns false, with a reason, for anything it cannot read.
-    static constexpr int SAVE_VERSION = 11;   // 2: site quality and pending placement; 3: rapport, contrariness, the story circle; 4: lines, questions; 5: deaths this season; 6: the narrator's rapport and buy-in; 7: duties and roles; 8: households; 9: gift practice; 10: goods and food kinds; 11: status and work
+    static constexpr int SAVE_VERSION = 12;   // 2: site quality and pending placement; 3: rapport, contrariness, the story circle; 4: lines, questions; 5: deaths this season; 6: the narrator's rapport and buy-in; 7: duties and roles; 8: households; 9: gift practice; 10: goods and food kinds; 11: status and work; 12: blueprints and workmanship
     struct SaveInfo { std::string village; int day = 0, year = 0, season = 0, people = 0; uint32_t seed = 0; };
     std::string save() const;
     bool load(const std::string& data, std::string* error = nullptr);
@@ -397,7 +398,22 @@ public:
     std::optional<std::pair<int, int>> suggestSite(const ProjectDef& d);
     bool placeAt(int projectId, int x, int y);   // the player's choice; false if the spot is not allowed
     bool placeSuggested(int projectId);          // "let them choose"
-    float siteQ(const std::string& key);         // the built one's site quality, 1 if there is none
+    float siteQ(const std::string& key);         // the built one's site quality times its workmanship, 1 if there is none
+
+    // Blueprints. With the narrator placing (askPlacement), settlers build only
+    // their homes and small things themselves; everything else waits for a
+    // blueprint from the build menu, and settlers build it when they see fit.
+    static bool settlersBuild(const ProjectDef& d);   // campfire, lean-to, rack, hut
+    // The highest level of the needs pyramid the village has cleared, 0..5:
+    // blueprints unlock as it rises (blueprintLevel).
+    int villageLevel();
+    static int blueprintLevel(const std::string& key);
+    bool unlocked(const std::string& key, std::string* why = nullptr);
+    std::vector<const ProjectDef*> blueprints();         // what the build menu offers, in order
+    int blueprint(const std::string& key);              // start placing one; the project id, or -1
+    void cancelBlueprint();                              // Esc while placing from the menu
+    std::vector<Project*> wishes();                      // blueprints the settlers would build next, if placed
+    static const char* craftWord(float c);
 
     // descriptions for UI
     std::vector<std::string> lacking(Person& p);

@@ -260,31 +260,47 @@ static void testSites() {
 }
 
 static void testPlacementPause() {
-    std::printf("placing a building\n");
+    std::printf("blueprints and placing a building\n");
     Sim s;
     s.newWorld(20261017);
     s.askPlacement = true;
-    int guard = 0;
-    while (!s.pendingPlacement && guard++ < 24 * 120) { s.step(60); if (!s.pendingFate.empty()) { auto f = s.pendingFate[0]; s.pendingFate.clear(); s.applyFate(f); } }
-    CHECK(s.pendingPlacement.has_value(), "a specialist building comes up for the narrator to place");
-    if (!s.pendingPlacement) return;
+    runDays(s, 12);
+    // with the narrator placing, the settlers build only their own homes and small things
+    bool onlyOwn = true;
+    for (auto& b : s.plan) if (b.placed && !Sim::settlersBuild(b)) onlyOwn = false;
+    CHECK(onlyOwn && !s.pendingPlacement, "the settlers build only homes and small things unless the narrator draws up a blueprint");
+    CHECK(!s.wishes().empty(), "they say what they would build next");
+    // locked blueprints wait for the village to rise
+    std::string why;
+    bool locked = !s.unlocked("school", &why) && s.blueprint("school") < 0 && !why.empty();
+    CHECK(locked, ("a blueprint above the village's level is locked (" + why + ")").c_str());
+    for (auto* p : s.members()) p->tiers = {90, 90, 90, 90, 10};
+    CHECK(s.villageLevel() == 4 && s.unlocked("school"), "and unlocks as the village clears the levels of need");
+    // the build menu: something the village can build now (a watchtower needs no gift)
+    int id = s.blueprint("tower");
+    CHECK(id >= 0 && s.pendingPlacement && s.pendingPlacement->chosen, "a blueprint from the build menu waits for its spot");
+    if (id < 0) return;
     double t = s.tMin;
     s.step(600);
     CHECK(s.tMin == t, "the game stands still while the spot is chosen");
-    // the choice survives saving
     Sim copy;
     copy.load(s.save());
-    CHECK(copy.pendingPlacement && copy.pendingPlacement->project == s.pendingPlacement->project, "a pending placement survives a save");
-    int id = s.pendingPlacement->project;
+    CHECK(copy.pendingPlacement && copy.pendingPlacement->project == id && copy.pendingPlacement->chosen, "a pending placement survives a save");
+    // Esc cancels it, and a fresh one leaves nothing behind
+    Sim c2;
+    c2.load(s.save());
+    c2.cancelBlueprint();
+    CHECK(!c2.pendingPlacement, "a blueprint can be cancelled");
     CHECK(!s.placeAt(id, 0, 0), "a spot in the sea is refused");
     Project* b = s.projectById(id);
-    // choose the worst legal spot on purpose, then see it recorded
     auto all = sites(s, *b, 20);
     auto worst = std::min_element(all.begin(), all.end(), [](auto& a, auto& c) { return a.second.quality < c.second.quality; });
     CHECK(worst != all.end() && s.placeAt(id, worst->first.first, worst->first.second) && b->placed && b->sited && std::abs(b->siteQuality - worst->second.quality) < 1e-4f,
           "the narrator's spot is used, and its quality kept");
     s.step(120);
     CHECK(!s.pendingPlacement && s.tMin > t, "the game goes on once the spot is chosen");
+    for (int h = 0; h < 24 * 40 && !s.projectById(id)->done; h++) { s.step(60); if (!s.pendingFate.empty()) { auto f = s.pendingFate[0]; s.pendingFate.clear(); s.applyFate(f); } }
+    CHECK(s.projectById(id)->done, "the settlers get round to building it");
 }
 
 // Two runs from the same point, one with a building in a good spot and one in a bad spot.
@@ -596,9 +612,8 @@ static void testRapportCurrency() {
     Sim base;
     base.newWorld(20261017);
     base.askPlacement = true;
-    int guard = 0;
-    while (!base.pendingPlacement && guard++ < 24 * 120) { base.step(60); if (!base.pendingFate.empty()) { auto f = base.pendingFate[0]; base.pendingFate.clear(); base.applyFate(f); } }
-    if (!base.pendingPlacement) { CHECK(false, "a building comes up for the narrator to place"); return; }
+    runDays(base, 6);
+    if (base.blueprint("store") < 0) { CHECK(false, "a store can be drawn up"); return; }
     std::string start = base.save();
     float change[2] = {0, 0};
     for (int pass = 0; pass < 2; pass++) {
@@ -609,7 +624,6 @@ static void testRapportCurrency() {
         auto pickIt = pass == 0 ? std::max_element(all.begin(), all.end(), [](auto& x, auto& y) { return x.second.quality < y.second.quality; })
                                 : std::min_element(all.begin(), all.end(), [](auto& x, auto& y) { return x.second.quality < y.second.quality; });
         b.placeAt(id, pickIt->first.first, pickIt->first.second);
-        b.askPlacement = false;
         for (int h = 0; h < 24 * 40 && !b.projectById(id)->done; h++) {
             float before = b.avgBuyIn();
             b.step(60);
@@ -1037,6 +1051,39 @@ static void testStatusAndWork() {
     CHECK(t.good("spices") > sp && t.good("finecloth") > fc && t.nextShip > t.day(), "a passing ship trades spices and fine cloth with a notable");
 }
 
+// Workmanship: practised, cheerful, gifted hands build better, and it counts.
+static void testWorkmanship() {
+    std::printf("workmanship\n");
+    float craft[2];
+    for (int pass = 0; pass < 2; pass++) {
+        Sim s;
+        s.newWorld(20261017);
+        runDays(s, 3);
+        std::set<int> before;   // only projects begun after the builders are set
+        for (auto& b : s.plan) if (b.progress > 0 || b.done) before.insert(b.id);
+        Project* first = nullptr;
+        for (int h = 0; h < 24 * 30 && !first; h++) {
+            for (auto* p : s.members()) { p->sk["build"] = pass ? 9.f : 1.f; p->mood = pass ? 90.f : 30.f; }
+            s.step(60);
+            if (!s.pendingFate.empty()) { auto f = s.pendingFate[0]; s.pendingFate.clear(); s.applyFate(f); }
+            for (auto& b : s.plan) if (b.done && b.craftW > 0 && !before.count(b.id) && !first) first = &b;
+        }
+        craft[pass] = first ? first->craft : 0;
+    }
+    CHECK(craft[1] > craft[0] + .15f, cat("skilled, cheerful builders build better (", int(craft[1] * 100), " against ", int(craft[0] * 100), ")").c_str());
+    Sim q;
+    q.newWorld(4242);
+    runDays(q, 25);
+    Project* st = nullptr;
+    for (auto& b : q.plan) if (b.key == "store") st = &b;
+    if (st) {
+        st->done = st->placed = true; st->siteQuality = 1;
+        st->craft = 1.2f; float fine = q.siteQ("store");
+        st->craft = .8f; float rough = q.siteQ("store");
+        CHECK(fine > rough, "a finely built store works better than a rough one");
+    }
+}
+
 int main() {
     for (uint32_t seed : {20261017u, 777u, 4242u}) testSurvival(seed);
     testNoSmithNoForge();
@@ -1053,6 +1100,7 @@ int main() {
     testPathsAroundBuildings();
     testGoods();
     testStatusAndWork();
+    testWorkmanship();
     testDeterminism();
     testFocus(20261017);
     testFocus(777);

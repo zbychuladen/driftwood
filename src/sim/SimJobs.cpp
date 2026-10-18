@@ -577,7 +577,12 @@ void Sim::buildJob(Person& p, Project& b) {
         if (bp->done) return;
         bool led = false;
         for (auto* q : members()) led |= q->kind == "lead" && q->focus.kind == Focus::PROJECT && q->focus.id == bp->id;
-        bp->progress += 60 * BUILD_PACE * skillF(p, "build") * giftBuild(p, *bp) * (led ? 1.25f : 1);
+        float added = 60 * BUILD_PACE * skillF(p, "build") * giftBuild(p, *bp) * (led ? 1.25f : 1);
+        bp->progress += added;
+        // workmanship: practised, cheerful and gifted hands build better
+        float q = .76f + p.sk["build"] * .035f + (p.mood - 50) / 400 + (!bp->gift.empty() && p.gifts.count(bp->gift) ? .08f + p.gifts[bp->gift] * .01f : 0) + (led ? .04f : 0);
+        bp->craft = (bp->craft * bp->craftW + std::clamp(q, .7f, 1.3f) * added) / (bp->craftW + added);
+        bp->craftW += added;
         if (!bp->gift.empty() && p.gifts.count(bp->gift)) practise(p, bp->gift);
         if (p.gifts.count("carpenter") && bp->wood >= bp->stone) practise(p, "carpenter");
         if (p.gifts.count("mason") && bp->stone > bp->wood) practise(p, "mason");

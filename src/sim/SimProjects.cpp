@@ -87,7 +87,9 @@ std::optional<Sim::Champion> Sim::champion(Project& b) {
 
 float Sim::projScore(Project& b, int i) {
     if (b.done || b.skip || (b.wait && b.wait > day()) || !prereqOk(b) || !giftOk(b)) return -1e9f;
+    if (askPlacement && !b.placed && !settlersBuild(b)) return -1e9f;   // waits for the narrator's blueprint
     float s = 3 - i * .03f + needOf(b.key) * 2 + (b.voiced ? .6f : 0);
+    if (b.sited && askPlacement) s += 1.4f;   // the narrator marked it out: they take that as wanted
     if (auto ch = champion(b)) s += ch->push;
     return s;
 }
@@ -268,6 +270,8 @@ void Sim::startProject(Project& b) {
 
 void Sim::finish(Project& b) {
     b.done = true;
+    if (b.craftW > 0 && !settlersBuild(b) && (b.craft >= 1.12f || b.craft < .85f))
+        note(b.craft >= 1.12f ? cat("The ", lower(b.name), " is finely made. Whoever built it took real care.") : cat("The ", lower(b.name), " went up roughly. It will do, but it will not do as well."));
     if (specialist(b)) siteJudged(b, true);
     if (active == b.id) active = -1;
     b.holderAtFinish = giftOk(b);

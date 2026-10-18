@@ -163,6 +163,7 @@ template <class A> void io(A& a, Obj& o) {
     io(a, o.size); io(a, o.berries); io(a, o.grow); io(a, o.stone); io(a, o.res); io(a, o.regrow); io(a, o.v);
 }
 template <class A> void io(A& a, Project& b) {
+    io(a, b.craft); io(a, b.craftW);
     io(a, b.key); io(a, b.name); io(a, b.w); io(a, b.h); io(a, b.wood); io(a, b.stone); io(a, b.work); io(a, b.beds);
     io(a, b.r0); io(a, b.r1); io(a, b.autoPlan); io(a, b.food); io(a, b.gift); io(a, b.req); io(a, b.desc); io(a, b.min);
     io(a, b.like); io(a, b.dislike);
@@ -178,7 +179,8 @@ template <class A> void io(A& a, Vote& v) { io(a, v.name); io(a, v.rows); io(a, 
 template <class A> void io(A& a, Wolf& v) { io(a, v.x); io(a, v.y); io(a, v.sx); io(a, v.sy); io(a, v.state); io(a, v.face); io(a, v.ph); }
 template <class A> void io(A& a, Agenda& v) { io(a, v.by); io(a, v.gift); io(a, v.job); io(a, v.str); }
 template <class A> void io(A& a, Stock& v) { io(a, v.wood); io(a, v.stone); io(a, v.food); }
-template <class A> void io(A& a, PendingPlacement& v) { io(a, v.project); io(a, v.sx); io(a, v.sy); }
+template <class A> void io(A& a, PendingPlacement& v) {
+    io(a, v.chosen); io(a, v.project); io(a, v.sx); io(a, v.sy); }
 
 template <class A> void io(A& a, Sim::SaveInfo& v) { io(a, v.village); io(a, v.day); io(a, v.year); io(a, v.season); io(a, v.people); io(a, v.seed); }
 

@@ -62,7 +62,7 @@ void Game::frame(float dt) {
     if (IsKeyPressed(KEY_ESCAPE) && !sandFocus) {
         // Esc backs out one step: the picker, a building waiting for its spot (the settlers choose), the info card, then the menu
         if (picker != Picker::NONE) { picker = Picker::NONE; confirmSlot = -1; }
-        else if (placing && !menuOpen) sim.placeSuggested(sim.pendingPlacement->project);
+        else if (placing && !menuOpen) { if (sim.pendingPlacement->chosen) sim.cancelBlueprint(); else sim.placeSuggested(sim.pendingPlacement->project); }
         else if (!title && inspected.ok) inspected = {};
         else if (!title) menuOpen = !menuOpen;
     }
@@ -340,12 +340,11 @@ int Game::run() {
             if (!sim.pendingFate.empty()) { auto f = sim.pendingFate[0]; sim.pendingFate.clear(); sim.applyFate(f); }
         }
         if (opt.placement) {
-            // keep going until a specialist building waits for its spot
+            // the narrator picks a blueprint from the build menu: the first unlocked one not yet built
             sim.askPlacement = true;
-            int guard = 0;
-            while (!sim.pendingPlacement && guard++ < 24 * 200) {
-                sim.step(60);
-                if (!sim.pendingFate.empty()) { auto f = sim.pendingFate[0]; sim.pendingFate.clear(); sim.applyFate(f); }
+            for (auto* d : sim.blueprints()) {
+                if (sim.built(d->key) || !sim.unlocked(d->key)) continue;
+                if (sim.blueprint(d->key) >= 0) break;
             }
             if (sim.pendingPlacement) view.centerOnTile(sim.pendingPlacement->sx + 1.f, sim.pendingPlacement->sy + 1.f);
         }
@@ -358,12 +357,12 @@ int Game::run() {
         sim.flash = 0;
         tab = opt.tab;
         if (opt.selectFirst) { auto m = sim.members(); if (!m.empty()) select(m[std::min<int>(opt.selectFirst - 1, int(m.size()) - 1)]->id, true); }
+        else if (!sim.pendingPlacement) view.centerOnTile(sim.campX + 1.f, sim.campY + 1.f);
         if (auto* p = sim.person(selected)) for (int i = 0; i < opt.narrate; i++) sim.narrate(*p, "wood");
         if (opt.question) {
             auto m = sim.members();
             if (m.size() > 2) { sim.ask(*m[1], "friend", m[2]->id); openQuestion = sim.questions.back().id; seenQuestion = openQuestion; }
         }
-        else if (!sim.pendingPlacement) view.centerOnTile(sim.campX + 1.f, sim.campY + 1.f);
         if (opt.placement && sim.pendingPlacement) {
             // aim at the suggestion, or at a given point (--pick X,Y) to show another spot
             placingOverride = true;
