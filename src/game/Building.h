@@ -63,8 +63,13 @@ int sideToward(float cx, float cy, float tx, float ty);
 // How many pieces show at a construction progress (0..1).
 int visible(const Design& d, float progress);
 
+// Which pieces to draw: all, everything under the roof (BELOW), or only the
+// roof and the posts holding it (ABOVE). An open shelter draws BELOW, then
+// whoever is sleeping inside, then ABOVE.
+enum Layer : unsigned char { ALL, BELOW, ABOVE };
+
 // Draws a design part-built (progress 0..1, 1 finished), with its door open by
 // doorOpen (0..1) and its windows lit when lit is set.
-void draw(const Design& d, float progress, float doorOpen, bool lit);
+void draw(const Design& d, float progress, float doorOpen, bool lit, Layer layer = ALL);
 
 } // namespace bld

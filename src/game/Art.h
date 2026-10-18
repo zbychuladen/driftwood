@@ -27,6 +27,9 @@ bool isFlat(const std::string& key);   // drawn under everything else
 void poi(const Ctx& c, const dw::Poi& p);
 // A settler as a box figure. facing is a figure::Facing; detail 0 is the far-away version.
 void person(const Ctx& c, const dw::Person& p, bool selected, int facing, int detail);
+// The same figure even when the sim has them out of sight, for a building that
+// shows its own sleepers (the open lean-to).
+void personAt(const Ctx& c, const dw::Person& p, bool selected, int facing, int detail);
 void wolf(const Ctx& c, const dw::Wolf& w);
 float doorHeight(float wallPx);
 // The assembled design of a building (null for types still drawn by hand).

@@ -35,7 +35,7 @@ void Sim::updatePerson(Person& p, double dmd) {
         if (asleep) {
             float r = p.sleepIn == "manor" ? 18.f : p.sleepIn == "house" ? 17.f : p.sleepIn == "longhouse" || p.sleepIn == "cottage" ? 16.f : p.sleepIn == "hut" ? 15.f : p.sleepIn == "leanto" ? 11.f : 7.f;
             n.fatigue = std::max(0.f, n.fatigue - hrs * r);
-        } else n.fatigue = std::min(100.f, n.fatigue + hrs * (p.sick > 0 ? 2.f : 4.3f));
+        } else n.fatigue = std::min(100.f, n.fatigue + hrs * (p.sick > 0 ? 2.f : 4.3f) * (p.has("tireless") ? .65f : 1));
         n.social = std::min(100.f, n.social + hrs * (p.has("social") ? 3.f : p.has("loner") ? 1.f : 2.f));
         float t = temp();
         auto* f = fire();

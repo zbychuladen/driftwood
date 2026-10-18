@@ -72,6 +72,8 @@ void Sim::clearQ(Person& p) {
     p.q.clear();
     p.focus = {};
     p.anim.clear();
+    // woken under a lean-to's roof: step out to its edge, where the paths are
+    if (p.sleeping) if (auto* b = projectById(p.bed); b && b->key == "leanto") { auto s = bedSpot(p); p.x = s.x; p.y = s.y; }
     p.sleeping = false;
     p.hidden = false;
 }
@@ -173,9 +175,21 @@ std::deque<Action> Sim::eatQ(Person& p) {
 Sim::BedSpot Sim::bedSpot(Person& p) {
     if (auto* b = projectById(p.bed)) {
         if (b->key == "leanto") {
+            // side by side under the roof, lying across it; the lean-to draws them itself
             int k = 0;
             for (auto* q : members()) { if (q == &p) break; if (q->bed == b->id) k++; }
-            return {b->x + .4f + k * .55f, b->y + 1.3f, false, b};
+            // they walk to its edge, then settle under the roof (the footprint itself cannot be walked into)
+            float along = .35f + k * (std::max(b->w, b->h) - .7f) / std::max(1, b->beds - 1);
+            bool wide = b->w >= b->h;
+            float lx = wide ? b->x + along : b->x + .5f, ly = wide ? b->y + .5f : b->y + along;
+            // the edge on a long side that can be stood on, nearest first
+            auto open = [&](float fx, float fy) { int tx = int(std::floor(fx)), ty = int(std::floor(fy)); return inb(tx, ty) && !isWater(tx, ty) && bOcc[idx(tx, ty)] == -1; };
+            float ax = wide ? lx : b->x + b->w + .3f, ay = wide ? b->y + b->h + .3f : ly;
+            float bx2 = wide ? lx : b->x - .3f, by2 = wide ? b->y - .3f : ly;
+            bool first = open(ax, ay), second = open(bx2, by2);
+            if (!first && second) { ax = bx2; ay = by2; }
+            else if (first && second && std::hypot(bx2 - p.x, by2 - p.y) < std::hypot(ax - p.x, ay - p.y)) { ax = bx2; ay = by2; }
+            return BedSpot{ax, ay, true, b, lx, ly};
         }
         return {b->x + b->w + .15f, b->y + b->h / 2.f, true, b};
     }
@@ -188,10 +202,12 @@ std::deque<Action> Sim::sleepQ(Person& p, bool sick) {
     auto s = bedSpot(p);
     double h = hour();
     float dur = h >= 20 ? float((24 - h + 6.5) * 60) : h < 6.5 ? float((6.5 - h) * 60) : sick ? (built("herbs") ? 150.f : 240.f) : 150.f;
-    auto w = workA(dur, sick ? "Resting" : "Sleeping", "sleep", [](Person& p) { p.sleeping = false; p.hidden = false; });
+    if (!sick && p.has("nightowl") && h >= 9 && h < 16) dur = std::max(90.f, float((16 - h) * 60));   // a night owl's day of sleep
+    float ax = s.x, ay = s.y, lx = s.lieX, ly = s.lieY;
+    auto w = workA(dur, sick ? "Resting" : "Sleeping", "sleep", [ax, ay, lx](Person& p) { p.sleeping = false; p.hidden = false; if (lx >= 0) { p.x = ax; p.y = ay; } });
     std::string where = s.b ? s.b->key : "ground";
     bool inside = s.inside;
-    w.start = [where, inside](Person& p) { p.sleeping = true; p.hidden = inside; p.sleepIn = where; };
+    w.start = [where, inside, lx, ly](Person& p) { p.sleeping = true; p.hidden = inside; p.sleepIn = where; if (lx >= 0) { p.x = lx; p.y = ly; } };
     return {walkA(s.x, s.y), w};
 }
 
@@ -254,7 +270,9 @@ void Sim::plan_(Person& p) {
         return setQ(p, "leave", "Leaving", {walkA(boatX + .5f, boatY + .5f), workA(5, "Leaving", "idle", [this](Person& q) { q.dead = true; q.gone = true; lostThisSeason++; })});
     auto& n = p.needs;
     double h = hour();
-    bool night = h >= 22 || h < 6;
+    // a night owl sleeps through the middle of the day and works through the night
+    bool owl = p.has("nightowl") && !p.child;
+    bool night = owl ? h >= 9 && h < 16 : h >= 22 || h < 6;
     Focus bed = projectById(p.bed) ? onProject(*projectById(p.bed)) : Focus{};
     Focus atFire = fire() ? onProject(*fire()) : Focus{};
     Focus mealAt = fire() ? onProject(*fire(), true) : onStock();
@@ -264,8 +282,9 @@ void Sim::plan_(Person& p) {
     if (n.fatigue > 90) return setQ(p, "sleep", "Collapsing into sleep", sleepQ(p, false), bed);
     if (n.cold > 58 && fireLit()) return setQ(p, "warm", "Warming up by the fire", warmQ(p), atFire);
     if (night) {
-        if (n.fatigue > 20 || h < 5) return setQ(p, "sleep", "Sleeping", sleepQ(p, false), bed);
-        return setQ(p, "social", "Sitting up by the fire", socialQ(p), atFire);
+        if (owl) { if (n.fatigue > 15) return setQ(p, "sleep", "Sleeping through the day", sleepQ(p, false), bed); }
+        else if (n.fatigue > 20 || h < 5) return setQ(p, "sleep", "Sleeping", sleepQ(p, false), bed);
+        else return setQ(p, "social", "Sitting up by the fire", socialQ(p), atFire);
     }
     bool meal = (h >= 12 && h < 13.5) || (h >= 18 && h < 19.5);
     if (meal && n.hunger > 38 && stock.food >= 1) return setQ(p, "eat", "Sharing a meal", eatQ(p), mealAt);
@@ -286,7 +305,7 @@ void Sim::plan_(Person& p) {
         if (w == "build") if (auto* pr = currentProject()) return buildJob(p, *pr);
     }
     // a season's work or a role they took on: daytime only, after their own needs
-    if (p.duty && (p.duty->until <= 0 || p.duty->until > tMin) && h >= 7 && h < 18) {
+    if (p.duty && (p.duty->until <= 0 || p.duty->until > tMin) && (owl || (h >= 7 && h < 18))) {
         auto w = p.duty->job;
         if (w == "explore") return exploreJob(p);
         if (w == "food") return foodJob(p);
@@ -333,6 +352,12 @@ void Sim::workQ(Person& p) {
     int unexplored = 0;
     for (auto e : explored) if (!e) unexplored++;
     float dExplore = day() >= 2 && unexplored > GW * GH * .03f ? .28f + (p.has("curious") ? .15f : 0) : 0;
+    // while most of the island is still unknown, someone should be out looking
+    if (dExplore > 0 && day() >= 4) {
+        int land = 0, known = 0;
+        for (int i = 0; i < GW * GH; i++) if (tt[i] >= 2) { land++; known += explored[i]; }
+        if (land && known < land * .3f) dExplore += .22f;
+    }
     Poi* hp = nullptr;
     for (auto& q : pois) if (q.type == "hermit" && q.found && !q.joined) hp = &q;
     float dVisit = hp ? .32f + (p.has("social") ? .15f : 0) : 0;
@@ -472,7 +497,7 @@ void Sim::foodJob(Person& p) {
         if (built("boatyard")) n *= 1.4f;
         if (built("smoke")) n *= 1 + .15f * siteQ("smoke");
         if (inventions.count("trap")) n *= 1.25f;
-        if (p.gifts.count("sailor")) n *= 1 + p.gifts["sailor"] * .05f;
+        if (p.gifts.count("sailor")) { n *= 1 + p.gifts["sailor"] * .05f; practise(p, "sailor"); }
         if (mods.count("calm") && mods["calm"] >= day()) n *= 1.3f;
         int ni = int(std::lround(n));
         if (dockRes == p.id) dockRes = -1;
@@ -510,7 +535,10 @@ void Sim::buildJob(Person& p, Project& b) {
     }
     auto w = workA(60, cat("Building the ", lower(b.name)), "build", [this, bp](Person& p) {
         if (bp->done) return;
-        bp->progress += 60 * skillF(p, "build") * giftBuild(p, *bp);
+        bp->progress += 60 * BUILD_PACE * skillF(p, "build") * giftBuild(p, *bp);
+        if (!bp->gift.empty() && p.gifts.count(bp->gift)) practise(p, bp->gift);
+        if (p.gifts.count("carpenter") && bp->wood >= bp->stone) practise(p, "carpenter");
+        if (p.gifts.count("mason") && bp->stone > bp->wood) practise(p, "mason");
         toolWear = std::min(100.f, toolWear + .3f);
         bp->workers.insert(p.id);
         gain(p, "build");
@@ -529,7 +557,9 @@ void Sim::farmJob(Person& p, Project& g, const std::string& job) {
             gp->state = "growing"; gp->growth = 0; gain(p, "farm");
             if (!firsts.count("plant")) { firsts.insert("plant"); note(cat(p.name, " sowed the garden: beans, squash and something nobody can name.")); }
         })}, onProject(g));
-    auto q = std::deque<Action>{walkA(sx, sy), workA(70 / skillF(p, "farm"), "Harvesting", "farm", [this, gp](Person& p) {
+    float farmPace = p.gifts.count("farmer") ? giftPace(p.gifts["farmer"]) : 1.f;
+    auto q = std::deque<Action>{walkA(sx, sy), workA(70 * farmPace / skillF(p, "farm"), "Harvesting", "farm", [this, gp](Person& p) {
+        if (p.gifts.count("farmer")) practise(p, "farmer");
         int n = int(std::lround(((gp->key == "fields" ? 30 : 14) + p.sk["farm"] * .8f) * (1 + (p.gifts.count("farmer") ? p.gifts["farmer"] : 0) * .06f) * gp->siteQuality));
         gp->state = "empty"; gp->growth = 0;
         p.carry = Carry{"food", n};
@@ -596,8 +626,10 @@ void Sim::craftJob(Person& p, const std::string& kind) {
     static const std::map<std::string, std::string> LAB = {{"smith", "Forging tools"}, {"potter", "Throwing pots"}, {"weaver", "Weaving blankets"}, {"herbalist", "Preparing remedies"}};
     Project* b = built(WORKSHOP.at(kind));
     if (!b) return setQ(p, "idle", "Taking a breather", wanderQ(p));
-    auto w = workA(120, LAB.at(kind), kind == "smith" ? "build" : "sit", [this, kind](Person& p) {
+    int lv0 = p.gifts.count(kind) ? p.gifts[kind] : 1;
+    auto w = workA(120 * giftPace(lv0), LAB.at(kind), kind == "smith" ? "build" : "sit", [this, kind](Person& p) {
         int lv = p.gifts.count(kind) ? p.gifts[kind] : 1;
+        if (p.gifts.count(kind)) practise(p, kind);
         if (kind == "smith") {
             toolWear = std::max(0.f, toolWear - (30 + lv * 3) * siteQ("forge"));
             if (!ironTools) { ironTools = true; note(cat(p.name, " forged the first iron tools on the island. Axes that hold an edge! Everyone chops, digs and builds faster now."), "big"); }

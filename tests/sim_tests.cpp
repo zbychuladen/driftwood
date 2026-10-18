@@ -313,8 +313,28 @@ static void testSiteEffects() {
     float g = 0, b = 0;
     paired("cookhouse", 1.2f, .7f, 20, [](Sim& s) { float h = 0; int n = 0; for (auto* p : s.members()) { h += p->needs.hunger; n++; } return n ? h / n : 0; }, g, b);
     CHECK(g > 0 && g < b, cat("people are less hungry with a well-placed cookhouse (", int(g), " vs ", int(b), ")").c_str());
-    paired("store", 1.2f, .7f, 30, [](Sim& s) { return s.stock.food; }, g, b);
-    CHECK(g > b, cat("a well-placed store keeps more food (", int(g), " vs ", int(b), " on average)").c_str());
+    // spoilage: one night's loss from the same full store, in a good spot and a bad one
+    {
+        Sim base;
+        base.newWorld(20261017);
+        runDays(base, 25);
+        Project* st = projectNamed(base, "store");
+        if (st && !st->placed) { auto at = base.suggestSite(*st); if (at) base.placeAt(st->id, at->first, at->second); }
+        if (st) { st->done = true; st->progress = float(st->work); if (base.active == st->id) base.active = -1; }
+        while (base.hour() < 23.8) { base.step(5); base.pendingFate.clear(); }
+        std::string at = base.save();
+        float lost[2];
+        for (int pass = 0; pass < 2; pass++) {
+            Sim s;
+            s.load(at);
+            for (auto& x : s.plan) if (x.key == "store") x.siteQuality = pass == 0 ? 1.2f : .7f;
+            s.stock.food = 300;
+            int d = s.day();
+            while (s.day() == d) s.step(5);
+            lost[pass] = 300 - s.stock.food;
+        }
+        CHECK(st && lost[0] < lost[1], cat("a well-placed store spoils less food overnight (", int(lost[0]), " vs ", int(lost[1]), " lost)").c_str());
+    }
     paired("well", 1.2f, .7f, 20, [](Sim& s) { float t = 0; int n = 0; for (auto* p : s.members()) { t += p->needs.thirst; n++; } return n ? t / n : 0; }, g, b);
     CHECK(g < b, cat("people are less thirsty with a well in a good spot (", int(g), " vs ", int(b), ")").c_str());
 }
@@ -734,15 +754,22 @@ static void testHouseholds() {
 
     // a hut whose household has what a cottage needs, and the materials, becomes a cottage
     Household* h = nullptr;
-    for (auto& x : s.households) if (x.home >= 0 && s.projectById(x.home)->key == "hut") h = &x;
+    // a hut household, a couple if there is one (a couple will not merge into another household mid-test)
+    for (auto& x : s.households) if (x.home >= 0 && s.projectById(x.home) && s.projectById(x.home)->key == "hut" && (!h || x.members.size() > h->members.size())) h = &x;
     if (!h) { CHECK(false, "a household lives in a hut"); return; }
     int hid = h->id;
     Project* home = s.projectById(h->home);
     for (int yy = home->y; yy < home->y + 2; yy++) s.fresh[Sim::idx(home->x - 1, yy)] = 1;   // a spring beside it
-    for (int d = 0; d < Sim::RISE_DAYS + 1; d++) { untilMidnight(s); s.stock.food = 400; s.pots = 10; s.stock.wood = 100; s.stock.stone = 100; pastMidnight(s); }
-    home = s.projectById(s.household(hid)->home);
+    bool used = false;
+    // the household's home, if it still has one
+    auto homeOf = [&](int id) -> Project* { auto* hh = s.household(id); return hh ? s.projectById(hh->home) : nullptr; };
+    for (int d = 0; d < Sim::RISE_DAYS + 1 && homeOf(hid) && homeOf(hid)->key == "hut"; d++) {
+        untilMidnight(s); s.stock.food = 400; s.pots = 10; s.stock.wood = 100; s.stock.stone = 100; pastMidnight(s);
+        used = s.stock.stone < 100;
+    }
+    home = homeOf(hid);
     CHECK(home && home->key == "cottage" && home->beds == 3 && s.status(*s.household(hid)) == 2, "a household with what a cottage needs turns its hut into a cottage");
-    CHECK(s.stock.stone < 100, "rising a level uses materials");
+    CHECK(used, "rising a level uses materials");
     // and when the pots run out for long enough, it falls back to a hut, with a warning first
     bool warned = false;
     for (int d = 0; d < Sim::FALL_DAYS + 1; d++) {
@@ -750,7 +777,7 @@ static void testHouseholds() {
         for (auto& g : s.ledger()) warned |= g.id == "home";
         while (s.hour() < 10) s.step(30);
     }
-    home = s.projectById(s.household(hid)->home);
+    home = homeOf(hid);
     CHECK(home && home->key == "hut" && warned, "a cottage short of pots for days falls back to a hut, and the ledger warns first");
 
     // services reach homes by walking: water in the way makes the way longer
@@ -765,6 +792,76 @@ static void testHouseholds() {
     CHECK(open <= 7 && walled > open + 2, cat("a service's reach follows the way people walk (", open, " tiles, or ", walled, " round the water)").c_str());
 }
 
+// Lean-to sleepers lie under its roof and step out when they wake; tireless
+// settlers tire slower; night owls sleep by day; specialists improve with practice.
+static void testWorkers() {
+    std::printf("sleepers, stamina, night owls and practice\n");
+    Sim s;
+    s.newWorld(20261017);
+    runDays(s, 3);
+    int d4 = s.day() + 1;
+    while (!(s.day() == d4 && s.hour() >= 1.5)) { s.step(30); s.pendingFate.clear(); }
+    int under = 0;
+    bool outside = true;
+    for (auto* p : s.members()) {
+        auto* b = s.projectById(p->bed);
+        if (!b || b->key != "leanto" || !p->sleeping) continue;
+        bool inFoot = p->x >= b->x && p->x <= b->x + b->w && p->y >= b->y && p->y <= b->y + b->h;
+        under += inFoot && p->hidden;
+    }
+    for (int h = 0; h < 10; h++) s.step(60);
+    s.pendingFate.clear();
+    for (auto* p : s.members()) {
+        if (p->sleeping) continue;
+        int tx = int(std::floor(p->x)), ty = int(std::floor(p->y));
+        if (Sim::inb(tx, ty)) if (auto* b = s.projectById(s.bOcc[Sim::idx(tx, ty)]); b && b->key == "leanto") outside = false;
+    }
+    CHECK(under >= 2, cat("lean-to sleepers lie under its roof (", under, " at half past one)").c_str());
+    CHECK(outside, "once awake, nobody is left standing inside the lean-to");
+
+    // tireless: the same morning's work tires them less
+    float rise[2];
+    for (int pass = 0; pass < 2; pass++) {
+        Sim t;
+        t.newWorld(777);
+        runDays(t, 2);
+        while (t.hour() < 8) t.step(30);
+        Person& p = *t.members()[0];
+        p.traits = pass ? std::vector<std::string>{"tireless", "curious"} : std::vector<std::string>{"cheerful", "curious"};
+        p.needs.fatigue = 20;
+        t.step(4 * 60);
+        rise[pass] = p.needs.fatigue - 20;
+    }
+    CHECK(rise[1] < rise[0] * .8f, cat("a tireless settler tires slower (", int(rise[1]), " against ", int(rise[0]), " over a morning)").c_str());
+
+    // a night owl sleeps through the middle of the day and is up in the small hours
+    Sim o;
+    o.newWorld(4242);
+    runDays(o, 2);
+    Person& owl = *o.members()[1];
+    owl.traits = {"nightowl", "curious"};
+    int dayAsleep = 0, nightAwake = 0, samples = 0;
+    for (int h = 0; h < 24 * 4; h++) {
+        o.step(60);
+        o.pendingFate.clear();
+        double hr = o.hour();
+        if (hr >= 11 && hr < 15) dayAsleep += owl.sleeping;
+        if (hr >= 0 && hr < 4) { nightAwake += !owl.sleeping; samples++; }
+    }
+    CHECK(dayAsleep >= 8 && nightAwake >= samples / 2, cat("a night owl sleeps by day and is up at night (", dayAsleep, " hours asleep at midday, ", nightAwake, " of ", samples, " awake at night)").c_str());
+
+    // practice: a working potter gets better, and better means quicker
+    CHECK(Sim::giftPace(10) < Sim::giftPace(5) && Sim::giftPace(5) < Sim::giftPace(1), "gifted work goes quicker at higher levels");
+    int rose = 0;
+    for (uint32_t seed : {20261017u, 777u, 4242u}) {
+        Sim g;
+        g.newWorld(seed);
+        runDays(g, 100);
+        for (auto& e : g.journal) rose += e.text.find("has become a better") != std::string::npos;
+    }
+    CHECK(rose >= 2, cat("specialists get better with practice (", rose, " gifts rose over three 100-day games)").c_str());
+}
+
 int main() {
     for (uint32_t seed : {20261017u, 777u, 4242u}) testSurvival(seed);
     testNoSmithNoForge();
@@ -777,6 +874,7 @@ int main() {
     testRapportCurrency();
     testLedger();
     testHouseholds();
+    testWorkers();
     testDeterminism();
     testFocus(20261017);
     testFocus(777);

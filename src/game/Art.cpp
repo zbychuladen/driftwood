@@ -562,7 +562,14 @@ void building(const Ctx& c, dw::Project& b) {
             const bld::Design* d = designFor(S, b);
             bool home = false;
             for (auto* m : S.members()) if (m->bed == b.id && (m->hidden || m->sleeping)) home = true;
-            bld::draw(*d, prog, doorOf(b.id), b.done && night && home);
+            if (k == "leanto" && b.done) {
+                // an open shelter: the deck and back wall, then whoever sleeps under it, then the posts and roof
+                bld::draw(*d, prog, 0, false, bld::BELOW);
+                bool across = b.w >= b.h;
+                for (auto* m : S.members())
+                    if (m->bed == b.id && m->sleeping && m->hidden) personAt(c, *m, false, figure::facingToward(across ? 0.f : 1.f, across ? 1.f : 0.f, figure::SE), 2);
+                bld::draw(*d, prog, 0, false, bld::ABOVE);
+            } else bld::draw(*d, prog, doorOf(b.id), b.done && night && home);
             // a hearth smokes all day in the forge and smokehouse, mornings and evenings in a hall
             bool hearth = k == "forge" || k == "smoke" || k == "pottery" || (k == "cookhouse" && c.hour >= 6 && c.hour < 21) || (k == "longhouse" && (c.hour >= 17 || c.hour < 8));
             if (b.done && d->smokes && hearth) { V2 q = solid::project(d->smoke); smoke(c, q.x, q.y, 3, 1); }
@@ -660,6 +667,10 @@ void poi(const Ctx& c, const dw::Poi& p) {
 
 void person(const Ctx& c, const dw::Person& p, bool selected, int facing, int detail) {
     if (p.hidden || p.dead) return;
+    personAt(c, p, selected, facing, detail);
+}
+
+void personAt(const Ctx& c, const dw::Person& p, bool selected, int facing, int detail) {
     V2 o = wp(p.x, p.y);
     figure::Pose pose = p.moving ? figure::walk(p.phase) : figure::activity(p.sleeping ? "sleep" : p.anim, float(c.t), p.id);
     if (p.carry && !pose.lying) figure::carrying(pose, p.carry->t);

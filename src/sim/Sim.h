@@ -72,6 +72,7 @@ struct Person {
     std::vector<std::string> traits;
     std::map<std::string, float> sk;          // basic survival skills 1..10
     std::map<std::string, int> gifts;         // specialist talents 1..10
+    std::map<std::string, float> giftXp;      // practice towards the next level of each gift
     int charisma = 5;
     float buyIn = 40;                         // how much they buy into the narrator, 0..100: sets prices and whether they go along
                     // how willing they are to go along with the narrator, 0..100
@@ -237,7 +238,7 @@ public:
     // The whole game as bytes, and back. Settlers' half-done actions are not
     // kept: after a load everyone picks their next task. load() leaves the sim
     // as it was and returns false, with a reason, for anything it cannot read.
-    static constexpr int SAVE_VERSION = 8;   // 2: site quality and pending placement; 3: rapport, contrariness, the story circle; 4: lines, questions; 5: deaths this season; 6: the narrator's rapport and buy-in; 7: duties and roles; 8: households
+    static constexpr int SAVE_VERSION = 9;   // 2: site quality and pending placement; 3: rapport, contrariness, the story circle; 4: lines, questions; 5: deaths this season; 6: the narrator's rapport and buy-in; 7: duties and roles; 8: households; 9: gift practice
     struct SaveInfo { std::string village; int day = 0, year = 0, season = 0, people = 0; uint32_t seed = 0; };
     std::string save() const;
     bool load(const std::string& data, std::string* error = nullptr);
@@ -349,6 +350,11 @@ public:
     // What a day's request costs: cheap when it fits what they want (fit is how
     // well, as linesFor scores it), dear when it does not or they hardly buy in.
     static int price(const Person& p, const std::string& job, float fit);
+    static constexpr float BUILD_PACE = 1.25f;   // building goes 20% quicker than it first did
+    // How long gifted work takes at a level, as a share of a beginner's time:
+    // about 1.1 at level 1, 0.65 at level 10.
+    static float giftPace(int level) { return 1.15f - std::clamp(level, 1, 10) * .05f; }
+    static float practiceFor(int level) { return 4.f + level * 2.f; }   // work to rise from this level
     // How much narrating a person takes before they turn contrary: easygoing
     // settlers put up with more, obstinate ones with less.
     static float tolerance(const Person& p);
@@ -388,6 +394,9 @@ private:
     void siteJudged(Project& b, bool finished);
     void talkHourly();
     void dutiesDaily();                       // seasons ending, roles' upkeep
+    // Specialists get better with practice: each piece of gifted work adds to it,
+    // and enough of it raises the gift a level (to 10).
+    void practise(Person& p, const std::string& gift);
     void updateHouseholds();
     void homesDaily();                        // homes rise and fall
     bool setHomeLevel(Project& b, int level);
@@ -462,7 +471,7 @@ private:
     std::string dirWord(float dx, float dy);
     std::string gardenJob(Project& g);
     Obj* nearestObj(const std::function<bool(const Obj&)>& f, float x, float y);
-    struct BedSpot { float x, y; bool inside; Project* b; };
+    struct BedSpot { float x, y; bool inside; Project* b; float lieX = -1, lieY = -1; };   // lie: where they settle once there, if not where they walked to
     BedSpot bedSpot(Person& p);
 
     // narrator internals
