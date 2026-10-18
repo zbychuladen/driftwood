@@ -288,53 +288,64 @@ void bareTree(const Ctx&, const dw::Obj& o, float sway) {
 }
 
 void fir(const Ctx& c, const dw::Obj& o, float sway) {
+    // tiers of drooping, ragged boughs inside one clean silhouette; each tier casts
+    // a soft shadow on the one below instead of being outlined, and catches the light on its left
     int seed = o.i;
-    float W = 30 + frand(seed * 5) * 10;   // half-width of the lowest tier
+    float W = 27 + frand(seed * 5) * 9;   // half-width of the lowest tier
     bool winter = c.season == 3;
-    Color dark = winter ? hex(0x3f5c4a) : hex(0x335c3e), lit = winter ? hex(0x557562) : hex(0x4a7a50), bark = hex(0x5e4636);
+    static const uint32_t PAL[3][3] = {{0x2f5a3c, 0x45744c, 0x5e8c5a}, {0x2c5446, 0x3f6c5a, 0x588670}, {0x37603a, 0x4f7d46, 0x6b955a}};
+    const uint32_t* pal = PAL[int(frand(seed * 23) * 3) % 3];
+    Color dark = hex(pal[0]), mid = hex(pal[1]), lit = hex(pal[2]), bark = hex(0x5e4636);
+    if (winter) { dark = mix(dark, hex(0x506a64), .35f); mid = mix(mid, hex(0x6a807a), .35f); lit = mix(lit, hex(0x88a098), .35f); }
     ellipse(5, 2, W * .95f, W * .34f, SHADOW);
     trunk({0, 0}, {0, -14}, 3.f, 2.4f, bark);
-    const int tiers = 5;
+    const int tiers = 6;
+    float lean = (frand(seed * 31) - .5f) * 4;
+    struct Tier { std::vector<V2> rim; V2 apex; float yb, hw, sx; };
+    std::vector<Tier> T;
     for (int i = 0; i < tiers; i++) {
-        float yb = -10 - i * 16.5f, yt = i == tiers - 1 ? -100 : yb - 34, hw = W * (1 - i * .17f);
-        float sx = sway * (-yt / 100);   // tips sway more than the base
-        V2 apex{sx, yt};
-        // drooping bottom edge: tips hang lower than the notches between them
-        int tips = i < 2 ? 4 : 3;
-        std::vector<V2> rim;
-        rim.push_back({sx * .5f, (yt + yb) / 2 + 6});   // a point inside, for the fan
-        rim.push_back(apex);
-        rim.push_back({sx * .5f + hw * .55f, (yt + yb) / 2 + 2});
-        for (int t = 0; t <= tips * 2; t++) {
-            float f = 1 - float(t) / (tips * 2);
-            float x = sx * .3f + (f * 2 - 1) * hw, droop = t % 2 == 0 ? 4.f : -3.f;
-            rim.push_back({x, yb + droop});
+        float f = float(i) / tiers;
+        float yb = -9 - i * 14.f, yt = i == tiers - 1 ? -100 : yb - 30, hw = W * (1 - f * .82f);
+        float sx = sway * (-yt / 100) + lean * f;
+        Tier t{{}, {sx, yt}, yb, hw, sx};
+        int tips = std::max(3, 6 - i);
+        t.rim.push_back({sx * .5f, (yt + yb) / 2 + 5});
+        t.rim.push_back(t.apex);
+        for (int q = 0; q <= tips * 2; q++) {
+            float u = float(q) / (tips * 2);
+            float x = sx * .3f + (u * 2 - 1) * hw * (q % 2 ? .86f : 1.f + (frand(seed * 7 + i * 13 + q) - .5f) * .12f);
+            float droop = q % 2 == 0 ? 3.f + frand(seed * 3 + i * 5 + q) * 3 : -3.f - frand(seed + i + q) * 2;
+            t.rim.push_back({x, yb + droop});
         }
-        rim.push_back({sx * .5f - hw * .55f, (yt + yb) / 2 + 2});
-        rim.push_back(apex);   // close the fan
-        polyV(rim, dark);
-        NoInk ni;
-        // the lit left half of the tier
-        std::vector<V2> left{apex, {sx * .3f, yb - 1}};
-        for (int t = tips * 2; t >= tips; t--) {
-            float f = 1 - float(t) / (tips * 2);
-            left.push_back({sx * .3f + (f * 2 - 1) * hw * .92f, yb + (t % 2 == 0 ? 2.f : -4.f)});
+        t.rim.push_back(t.apex);
+        T.push_back(t);
+    }
+    // the outline of the whole tree, then the tiers again without ink to clear the inner lines
+    for (auto& t : T) polyV(t.rim, dark);
+    NoInk ni;
+    auto inset = [](const std::vector<V2>& r, V2 c, float k) { std::vector<V2> v; for (auto& p : r) v.push_back({c.x + (p.x - c.x) * k, c.y + (p.y - c.y) * k}); return v; };
+    for (size_t i = 0; i < T.size(); i++) {
+        auto& t = T[i];
+        V2 c0 = t.rim[0];
+        if (i > 0) {
+            // this tier's shadow on the boughs below
+            std::vector<V2> sh;
+            for (auto& p : t.rim) sh.push_back({p.x + 1.5f, p.y + 4.5f});
+            polyV(inset(sh, c0, .97f), shade(dark, .82f));
         }
-        left.push_back({sx * .5f - hw * .52f, (yt + yb) / 2 + 2});
-        std::vector<V2> fan{{sx * .1f - hw * .25f, (yt + yb) / 2 + 4}};
-        fan.insert(fan.end(), left.begin(), left.end());
-        fan.push_back(apex);
-        polyV(fan, lit);
+        polyV(inset(t.rim, c0, .965f), mid);
+        // a shaded wedge on the right and a lit one on the left, smooth, so the boughs read as masses
+        float base = t.yb - 2, inner = t.sx * .3f;
+        poly({t.apex, {inner + t.hw * .82f, base + 3}, {inner + t.hw * .5f, base + 1}, {inner + t.hw * .12f, base - 3}}, dark);
+        poly({t.apex, {inner - t.hw * .1f, base - 4}, {inner - t.hw * .55f, base - 1}, {inner - t.hw * .8f, base + 1}}, lit);
         if (winter) {
-            // snow resting on the drooping branch tips, the part of each tier left in view
-            // irregular drifts, mostly on the lit side; not every branch holds snow
-            for (int t = 0; t <= tips * 2; t += 2) {
-                if (frand(seed * 19 + i * 7 + t) < .35f) continue;
-                float f = 1 - float(t) / (tips * 2), x = sx * .3f + (f * 2 - 1) * hw * .82f;
-                float w = hw * (.18f + frand(seed + i * 3 + t) * .14f) * (x < 0 ? 1.f : .7f);
-                poly({{x - w, yb + 1}, {x - w * .4f, yb - 2.2f}, {x + w * .5f, yb - 1.6f}, {x + w, yb + .6f}}, hex(0xf4f6f6));
+            for (size_t q = 2; q + 1 < t.rim.size(); q += 2) {
+                if (frand(seed * 19 + int(i) * 7 + int(q)) < .35f) continue;
+                V2 tip = t.rim[q];
+                float w = t.hw * (.16f + frand(seed + int(i) * 3 + int(q)) * .12f) * (tip.x < t.sx ? 1.f : .7f);
+                poly({{tip.x - w, tip.y - 1}, {tip.x - w * .4f, tip.y - 3.6f}, {tip.x + w * .5f, tip.y - 3}, {tip.x + w, tip.y - 1.2f}}, hex(0xf4f6f6));
             }
-            if (i == tiers - 1) poly({apex, {sx + 4, yt + 9}, {sx, yt + 7}, {sx - 4, yt + 10}}, hex(0xf4f6f6));
+            if (i == T.size() - 1) poly({t.apex, {t.sx + 4, t.apex.y + 9}, {t.sx, t.apex.y + 7}, {t.sx - 4, t.apex.y + 10}}, hex(0xf4f6f6));
         }
     }
 }
@@ -367,7 +378,7 @@ void palm(const Ctx& c, const dw::Obj& o, float sway) {
     }
     // fronds: back ones first and darker, feathered and drooping
     Color frondLit = c.season == 3 ? hex(0x7f9a6e) : hex(0x7fae4a), frondDark = c.season == 3 ? hex(0x5e7a54) : hex(0x5a8a36);
-    const int n = 9;
+    const int n = 11;
     auto frond = [&](float a, Color col) {
         float Lf = 34 + frand(seed * 5 + int(a * 10)) * 6;
         V2 tip{top.x + std::cos(a) * Lf, top.y + std::sin(a) * Lf * .42f + 24};
@@ -377,7 +388,8 @@ void palm(const Ctx& c, const dw::Obj& o, float sway) {
             float t = i / 12.f, u = 1 - t;
             V2 p{u * u * top.x + 2 * u * t * mid.x + t * t * tip.x, u * u * top.y + 2 * u * t * mid.y + t * t * tip.y};
             V2 d{2 * u * (mid.x - top.x) + 2 * t * (tip.x - mid.x), 2 * u * (mid.y - top.y) + 2 * t * (tip.y - mid.y)};
-            float len = std::max(.01f, std::hypot(d.x, d.y)), w = 6.f * std::pow(std::sin(3.1416f * std::min(t * 1.1f, 1.f)), .7f) * (i % 2 ? .45f : 1.f);
+            // a gently serrated leaf, widest a third of the way out
+            float len = std::max(.01f, std::hypot(d.x, d.y)), w = 6.f * std::pow(std::sin(3.1416f * std::min(t * 1.1f, 1.f)), .7f) * (i % 2 ? .78f : 1.f);
             le.push_back({p.x + d.y / len * w, p.y - d.x / len * w});
             ri.push_back({p.x - d.y / len * w * .8f, p.y + d.x / len * w * .8f});
         }
@@ -385,7 +397,16 @@ void palm(const Ctx& c, const dw::Obj& o, float sway) {
             NoInk ni;
             for (size_t i = 0; i + 1 < le.size(); i++) poly({le[i], le[i + 1], ri[i + 1], ri[i]}, col);
         }
-        float iw = draw::ink.width * .8f;
+        {
+            // the midrib, and the darker underside along one edge
+            NoInk ni;
+            for (size_t i = 0; i + 1 < le.size(); i++) {
+                V2 m0{(le[i].x + ri[i].x) / 2, (le[i].y + ri[i].y) / 2}, m1{(le[i + 1].x + ri[i + 1].x) / 2, (le[i + 1].y + ri[i + 1].y) / 2};
+                poly({m0, m1, ri[i + 1], ri[i]}, shade(col, .86f));
+                line(m0.x, m0.y, m1.x, m1.y, .7f, shade(col, .7f));
+            }
+        }
+        float iw = draw::ink.width * .75f;
         for (size_t i = 0; i + 1 < le.size(); i++) {
             line(le[i].x, le[i].y, le[i + 1].x, le[i + 1].y, iw, draw::ink.color);
             line(ri[i].x, ri[i].y, ri[i + 1].x, ri[i + 1].y, iw, draw::ink.color);
@@ -434,18 +455,50 @@ void rock(const Ctx& c, const dw::Obj& o) {
 }
 
 void bush(const Ctx& c, const dw::Obj& o) {
+    // a low, lobed shrub drawn like a small crown: shade, light and single leaves;
+    // berries in clusters on the sunny side, blossom in spring, bare twigs in winter
     V2 p = wp(o.x + .5f, o.y + .6f);
-    float x = p.x, y = p.y;
-    int s = c.season;
-    push(p, px(scale::BUSH) / 17.f);
-    ellipse(x + 3, y + 1, 10, 4, SHADOW);
-    uint32_t c0 = s == 3 ? 0x5f6b5c : s == 2 ? 0x6e7a34 : 0x3f7a3a, c1 = s == 3 ? 0x76826f : s == 2 ? 0x8a9440 : 0x55964a;
-    circle(x - 5, y - 5, 7, hex(c0));
-    circle(x + 5, y - 5, 7, hex(c0));
-    circle(x, y - 9, 8, hex(c1));
-    if (s == 3) { circle(x, y - 13, 4.5f, rgba(255, 255, 255, .8f)); pop(); return; }
-    int n = int(o.berries);
-    for (int b = 0; b < n * 2; b++) circle(x + std::cos(b * 2.4f + o.i) * 6, y - 8 + std::sin(b * 1.9f + o.i) * 4, 1.8f, s == 0 ? hex(0xe8eef8) : hex(0xc0303f));
+    int s = c.season, seed = o.i;
+    float k = px(scale::BUSH) / 17.f;   // always its real height; bushes differ in width
+    push(p, k, {0, 0});
+    float wide = 1 + frand(seed * 5) * .35f;
+    ellipse(3, 1, 12 * wide, 4.2f, SHADOW);
+    if (s == 3) {
+        // winter: a tangle of bare stems with snow caught on top
+        Color twig = hex(0x6e5c4c);
+        for (int i = 0; i < 9; i++) {
+            float a = -1.5708f + (i - 4) * .3f + (frand(seed + i) - .5f) * .2f, len = 11 + frand(seed * 3 + i) * 6;
+            V2 e{std::cos(a) * len * wide, std::sin(a) * len};
+            line(0, 0, e.x, e.y, 1.2f, twig);
+            line(e.x * .6f, e.y * .6f, e.x * .6f + std::cos(a + .6f) * 4, e.y * .6f + std::sin(a + .6f) * 4, .8f, twig);
+        }
+        NoInk ni;
+        ellipse(-1, -12, 8 * wide, 2.6f, hex(0xf4f6f6));
+        ellipse(4, -9, 4, 1.6f, hex(0xf4f6f6));
+        pop();
+        return;
+    }
+    std::vector<Lobe> L{{0, -8, 7.5f}};
+    int n = 5 + int(frand(seed * 7) * 3);
+    for (int i = 0; i < n; i++) {
+        float a = 3.1416f + 3.1416f * i / (n - 1) + (frand(seed + i * 3) - .5f) * .3f;   // the upper half: a mound
+        L.push_back({std::cos(a) * 8.5f * wide, -5 + std::sin(a) * 6.5f, 5 + frand(seed * 11 + i) * 2.2f});
+    }
+    V2 o0{0, -7};
+    topAt(L, o0, -17);
+    Leaf col = s == 2 ? Leaf{hex(0x5c6a2e), hex(0x7c8a38), hex(0x9eac52), hex(0xc0c474)} : leafColors(s, seed);
+    if (s != 2) { col.dark = shade(col.dark, .9f); col.base = shade(col.base, .92f); }
+    crown(L, o0, col, seed, s == 0 && seed % 2 == 0);
+    if (s != 0) {
+        NoInk ni;
+        int clusters = std::min(4, int(o.berries));
+        for (int b = 0; b < clusters; b++) {
+            const Lobe& l = L[size_t(1 + (b * 2 + seed) % (L.size() - 1))];
+            float bx = l.x - l.r * .3f, by = l.y - l.r * .1f;
+            for (int q = 0; q < 3; q++) circle(bx + (q - 1) * 1.6f, by + (q == 1 ? -1.2f : 0), 1.25f, hex(0xb8283a));
+            circle(bx - 1.9f, by - .4f, .45f, hex(0xf2a0a8));
+        }
+    }
     pop();
 }
 
@@ -673,6 +726,21 @@ void person(const Ctx& c, const dw::Person& p, bool selected, int facing, int de
 void personAt(const Ctx& c, const dw::Person& p, bool selected, int facing, int detail) {
     V2 o = wp(p.x, p.y);
     figure::Pose pose = p.moving ? figure::walk(p.phase) : figure::activity(p.sleeping ? "sleep" : p.anim, float(c.t), p.id);
+    // ease from what they were doing into what they are doing now, instead of snapping
+    {
+        static std::unordered_map<int, figure::Pose> shown;
+        auto it = shown.find(p.id);
+        float dt = GetFrameTime();
+        if (c.effects) {
+            if (it != shown.end() && dt > 0 && it->second.lying == pose.lying) it->second = figure::blend(it->second, pose, 1 - std::exp(-dt * 9));
+            else shown[p.id] = pose;
+        }
+        if (auto s = shown.find(p.id); s != shown.end() && s->second.lying == pose.lying) {
+            figure::Pose eased = s->second;
+            eased.prop = pose.prop; eased.strike = pose.strike;
+            pose = eased;
+        }
+    }
     if (p.carry && !pose.lying) figure::carrying(pose, p.carry->t);
     if (p.sick > 0 && !pose.lying && !p.moving && pose.prop == figure::NONE) figure::unwell(pose);
     if (!pose.lying) ellipse(o.x, o.y, 9, 4, SHADOW);

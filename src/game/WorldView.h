@@ -72,6 +72,10 @@ public:
     std::vector<Drawable> collect(dw::Sim& sim, const art::Ctx& ctx, Rectangle worldView, int selectedId) const;
     // The same list in back-to-front drawing order.
     static std::vector<Drawable> sorted(std::vector<Drawable> items);
+    // For a draw order: which trees stand in front of a settler and should be
+    // drawn see-through (at SEE_THROUGH alpha) so the settler is not lost.
+    static std::vector<bool> seeThrough(const dw::Sim& s, const std::vector<Drawable>& order);
+    static constexpr float SEE_THROUGH = .38f;
     void centerOnTile(float tx, float ty);
     void zoomBy(float f, Vector2 screenPivot);
     bool clickedMap() const { return clicked; }   // left click without drag this frame
@@ -101,6 +105,7 @@ private:
     void clampCam();
 
     RenderTexture2D ground{};
+    RenderTexture2D fadeRT{};               // a tree drawn here, then over the scene see-through
     // ground colors and marks for one season and seed, filed by tile
     struct GroundCache {
         int season = -1;

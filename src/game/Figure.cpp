@@ -95,13 +95,44 @@ Look lookOf(const dw::Person& p) {
 }
 
 Pose idle(float t) {
+    // breathing, a slow shift of weight from foot to foot, and a look up or down now and then
     Pose p;
-    float b = std::sin(t * 1.6f);
+    float b = std::sin(t * 1.6f), shift = std::sin(t * .37f);
     p.bob = .004f * b;
-    p.shoulder[0] = .03f * b;
-    p.shoulder[1] = -.03f * b;
+    p.shoulder[0] = .03f * b + .02f * shift;
+    p.shoulder[1] = -.03f * b + .02f * shift;
+    p.hip[0] = .05f * std::max(0.f, shift);
+    p.knee[0] = .08f * std::max(0.f, shift);
+    p.hip[1] = .05f * std::max(0.f, -shift);
+    p.knee[1] = .08f * std::max(0.f, -shift);
+    p.head = .07f * std::sin(t * .23f) * std::max(0.f, std::sin(t * .11f));
     return p;
 }
+
+Pose blend(const Pose& a, const Pose& b, float k) {
+    auto l = [k](float x, float y) { return x + (y - x) * k; };
+    Pose p = b;
+    p.drop = l(a.drop, b.drop); p.bob = l(a.bob, b.bob); p.lean = l(a.lean, b.lean); p.head = l(a.head, b.head);
+    for (int i = 0; i < 2; i++) {
+        p.hip[i] = l(a.hip[i], b.hip[i]); p.knee[i] = l(a.knee[i], b.knee[i]);
+        p.shoulder[i] = l(a.shoulder[i], b.shoulder[i]); p.spread[i] = l(a.spread[i], b.spread[i]); p.elbow[i] = l(a.elbow[i], b.elbow[i]);
+    }
+    return p;
+}
+
+namespace {
+float smooth(float x) { x = std::clamp(x, 0.f, 1.f); return x * x * (3 - 2 * x); }
+// A tool's swing over one cycle: a slow lift, a quick strike, a moment's follow-through.
+// Returns how high it is (0 down, 1 raised) and sets strike near the moment of impact.
+float swing(float t, float rate, int seed, float& strike) {
+    float u = std::fmod(t * rate + seed * .37f, 1.f);
+    if (u < 0) u += 1;
+    strike = u > .66f && u < .74f ? 1 - std::abs(u - .7f) / .04f : 0;
+    if (u < .55f) return smooth(u / .55f);
+    if (u < .68f) { float d = (u - .55f) / .13f; return 1 - d * d; }
+    return 0;
+}
+} // namespace
 
 Pose walk(float ph) {
     Pose p;
@@ -113,9 +144,12 @@ Pose walk(float ph) {
     p.knee[1] = .08f + .38f * std::max(0.f, std::sin(ph + 1.9f + 3.1416f));
     p.shoulder[0] = -.38f * s;
     p.shoulder[1] = .38f * s;
-    p.elbow[0] = p.elbow[1] = .3f;
-    p.bob = .018f * std::abs(std::cos(ph));
-    p.lean = .06f;
+    // the arm swinging forward bends more at the elbow
+    p.elbow[0] = .25f + .3f * std::max(0.f, -s);
+    p.elbow[1] = .25f + .3f * std::max(0.f, s);
+    p.bob = .02f * std::abs(std::cos(ph));
+    p.lean = .07f;
+    p.head = -.03f * std::cos(2 * ph);
     return p;
 }
 
@@ -173,24 +207,32 @@ Pose activity(const std::string& a, float t, int seed) {
     if (a == "chop" || a == "mine") {
         // feet apart, both hands on the handle: up over the head, then down
         p.hip[0] = .22f; p.hip[1] = -.14f; p.knee[0] = .18f; p.knee[1] = .08f;
-        float arc = a == "mine" ? 2.7f : 2.4f;
-        p.shoulder[0] = p.shoulder[1] = arc - 2.f * up01;
-        p.elbow[0] = p.elbow[1] = .2f;
+        float arc = a == "mine" ? 2.7f : 2.4f, strike = 0;
+        float raised = swing(t, .19f, seed, strike);
+        p.shoulder[0] = p.shoulder[1] = arc - 2.f * (1 - raised);
+        p.elbow[0] = p.elbow[1] = .2f + .25f * raised;
         p.spread[0] = p.spread[1] = -.2f;
-        p.lean = .08f + .2f * up01;
+        p.lean = .08f + .22f * (1 - raised);
+        p.knee[0] += .12f * (1 - raised);   // the knees give a little at the blow
+        p.drop = .03f * (1 - raised);
         p.prop = a == "mine" ? PICK : AXE;
-        p.strike = std::max(0.f, (w - .9f) * 10);
+        p.strike = strike;
     } else if (a == "build") {
         // down on one knee, hammering with the right hand
         p.drop = .37f; p.hip[0] = 1.45f; p.knee[0] = 1.5f; p.hip[1] = -.15f; p.knee[1] = 1.7f;
         p.lean = .22f;
-        p.shoulder[1] = 1.2f + .7f * w; p.elbow[1] = 1.f - .5f * w;
+        float strike = 0, raised = swing(t, .45f, seed, strike);
+        p.shoulder[1] = .5f + 1.4f * raised; p.elbow[1] = .5f + .5f * raised;
         p.shoulder[0] = .9f; p.elbow[0] = .5f;
         p.prop = HAMMER;
-        p.strike = std::max(0.f, (-w - .9f) * 10);
+        p.strike = strike;
     } else if (a == "fish") {
-        p.shoulder[0] = p.shoulder[1] = .75f + .03f * std::sin(t * .2f + seed);
-        p.elbow[0] = p.elbow[1] = .3f;
+        // waiting, with the odd twitch of the rod and, now and then, a fresh cast
+        float u = std::fmod(t * .05f + seed * .29f, 1.f);
+        float cast = u < .08f ? std::sin(u / .08f * 3.1416f) : 0;
+        p.shoulder[0] = p.shoulder[1] = .75f + .03f * std::sin(t * .2f + seed) + .9f * cast;
+        p.elbow[0] = p.elbow[1] = .3f + .3f * cast;
+        p.lean = -.05f * cast;
         p.spread[0] = p.spread[1] = -.12f;
         p.prop = ROD;
     } else if (a == "forage" || a == "farm") {

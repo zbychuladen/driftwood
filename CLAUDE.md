@@ -44,6 +44,8 @@ tools/shots.sh after         # on yours, then open .shots/index.html (git-ignore
 - Clicks hit the drawn shape (`draw::Probe`), and `src/game/Inspect` builds each card from sim state. A new object type needs a card there; the test checks every drawable has one.
 - What a settler is doing for the map comes from `Person::focus`, set where the job is handed out (`setQ`'s last argument). A new job sets one; `sim_tests` checks everyone at work has a focus.
 - The look: world colors pass through `draw::tone` and solid shapes get `draw::ink` outlines (both set in `WorldView::draw`), so pick ordinary colors and let the tone soften them. UI colors are the light `ui::T` theme; `game_tests` checks text contrast (WCAG AA).
+- A tree that would hide a settler is drawn see-through (`WorldView::seeThrough`, into an offscreen buffer so its own layers do not show through each other). Standing buildings get trodden earth and a soft shadow at their foot in the ground pass, before the sorted drawables.
+- Figures ease between poses (`figure::blend`, held per settler in `art::personAt`); tool swings use a shaped curve (slow lift, quick strike).
 - 2D shapes are drawn with backface culling disabled (both windings occur); see `Game::frame`.
 - People live in a `std::deque` and projects in a `std::deque` so pointers stay valid when new ones are added. Objects are a `std::vector`; refer to them by index in lambdas.
 - Journal text: plain, warm sentences. No em dashes.

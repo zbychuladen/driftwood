@@ -40,6 +40,8 @@ struct Pose {
     float strike = 0;            // 1 at the moment a tool lands (chips and sparks)
 };
 
+// Part way from pose a to pose b (k 0..1), for easing from one activity into the next.
+Pose blend(const Pose& a, const Pose& b, float k);
 // Standing at rest at time t, and walking at the stride phase (radians).
 Pose idle(float t);
 Pose walk(float phase);
