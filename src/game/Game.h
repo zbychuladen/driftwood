@@ -98,7 +98,7 @@ private:
     float titleClock = 0;                 // the title backdrop's camera drift
     bool settlersPlace = false;           // the settlers choose every building's spot themselves
     bool pauseQuestions = false;          // pause the game when a settler asks the narrator something
-    int openQuestion = -1, seenQuestion = 0;
+    int openQuestion = -1, seenQuestion = 0, openPetition = -1;
     std::string ledgerNote;               // what came of the last nudge from the Ledger
     int renaming = -1;                    // the building whose name is being typed
     std::string renameText;

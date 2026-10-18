@@ -487,7 +487,7 @@ void Game::drawFate() {
 void Game::drawDecisions() {
     float w = 340, pad = 14, x = rMap.x + rMap.width - w - 14, y = rTop.height + 14;
     decisionsR = {x, y, w, 0};
-    if (sim.questions.empty() && !sim.pendingPlacement) return;
+    if (sim.questions.empty() && !sim.pendingPlacement && sim.petitions.empty()) return;
     if (openQuestion >= 0 && std::none_of(sim.questions.begin(), sim.questions.end(), [&](const Question& q) { return q.id == openQuestion; })) openQuestion = -1;
     // measure and draw in one pass: draw the panel behind once the height is known
     float yy = y + pad;
@@ -540,17 +540,58 @@ void Game::drawDecisions() {
         }
         yy += 6;
     }
+    // petitions: a household asking for something, by a day
+    for (auto& pt : sim.petitions) {
+        Household* hh = sim.household(pt.hh);
+        if (!hh) continue;
+        int left = std::max(0, pt.due - sim.day());
+        bool open = openPetition == pt.id;
+        std::string head = sim.householdName(*hh) + (pt.kind == "feast" ? " ask for a feast" : pt.kind == "home" ? " ask for a better home" : " ask a favour"), when = left == 0 ? "today" : cat(left, "d");
+        Rectangle hr{x + 6, yy - 4, w - 12, 26};
+        rows.push_back({hr, -1000 - pt.id});
+        paint.push_back([=] {
+            if (hovered(hr) || open) DrawRectangleRounded(hr, .3f, 6, T.panel2);
+            DrawCircle(int(x + pad + 4), int(yy + 9), 4, T.accent);
+            text(F.bold, head, x + pad + 16, yy, 14, T.text);
+            text(F.body, when, x + w - pad - measure(F.body, when, 13).x, yy + 1, 13, left <= 2 ? T.berry : T.muted);
+        });
+        yy += 26;
+        if (!open) continue;
+        std::string say = "\"" + pt.text + "\"", need = "Met by " + sim.petitionNeed(pt) + ".";
+        float th = wrapped(F.hand, say, 0, 0, w - pad * 2, 21, T.text, false), nh = wrapped(F.body, need, 0, 0, w - pad * 2, 13.5f, T.muted, false);
+        paint.push_back([=] { wrapped(F.hand, say, x + pad, yy, w - pad * 2, 21, T.text); wrapped(F.body, need, x + pad, yy + th + 4, w - pad * 2, 13.5f, T.muted); });
+        yy += th + nh + 14;
+    }
     float h = yy - y + pad - 6;
     decisionsR.height = h;
     DrawRectangleRounded({x + 2, y + 4, w, h}, .06f, 8, Color{40, 50, 40, 36});
     panel({x, y, w, h}, draw::withA(T.panel, .97f), T.line, .06f);
     for (auto& f : paint) f();
-    for (auto& r : rows) if (clicked(r.r)) openQuestion = openQuestion == r.id ? -1 : r.id;
+    for (auto& r : rows) if (clicked(r.r)) {
+        if (r.id <= -1000) { int pid = -1000 - r.id; openPetition = openPetition == pid ? -1 : pid; }
+        else openQuestion = openQuestion == r.id ? -1 : r.id;
+    }
 }
 
 // The Narrator's Ledger: what is going wrong, who could fix it and what each
 // size of nudge would cost, and the roles and seasons already given out.
 float Game::drawLedger(float x, float y, float w) {
+    // the trial the narrator has seen coming this year, and how ready the village is
+    for (auto& t : sim.trials) {
+        if (t.over || t.year != sim.yearN()) continue;
+        y += sectionTitle(t.active ? "The trial is here" : "The year's trial", x, y);
+        int in = t.start - sim.day();
+        std::string when = t.active ? cat(Sim::trialName(t.kind), ", day ", sim.day() - t.start + 1, " of 10. We were ", int(t.ready * 100), "% ready.")
+                                    : cat(Sim::trialName(t.kind), ", in ", in, in == 1 ? " day." : " days.");
+        when[0] = char(std::toupper(when[0]));
+        y += wrapped(F.bold, when, x, y, w, 14, t.active ? T.berry : T.text) + 4;
+        if (!t.active)
+            for (auto& n : sim.trialChecklist(t.kind)) {
+                text(F.bold, n.met ? "+" : "-", x + 4, y, 14, n.met ? T.ok : T.berry);
+                y += wrapped(F.body, n.text, x + 20, y, w - 20, 13.5f, n.met ? T.muted : T.text) + 2;
+            }
+        y += 10;
+    }
     y += sectionTitle("Ledger", x, y);
     auto gaps = sim.ledger();
     bool night = sim.hour() < 7 || sim.hour() >= 18;

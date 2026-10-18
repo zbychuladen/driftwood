@@ -1211,6 +1211,65 @@ static void testVillageByHand() {
     }
 }
 
+// Petitions: households ask for things by a day; meeting one earns rapport,
+// letting it lapse costs some. Trials: foreseen each year, as hard as the
+// village was unready, two at once from year five.
+static void testPetitionsAndTrials() {
+    std::printf("petitions and trials\n");
+    Sim s;
+    s.newWorld(20261017);
+    runDays(s, 40);
+    int asked = s.nextPetition - 1;
+    CHECK(asked >= 2, cat("households ask the narrator for things (", asked, " petitions in 40 days)").c_str());
+    // the same night, once with a petition met and once with one that lapses
+    Household* h = nullptr;
+    for (auto& x : s.households) if (!x.members.empty()) h = &x;
+    if (!h) { CHECK(false, "a household"); return; }
+    untilMidnight(s);
+    std::string at = s.save();
+    float r[2];
+    for (int pass = 0; pass < 2; pass++) {
+        Sim t;
+        t.load(at);
+        t.petitions.clear();
+        t.rapport = 50;
+        Petition p;
+        p.id = 999; p.hh = h->id; p.pid = h->members[0]; p.kind = "luxury"; p.key = "spices"; p.text = "Spices?"; p.due = pass ? t.day() - 1 : t.day() + 5;
+        t.goods["spices"] = pass ? 0 : 5;
+        t.petitions.push_back(p);
+        if (pass == 0) { Sim c; c.load(t.save()); CHECK(c.petitions.size() == 1 && c.petitions[0].id == 999, "a petition survives a save"); }
+        pastMidnight(t);
+        r[pass] = t.rapport;
+        CHECK(std::none_of(t.petitions.begin(), t.petitions.end(), [](const Petition& q) { return q.id == 999; }), pass ? "a petition past its day lapses" : "a met petition is settled");
+    }
+    CHECK(r[0] > r[1] + 8, cat("meeting a petition earns rapport, letting one lapse costs it (", int(r[0]), " against ", int(r[1]), ")").c_str());
+
+    // the year's trial is foreseen, with a checklist
+    Sim y;
+    y.newWorld(777);
+    runDays(y, 3);
+    CHECK(!y.trials.empty() && y.trials[0].kind == "winter" && y.trials[0].start == 31 && !y.trialChecklist("winter").empty(), "early in the year the narrator sees the trial coming: a hard winter");
+    CHECK(Sim::trialKinds(2)[0] == "sickness" && Sim::trialKinds(3)[0] == "drought" && Sim::trialKinds(4)[0] == "storms" && Sim::trialKinds(5).size() == 2, "trials escalate: sickness, drought, storms, then two at once");
+    // the same village going into winter, ready and not
+    while (y.day() < 30) { y.step(60); if (!y.pendingFate.empty()) { auto f = y.pendingFate[0]; y.pendingFate.clear(); y.applyFate(f); } }
+    std::string eve = y.save();
+    float kept[2], ready[2];
+    for (int pass = 0; pass < 2; pass++) {
+        Sim t;
+        t.load(eve);
+        t.stock.food = 1500;
+        t.stock.wood = pass ? 0 : 120;
+        t.goods["cloth"] = pass ? 0 : 12;
+        while (t.day() < 33) { t.step(60); t.pendingFate.clear(); t.stock.wood = std::max(t.stock.wood, pass ? 0.f : 60.f); }
+        float atStart = t.stock.food;
+        ready[pass] = t.trials.empty() ? -1 : t.trials[0].ready;
+        while (t.day() < 41) { t.step(60); t.pendingFate.clear(); }
+        kept[pass] = t.stock.food / std::max(1.f, atStart);
+    }
+    CHECK(ready[0] > ready[1], cat("readiness is measured as the trial begins (", int(ready[0] * 100), "% against ", int(ready[1] * 100), "%)").c_str());
+    CHECK(kept[0] > kept[1], cat("a ready village loses less to a hard winter (kept ", int(kept[0] * 100), "% of its food against ", int(kept[1] * 100), "%)").c_str());
+}
+
 int main() {
     for (uint32_t seed : {20261017u, 777u, 4242u}) testSurvival(seed);
     testNoSmithNoForge();
@@ -1229,6 +1288,7 @@ int main() {
     testStatusAndWork();
     testWorkmanship();
     testVillageByHand();
+    testPetitionsAndTrials();
     testDeterminism();
     testFocus(20261017);
     testFocus(777);

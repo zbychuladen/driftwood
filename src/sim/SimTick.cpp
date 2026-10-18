@@ -30,7 +30,7 @@ void Sim::updatePerson(Person& p, double dmd) {
     if (p.status == "member") {
         bool asleep = a && a->anim == "sleep" && p.sleeping;
         n.hunger = std::min(100.f, n.hunger + hrs * (p.child ? 2.6f : 3.1f));
-        n.thirst = std::min(100.f, n.thirst + hrs * (asleep ? 2.f : 4.8f) * (inventions.count("skins") ? .8f : 1));
+        n.thirst = std::min(100.f, n.thirst + hrs * (asleep ? 2.f : 4.8f) * (inventions.count("skins") ? .8f : 1) * (1 + .4f * trialHard("drought")));
         if (!p.calling.empty()) p.callingNeed = std::min(100.f, p.callingNeed + hrs * 1.1f);
         if (asleep) {
             float r = p.sleepIn == "manor" ? 18.f : p.sleepIn == "house" ? 17.f : p.sleepIn == "longhouse" || p.sleepIn == "cottage" ? 16.f : p.sleepIn == "hut" ? 15.f : p.sleepIn == "leanto" ? 11.f : 7.f;
@@ -42,7 +42,7 @@ void Sim::updatePerson(Person& p, double dmd) {
         bool nearFire = fireLit() && std::hypot(p.x - (f->x + .5f), p.y - (f->y + .5f)) < 3.2f;
         bool inside = p.hidden && asleep;
         if (nearFire || inside || t >= 12) n.cold = std::max(0.f, n.cold - hrs * (nearFire ? 35.f : inside ? 20.f : 12.f) - (built("bath") ? hrs * 5 : 0));
-        else n.cold = std::min(100.f, n.cold + hrs * (12 - t) * .55f * (p.has("tough") ? .55f : 1) * (p.sleepIn == "leanto" && asleep ? .5f : 1)
+        else n.cold = std::min(100.f, n.cold + hrs * (12 - t) * .55f * (1 + .6f * trialHard("winter")) * (p.has("tough") ? .55f : 1) * (p.sleepIn == "leanto" && asleep ? .5f : 1)
                                   * (mods.count("wolves") ? .8f : 1) * (1 - std::min(.5f, good("cloth") * .03f)));
         if (p.sick > 0) p.sick -= hrs * (built("herbs") ? 1 + .6f * siteQ("herbs") : 1) * (hasHerb ? 1.4f : 1) * (built("infirmary") ? 1 + .5f * siteQ("infirmary") : 1);
         if (n.hunger >= 100) { p.starve += hrs; if (p.starve > 80) { die(p); return; } } else p.starve = 0;
@@ -164,6 +164,8 @@ void Sim::daily() {
     earn(rapportIncome());   // the day's rapport, from how much they buy in
     dutiesDaily();
     villageDaily();
+    petitionsDaily();
+    trialsDaily();
     homesDaily();
     statusDaily();
     for (auto* p : m) if (p->contraryUntil > 0 && !contrary(*p)) { p->contraryUntil = 0; note(cat(p->name, " has stopped bristling at the narrator, and will hear a line again.")); }
@@ -181,7 +183,7 @@ void Sim::daily() {
     for (auto key : {"garden", "fields"}) {
         auto* g = built(key);
         if (!g || g->state != "growing") continue;
-        g->growth += (s <= 1 ? .19f : s == 2 ? .12f : 0) * grow * g->siteQuality;
+        g->growth += (s <= 1 ? .19f : s == 2 ? .12f : 0) * grow * g->siteQuality * std::max(.1f, 1 - trialHard("drought"));
         if (s == 3) { g->state = "empty"; g->growth = 0; note("Frost blackened what was left in the fields.", "sad"); }
         if (g->growth >= 1) g->state = "ripe";
     }

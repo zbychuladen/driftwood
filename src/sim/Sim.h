@@ -186,6 +186,12 @@ struct Gap { std::string id, text, job, fix; std::vector<Candidate> candidates; 
 struct Household { int id = 0; std::vector<int> members; int home = -1; int rising = 0, falling = 0; bool noRoom = false; float toil = 0; };   // toil: a notable household's recent common work
 struct HomeNeed { std::string id, text; bool met = false; };
 struct HomeCost { int wood = 0, stone = 0; };
+// A household's petition to the narrator: a building, a better home, a feast or
+// a luxury, by a day. hh is the household, pid who asked.
+struct Petition { int id = 0, hh = -1, pid = -1; std::string kind, key, text; int due = 0; };
+// A trial foreseen for a year: when it starts, how ready the village was then,
+// and whether it is under way or over.
+struct Trial { std::string kind; int year = 1, start = 0; float ready = 0; bool active = false, over = false; };
 struct VoteRow { int pid; bool yes; std::string why; };
 struct Vote { std::string name; std::vector<VoteRow> rows; bool pass = false; int y = 0, n = 0; };
 struct Wolf { float x, y, sx, sy; std::string state; int face = 1; float ph = 0; };
@@ -257,7 +263,7 @@ public:
     // The whole game as bytes, and back. Settlers' half-done actions are not
     // kept: after a load everyone picks their next task. load() leaves the sim
     // as it was and returns false, with a reason, for anything it cannot read.
-    static constexpr int SAVE_VERSION = 13;   // 2: site quality and pending placement; 3: rapport, contrariness, the story circle; 4: lines, questions; 5: deaths this season; 6: the narrator's rapport and buy-in; 7: duties and roles; 8: households; 9: gift practice; 10: goods and food kinds; 11: status and work; 12: blueprints and workmanship; 13: paths, names, looks
+    static constexpr int SAVE_VERSION = 14;   // 2: site quality and pending placement; 3: rapport, contrariness, the story circle; 4: lines, questions; 5: deaths this season; 6: the narrator's rapport and buy-in; 7: duties and roles; 8: households; 9: gift practice; 10: goods and food kinds; 11: status and work; 12: blueprints and workmanship; 13: paths, names, looks; 14: petitions and trials
     struct SaveInfo { std::string village; int day = 0, year = 0, season = 0, people = 0; uint32_t seed = 0; };
     std::string save() const;
     bool load(const std::string& data, std::string* error = nullptr);
@@ -363,6 +369,19 @@ public:
     float alongside(const Person& p, const std::string& skill);   // 1.2 working beside a notable
     int topStatus();
     int nextShip = 0;                            // the day a ship next calls, while a beacon stands
+
+    // Petitions and trials (SimTrials.cpp).
+    std::vector<Petition> petitions;
+    int nextPetition = 1;
+    bool petitionMet(const Petition& p);
+    std::string petitionNeed(const Petition& p);     // what would meet it, in words
+    std::vector<Trial> trials;
+    static std::vector<std::string> trialKinds(int year);   // a hard winter, sickness, drought, storms; two at once from year 5
+    static int trialSeason(const std::string& kind);
+    static std::string trialName(const std::string& kind);
+    std::vector<HomeNeed> trialChecklist(const std::string& kind);   // what readiness for it means
+    float readiness(const std::string& kind);                         // 0..1, the share of the checklist met
+    float trialHard(const std::string& kind);                         // how hard a running trial bites, 0 when none
     std::string writeSand(const std::string& text);
     std::vector<const ProjectDef*> proposalList();
     void propose(const std::string& key);
@@ -452,6 +471,8 @@ private:
     void talkHourly();
     void dutiesDaily();                       // seasons ending, roles' upkeep
     void villageDaily();                      // paths fade where nobody walks
+    void petitionsDaily();
+    void trialsDaily();
     void finishByHand(Project& b);            // a clearing felled, an orchard planted
     // Specialists get better with practice: each piece of gifted work adds to it,
     // and enough of it raises the gift a level (to 10).
