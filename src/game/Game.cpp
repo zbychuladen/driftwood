@@ -14,7 +14,12 @@
 static const float MIN_PER_SEC = 14;   // game minutes per real second at "Slow"
 
 void Game::newGame(uint32_t seed) {
-    sim.newWorld(seed);
+    // the island and the landing chosen on the title screen, if the legacy has unlocked them
+    dw::StartOptions start;
+    if (legacy::unlocked(profile, legacy::islands()[size_t(islandChoice)])) start.island = legacy::islands()[size_t(islandChoice)].key;
+    if (legacy::unlocked(profile, legacy::starts()[size_t(startChoice)])) start.start = legacy::starts()[size_t(startChoice)].key;
+    sim.newWorld(seed, start);
+    endingRecorded = false;
     view.init(sim);
     selected = -1;
     speed = 1;
@@ -45,6 +50,12 @@ void Game::frame(float dt) {
     layout();
     const bool title = screen == Screen::TITLE;
     const bool ended = !title && !sim.ending.empty() && !endingSeen;   // the ending screen
+    // an ending reached in play goes into the legacy, once per run
+    if (!title && !sim.ending.empty() && !endingRecorded && opt.screenshot.empty()) {   // captures never touch the legacy
+        endingRecorded = true;
+        profile.endings.insert(sim.ending);
+        legacy::save(profile);
+    }
     const bool overlay = title || menuOpen || picker != Picker::NONE || ended;
     // a year in review pauses the island like a fate card
     bool fate = !sim.pendingFate.empty() || (!title && int(sim.years.size()) > yearsShown);
@@ -327,6 +338,7 @@ int Game::run() {
     if (!DirectoryExists(assets.c_str())) assets = "assets";
     ui::load(assets);
     if (!opt.saveDir.empty()) saves::setDir(opt.saveDir);
+    profile = legacy::load();
     newGame(opt.seed);
     if (opt.fullscreen) ToggleFullscreen();
     // the title's backdrop: the island a few weeks on, with a village to look at

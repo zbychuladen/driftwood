@@ -4,6 +4,7 @@
 #include <vector>
 #include "engine/Ui.h"
 #include "game/Inspect.h"
+#include "game/Legacy.h"
 #include "game/WorldView.h"
 #include "sim/Sim.h"
 
@@ -105,6 +106,9 @@ private:
     int openQuestion = -1, seenQuestion = 0, openPetition = -1;
     int yearsShown = 0;                   // year reviews the player has seen
     bool endingSeen = false;              // the ending screen has been closed (keep playing)
+    legacy::Profile profile;              // endings reached across runs
+    int islandChoice = 0, startChoice = 0;   // what the next new game starts with
+    bool endingRecorded = false;          // this run's ending is in the legacy
     ui::Scroll storyScroll;
     std::string ledgerNote;               // what came of the last nudge from the Ledger
     int renaming = -1;                    // the building whose name is being typed

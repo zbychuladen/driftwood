@@ -20,6 +20,7 @@
 #include "game/Inspect.h"
 #include "game/Iso.h"
 #include "game/Labels.h"
+#include "game/Legacy.h"
 #include "game/Saves.h"
 #include "game/Scale.h"
 #include "game/WorldView.h"
@@ -812,6 +813,30 @@ static void testGraphicsPass() {
     CHECK(up > down * 2 && strikes > 0 && strikes < 100, cat("a swing lifts slowly and strikes fast (", up, " steps up, ", down, " down)").c_str());
 }
 
+// ---------------------------------------------------------------- the legacy
+static void testLegacy() {
+    std::printf("legacy\n");
+    namespace fs = std::filesystem;
+    std::string dir = (fs::temp_directory_path() / "driftwood-legacy-test").string();
+    fs::remove_all(dir);
+    saves::setDir(dir);
+    legacy::Profile empty = legacy::load();
+    CHECK(empty.endings.empty() && empty.runs == 0, "with no profile yet, the legacy is empty");
+    legacy::Profile p;
+    p.runs = 3;
+    p.endings = {"haven", "lost"};
+    CHECK(legacy::save(p), "the legacy is written beside the saves");
+    legacy::Profile q = legacy::load();
+    CHECK(q.runs == 3 && q.endings == p.endings, "and read back as it was");
+    auto find = [](const std::vector<legacy::Option>& v, const char* k) { for (auto& o : v) if (std::string(o.key) == k) return o; return v[0]; };
+    CHECK(legacy::unlocked(q, find(legacy::islands(), "standard")) && legacy::unlocked(q, find(legacy::starts(), "ordinary")), "the standard island and landing are always open");
+    CHECK(legacy::unlocked(q, find(legacy::islands(), "lush")) && legacy::unlocked(q, find(legacy::starts(), "sixth")), "Haven opens the lush isle, Lost six castaways");
+    CHECK(!legacy::unlocked(q, find(legacy::islands(), "misty")) && !legacy::unlocked(q, find(legacy::starts(), "trusted")), "what has not been earned stays locked");
+    q.endings.insert("divided");
+    CHECK(legacy::unlocked(q, find(legacy::starts(), "trusted")), "any three endings open the trusted landing");
+    fs::remove_all(dir);
+}
+
 int main() {
     testProjection();
     testPickPeople(20261017);
@@ -833,6 +858,7 @@ int main() {
     testDoors();
     testSaveSlots();
     testGraphicsPass();
+    testLegacy();
     std::printf(failures ? "\n%d check(s) failed\n" : "\nall checks passed\n", failures);
     return failures;
 }

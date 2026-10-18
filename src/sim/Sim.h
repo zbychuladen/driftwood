@@ -206,6 +206,11 @@ struct Shore { int x, y, dx, dy; };
 // Pure noise + rng helpers used by world generation.
 struct Mulberry { uint32_t a; explicit Mulberry(uint32_t s) : a(s) {} float operator()(); };
 
+// How a run begins: which kind of island (standard, lush, rocky, misty) and
+// which starting situation (ordinary, winter, sixth, tools, trusted). Chosen
+// before a new game from what the legacy has unlocked; kept with the save.
+struct StartOptions { std::string island = "standard", start = "ordinary"; };
+
 class Sim {
 public:
     // ---- world ----
@@ -261,13 +266,14 @@ public:
     bool askPlacement = false;
 
     // ---- api ----
-    void newWorld(uint32_t seed);
+    void newWorld(uint32_t seed, const StartOptions& start = {});
+    StartOptions startOpts;                   // how this run began
 
     // ---- saving ----
     // The whole game as bytes, and back. Settlers' half-done actions are not
     // kept: after a load everyone picks their next task. load() leaves the sim
     // as it was and returns false, with a reason, for anything it cannot read.
-    static constexpr int SAVE_VERSION = 16;   // 2: site quality and pending placement; 3: rapport, contrariness, the story circle; 4: lines, questions; 5: deaths this season; 6: the narrator's rapport and buy-in; 7: duties and roles; 8: households; 9: gift practice; 10: goods and food kinds; 11: status and work; 12: blueprints and workmanship; 13: paths, names, looks; 14: petitions and trials; 15: the rival; 16: endings, years, chronicle
+    static constexpr int SAVE_VERSION = 17;   // 2: site quality and pending placement; 3: rapport, contrariness, the story circle; 4: lines, questions; 5: deaths this season; 6: the narrator's rapport and buy-in; 7: duties and roles; 8: households; 9: gift practice; 10: goods and food kinds; 11: status and work; 12: blueprints and workmanship; 13: paths, names, looks; 14: petitions and trials; 15: the rival; 16: endings, years, chronicle; 17: start options
     struct SaveInfo { std::string village; int day = 0, year = 0, season = 0, people = 0; uint32_t seed = 0; };
     std::string save() const;
     bool load(const std::string& data, std::string* error = nullptr);
@@ -400,7 +406,7 @@ public:
     std::string ending;
     int endedDay = 0;
     std::vector<YearSummary> years;
-    int yBirths = 0, yDeaths = 0, yMet = 0, yLapsed = 0, lastDeathDay = 0, dividedDays = 0;
+    int yBirths = 0, yDeaths = 0, yMet = 0, yLapsed = 0, lastDeathDay = 0, dividedDays = 0, awakeningDays = 0;
     std::vector<Entry> chronicle;                 // the story so far: every journal entry that matters, kept whole
     static const char* endingTitle(const std::string& e);
     static const char* endingLine(const std::string& e);

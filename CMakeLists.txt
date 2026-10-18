@@ -69,6 +69,7 @@ if(DRIFTWOOD_BUILD_GAME)
     src/game/WorldView.cpp
     src/game/Hud.cpp
     src/game/Saves.cpp
+    src/game/Legacy.cpp
     src/game/Inspect.cpp
     src/game/Menus.cpp
     src/game/Game.cpp)
