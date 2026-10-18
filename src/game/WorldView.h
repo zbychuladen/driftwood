@@ -106,6 +106,7 @@ private:
 
     RenderTexture2D ground{};
     RenderTexture2D fadeRT{};               // a tree drawn here, then over the scene see-through
+    RenderTexture2D pathRT{};               // worn paths, drawn solid here and laid over the ground
     // ground colors and marks for one season and seed, filed by tile
     struct GroundCache {
         int season = -1;

@@ -90,6 +90,14 @@ std::vector<Gap> Sim::ledger() {
     // what the settlers would build next, if the narrator drew it up
     if (askPlacement && !pendingPlacement)
         for (auto* w : wishes()) if (std::none_of(petitions.begin(), petitions.end(), [&](const Petition& p) { return p.kind == "building" && p.key == w->key; })) gap("wish", cat("The camp would like a ", lower(w->name), "."), "", "Open the Build tab and mark out a spot for it. They will start it when they can.");
+    // the rival winning people over
+    if (Person* rv = rival >= 0 ? person(rival) : nullptr) {
+        int followers = 0;
+        for (auto* p : adults) followers += p != rv && p->follow >= 50;
+        float mine = avgBuyIn(), theirs = rivalStanding();
+        if (overruled()) gap("rival", cat(rv->name, " is planning the village now. Win people back: meet petitions, get them through the trials, ease the resentment."), "", "When they trust the narrator clearly more than " + rv->name + " again, the blueprints are the narrator's.");
+        else if (theirs > mine * .7f || followers) gap("rival", cat(rv->name, " is winning people over", followers ? cat(" (", followers, followers == 1 ? " follows them)" : " follow them)") : std::string(), "."), "", rivalAhead ? cat("Ahead of the narrator for ", rivalAhead, " of 10 days; then they take over the planning.") : "Petitions met, trials survived and less resentment bring people back.");
+    }
     // resentment at how much better others live
     {
         std::vector<std::string> bitter;
@@ -137,6 +145,7 @@ int Sim::appealCost(const std::string&) {
 }
 
 std::string Sim::askSeason(Person& p, const std::string& job) {
+    if (overruled()) return "overruled";
     int cost = seasonCost(p, job);
     if (float(cost) > rapport) return "unaffordable";
     lastToldName = p.name;
@@ -158,6 +167,7 @@ std::string Sim::askSeason(Person& p, const std::string& job) {
 }
 
 std::string Sim::appoint(Person& p, const std::string& job) {
+    if (overruled()) return "overruled";
     int cost = roleCost(p, job);
     if (float(cost) > rapport) return "unaffordable";
     lastToldName = p.name;
@@ -187,6 +197,7 @@ void Sim::revoke(Person& p) {
 }
 
 std::string Sim::appeal(const std::string& job) {
+    if (overruled()) return "overruled";
     int cost = appealCost(job);
     if (float(cost) > rapport) return "unaffordable";
     earn(-float(cost));

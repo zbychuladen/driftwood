@@ -98,6 +98,7 @@ struct Person {
     std::vector<int> parents;
     int lastTold = -9, lastAsked = -9;
     float resentment = 0;                     // at how much better others live, 0..100
+    float follow = 0;                         // how far they follow the rival rather than the narrator, 0..100
     int lastStatus = 0;                       // their household's status, as of this morning (for prices)        // days they were last narrated, and last asked the narrator something
     std::array<float, 5> tiers{70, 40, 35, 30, 10};
     std::array<float, 5> gates{1, 1, .4f, .1f, 0};
@@ -263,7 +264,7 @@ public:
     // The whole game as bytes, and back. Settlers' half-done actions are not
     // kept: after a load everyone picks their next task. load() leaves the sim
     // as it was and returns false, with a reason, for anything it cannot read.
-    static constexpr int SAVE_VERSION = 14;   // 2: site quality and pending placement; 3: rapport, contrariness, the story circle; 4: lines, questions; 5: deaths this season; 6: the narrator's rapport and buy-in; 7: duties and roles; 8: households; 9: gift practice; 10: goods and food kinds; 11: status and work; 12: blueprints and workmanship; 13: paths, names, looks; 14: petitions and trials
+    static constexpr int SAVE_VERSION = 15;   // 2: site quality and pending placement; 3: rapport, contrariness, the story circle; 4: lines, questions; 5: deaths this season; 6: the narrator's rapport and buy-in; 7: duties and roles; 8: households; 9: gift practice; 10: goods and food kinds; 11: status and work; 12: blueprints and workmanship; 13: paths, names, looks; 14: petitions and trials; 15: the rival
     struct SaveInfo { std::string village; int day = 0, year = 0, season = 0, people = 0; uint32_t seed = 0; };
     std::string save() const;
     bool load(const std::string& data, std::string* error = nullptr);
@@ -382,6 +383,14 @@ public:
     std::vector<HomeNeed> trialChecklist(const std::string& kind);   // what readiness for it means
     float readiness(const std::string& kind);                         // 0..1, the share of the checklist met
     float trialHard(const std::string& kind);                         // how hard a running trial bites, 0 when none
+
+    // The rival (SimRival.cpp).
+    int rival = -1;                              // the settler competing with the narrator, -1 none yet
+    int rivalAhead = 0;                          // days in a row their following has beaten the narrator's buy-in
+    int overruledSince = 0, overruledDays = 0;   // the day they took over the planning (0 not now), and days overruled before
+    float rivalStanding();                       // the village's average following of the rival
+    bool overruled() const;                      // the rival plans: blueprints and appointments do not work
+    void rivalCools(float n, const Household* h = nullptr);   // followers drift back (all, or one household)
     std::string writeSand(const std::string& text);
     std::vector<const ProjectDef*> proposalList();
     void propose(const std::string& key);
@@ -473,6 +482,7 @@ private:
     void villageDaily();                      // paths fade where nobody walks
     void petitionsDaily();
     void trialsDaily();
+    void rivalDaily();
     void finishByHand(Project& b);            // a clearing felled, an orchard planted
     // Specialists get better with practice: each piece of gifted work adds to it,
     // and enough of it raises the gift a level (to 10).

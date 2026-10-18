@@ -53,7 +53,7 @@ std::vector<const ProjectDef*> Sim::blueprints() {
 
 int Sim::blueprint(const std::string& key) {
     const ProjectDef* d = projectDef(key);
-    if (!d || settlersBuild(*d) || d->upgrade || d->commissioned || !unlocked(key) || pendingPlacement) return -1;
+    if (!d || settlersBuild(*d) || d->upgrade || d->commissioned || !unlocked(key) || pendingPlacement || overruled()) return -1;
     // an unplaced one already in the plan, or a new one
     Project* b = nullptr;
     for (auto& p : plan) if (p.key == key && !p.placed && !p.done && !p.skip) { b = &p; break; }

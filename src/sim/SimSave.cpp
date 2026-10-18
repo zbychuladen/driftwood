@@ -158,7 +158,7 @@ template <class A> void io(A& a, Person& p) {
     io(a, p.sk); io(a, p.gifts); io(a, p.giftXp); io(a, p.charisma); io(a, p.buyIn); io(a, p.aff); io(a, p.partner); io(a, p.child);
     io(a, p.age); io(a, p.bornDay); io(a, p.bed); io(a, p.hidden); io(a, p.sleeping); io(a, p.sleepIn); io(a, p.sick);
     io(a, p.starve); io(a, p.phase); io(a, p.moving); io(a, p.face); io(a, p.anim); io(a, p.carry); io(a, p.bubble);
-    io(a, p.told); io(a, p.dead); io(a, p.gone); io(a, p.parents); io(a, p.lastTold); io(a, p.lastAsked); io(a, p.duty); io(a, p.resentment); io(a, p.lastStatus); io(a, p.tiers); io(a, p.gates);
+    io(a, p.told); io(a, p.dead); io(a, p.gone); io(a, p.parents); io(a, p.lastTold); io(a, p.lastAsked); io(a, p.duty); io(a, p.resentment); io(a, p.lastStatus); io(a, p.follow); io(a, p.tiers); io(a, p.gates);
     io(a, p.seeking); io(a, p.calling); io(a, p.callingNeed); io(a, p.esteemPts); io(a, p.titles); io(a, p.goodDays);
     io(a, p.inspired); io(a, p.trust); io(a, p.inventProg); io(a, p.lastBaby); io(a, p.weary); io(a, p.pressure); io(a, p.contraryUntil);
 }
@@ -200,7 +200,7 @@ template <class A> void body(A& a, Sim& s) {
     io(a, s.totems); io(a, s.vote); io(a, s.pendingFate); io(a, s.nextProjId); io(a, s.nextPid); io(a, s.active);
     io(a, s.fuelRes); io(a, s.dockRes); io(a, s.toolWear); io(a, s.goods); io(a, s.foodSeen); io(a, s.ironTools);
     io(a, s.hasHerb); io(a, s.agenda); io(a, s.lastToldName); io(a, s.lastReply); io(a, s.pendingPlacement);
-    io(a, s.questions); io(a, s.fibs); io(a, s.nextQuestion); io(a, s.lastSaid); io(a, s.lostThisSeason); io(a, s.rapport); io(a, s.households); io(a, s.nextHousehold); io(a, s.nextShip); io(a, s.wear); io(a, s.petitions); io(a, s.nextPetition); io(a, s.trials);
+    io(a, s.questions); io(a, s.fibs); io(a, s.nextQuestion); io(a, s.lastSaid); io(a, s.lostThisSeason); io(a, s.rapport); io(a, s.households); io(a, s.nextHousehold); io(a, s.nextShip); io(a, s.wear); io(a, s.petitions); io(a, s.nextPetition); io(a, s.trials); io(a, s.rival); io(a, s.rivalAhead); io(a, s.overruledSince); io(a, s.overruledDays);
     // the behaviour random generator, so a loaded game goes on the same way every time
     std::string rng;
     if constexpr (!A::reading) { std::ostringstream o; o << s.gen; rng = o.str(); }

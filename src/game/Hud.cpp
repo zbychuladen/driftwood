@@ -212,6 +212,8 @@ float Game::settlerCard(Person& p, float x, float y, float w, bool d) {
         else if (friendP) desc += " Closest to " + friendP->name + ".";
         desc += cat("\nGifts: ", p.gifts.empty() ? "none, a jack of all trades" : sim.giftText(p), ". Charisma ", p.charisma, "/10 (", Sim::charWord(p.charisma), "). Buys into the narrator ", Sim::buyInWord(p.buyIn), ".");
         if (auto* hh = sim.householdOf(p.id)) desc += cat("\nHousehold: ", sim.householdName(*hh), ", ", Sim::statusName(sim.status(*hh)), "s", hh->home >= 0 && sim.projectById(hh->home) ? cat(", in a ", lower(sim.projectById(hh->home)->name)) : std::string(", no home of their own"), ".");
+        if (p.id == sim.rival) desc += "\nSpeaks against the narrator, and has a following.";
+        else if (p.follow >= 50 && sim.rival >= 0 && sim.person(sim.rival)) desc += cat("\nFollows ", sim.person(sim.rival)->name, " more than the narrator.");
         if (p.resentment >= 20) desc += p.resentment >= 50 ? "\nBitter about how much better others live." : "\nA little resentful of those doing better.";
         if (p.duty) desc += p.duty->role ? cat("\nThe camp's ", Sim::roleName(p.duty->job), ", by the narrator's choosing.") : cat("\nSpending the season on ", Sim::roleName(p.duty->job), "'s work.");
         if (sim.contrary(p)) desc += "\nContrary: narrated once too often, and doing the opposite for now.";
@@ -250,6 +252,13 @@ void Game::drawNarrator(Rectangle a) {
     float f = sim.avgBuyIn();
     bar({x, y + 6, w, 10}, f / 100, T.narrator, T.panel2);
     y += 26;
+    if (Person* rv = sim.rival >= 0 ? sim.person(sim.rival) : nullptr) {
+        // the rival's following, on the same scale, for comparison
+        text(F.bold, sim.overruled() ? cat(rv->name, " plans the village now") : cat(rv->name, "'s following"), x, y, 13, T.berry);
+        y += 18;
+        bar({x, y + 2, w, 10}, sim.rivalStanding() / 100, T.berry, T.panel2);
+        y += 20;
+    }
     y += wrapped(F.body, f > 75 ? "They chat with the narrator like an old friend and mostly go along with the story." : f > 50 ? "They take the narration in their stride and usually play along." : f > 25 ? "They put up with being narrated, some days more than others." : "They are tired of being narrated. Lines rarely land.", x, y, w, 14, T.muted) + 18;
     // narrate one settler
     y += sectionTitle("Narrate", x, y);

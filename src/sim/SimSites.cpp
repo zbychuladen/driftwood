@@ -297,7 +297,15 @@ bool Sim::placeAt(int id, int x, int y) {
     siteJudged(*b, false);
     // a blueprint from the build menu waits its turn: the settlers start it when they see fit
     if (!chosen) startProject(*b);
-    else { b->waitNoted = false; note(cat("The narrator marked out a spot for a ", lower(b->name), ". The camp will get to it when they can.")); }
+    else {
+        b->waitNoted = false;
+        note(cat("The narrator marked out a spot for a ", lower(b->name), ". The camp will get to it when they can."));
+        // the rival speaks against it, and their followers listen
+        if (Person* rv = rival >= 0 ? person(rival) : nullptr) {
+            note(cat(rv->name, " said a ", lower(b->name), " was the last thing we needed. A few nodded."));
+            for (auto* p : members()) if (p->follow >= 40) p->follow = std::min(100.f, p->follow + 2);
+        }
+    }
     return true;
 }
 
