@@ -834,21 +834,25 @@ static void testWorkers() {
     }
     CHECK(rise[1] < rise[0] * .8f, cat("a tireless settler tires slower (", int(rise[1]), " against ", int(rise[0]), " over a morning)").c_str());
 
-    // a night owl sleeps through the middle of the day and is up in the small hours
-    Sim o;
-    o.newWorld(4242);
-    runDays(o, 2);
-    Person& owl = *o.members()[1];
-    owl.traits = {"nightowl", "curious"};
-    int dayAsleep = 0, nightAwake = 0, samples = 0;
-    for (int h = 0; h < 24 * 4; h++) {
-        o.step(60);
-        o.pendingFate.clear();
-        double hr = o.hour();
-        if (hr >= 11 && hr < 15) dayAsleep += owl.sleeping;
-        if (hr >= 0 && hr < 4) { nightAwake += !owl.sleeping; samples++; }
+    // a night owl sleeps through the middle of the day and is up in the small hours, unlike the others
+    int dayAsleep[2] = {0, 0}, nightAwake[2] = {0, 0}, samples = 0;
+    for (int pass = 0; pass < 2; pass++) {
+        Sim o;
+        o.newWorld(4242);
+        runDays(o, 2);
+        Person& who = *o.members()[1];
+        who.traits = pass ? std::vector<std::string>{"nightowl", "curious"} : std::vector<std::string>{"cheerful", "curious"};
+        samples = 0;
+        for (int h = 0; h < 24 * 4; h++) {
+            o.step(60);
+            o.pendingFate.clear();
+            double hr = o.hour();
+            if (hr >= 11 && hr < 15) dayAsleep[pass] += who.sleeping;
+            if (hr >= 0 && hr < 4) { nightAwake[pass] += !who.sleeping; samples++; }
+        }
     }
-    CHECK(dayAsleep >= 8 && nightAwake >= samples / 2, cat("a night owl sleeps by day and is up at night (", dayAsleep, " hours asleep at midday, ", nightAwake, " of ", samples, " awake at night)").c_str());
+    CHECK(dayAsleep[1] >= samples / 3 && dayAsleep[1] > dayAsleep[0] + 3 && nightAwake[1] >= samples / 2 && nightAwake[1] > nightAwake[0] + 4,
+          cat("a night owl sleeps by day and is up at night (asleep at midday ", dayAsleep[1], " of ", samples, " against ", dayAsleep[0], "; awake at night ", nightAwake[1], " against ", nightAwake[0], ")").c_str());
 
     // practice: a working potter gets better, and better means quicker
     CHECK(Sim::giftPace(10) < Sim::giftPace(5) && Sim::giftPace(5) < Sim::giftPace(1), "gifted work goes quicker at higher levels");
@@ -860,6 +864,44 @@ static void testWorkers() {
         for (auto& e : g.journal) rose += e.text.find("has become a better") != std::string::npos;
     }
     CHECK(rose >= 2, cat("specialists get better with practice (", rose, " gifts rose over three 100-day games)").c_str());
+}
+
+// Settlers walk round buildings, not through them.
+static void testPathsAroundBuildings() {
+    std::printf("paths round buildings\n");
+    Sim s;
+    s.newWorld(20261017);
+    runDays(s, 40);
+    int checked = 0, through = 0, stuck = 0;
+    for (auto& b : s.plan) {
+        if (!b.done || (b.key != "hut" && b.key != "store" && b.key != "longhouse" && b.key != "forge" && b.key != "cottage")) continue;
+        auto inside = [&](float x, float y) { return x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h; };
+        // from one side to the other, both ways round
+        float pairs[2][4] = {{b.x - 1.5f, b.y + b.h / 2.f, b.x + b.w + 1.5f, b.y + b.h / 2.f}, {b.x + b.w / 2.f, b.y - 1.5f, b.x + b.w / 2.f, b.y + b.h + 1.5f}};
+        for (auto& q : pairs) {
+            if (s.isWater(int(q[0]), int(q[1])) || s.isWater(int(q[2]), int(q[3])) || s.bOcc[Sim::idx(int(q[0]), int(q[1]))] >= 0 || s.bOcc[Sim::idx(int(q[2]), int(q[3]))] >= 0) continue;
+            auto path = s.findPath(q[0], q[1], q[2], q[3]);
+            checked++;
+            if (path.empty()) stuck++;
+            for (auto& [x, y] : path) if (inside(x, y)) { through++; break; }
+        }
+    }
+    CHECK(checked >= 4 && through == 0, cat("walking past a building goes round it (", checked, " routes)").c_str());
+    CHECK(stuck == 0, "and there is always a way round");
+    // you can still leave the building you are in, and walk into the one you are going to
+    Project* hut = nullptr;
+    for (auto& b : s.plan) if (b.done && b.key == "hut") hut = &b;
+    if (hut) {
+        // an open patch of ground a few tiles away
+        int fx = -1, fy = -1;
+        for (int r = 3; r <= 6 && fx < 0; r++) for (int dy = -r; dy <= r && fx < 0; dy++) for (int dx = -r; dx <= r; dx++) {
+            int x = hut->x + dx, y = hut->y + dy;
+            if (Sim::inb(x, y) && !s.isWater(x, y) && s.bOcc[Sim::idx(x, y)] < 0 && std::max(std::abs(dx), std::abs(dy)) == r) { fx = x; fy = y; break; }
+        }
+        auto out = s.findPath(hut->x + .5f, hut->y + .5f, fx + .5f, fy + .5f);
+        auto in = s.findPath(fx + .5f, fy + .5f, hut->x + .5f, hut->y + .5f);
+        CHECK(fx >= 0 && !out.empty() && !in.empty(), "a settler can leave a building and walk into one");
+    }
 }
 
 int main() {
@@ -875,6 +917,7 @@ int main() {
     testLedger();
     testHouseholds();
     testWorkers();
+    testPathsAroundBuildings();
     testDeterminism();
     testFocus(20261017);
     testFocus(777);

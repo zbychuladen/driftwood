@@ -7,6 +7,24 @@
 namespace dw {
 
 // ---------------------------------------------------------------- path
+// Which tiles buildings make solid (1), or walkable over water (2, a dock).
+// Rebuilt only when buildings start, finish or move.
+const std::vector<uint8_t>& Sim::walkGrid() {
+    long sig = long(plan.size());
+    for (auto& b : plan) sig = sig * 31 + b.id * 7 + (b.done ? 3 : b.progress > 0 ? 1 : 0) + b.x * 131 + b.y * 17 + b.w + b.h * 5;
+    if (walkSig == sig && walkCache.size() == size_t(GW * GH)) return walkCache;
+    walkSig = sig;
+    walkCache.assign(GW * GH, 0);
+    std::unordered_map<int, uint8_t> kind;
+    for (auto& b : plan) {
+        if (!b.placed || (!b.done && b.progress <= 0)) continue;
+        // places people walk into by design: a dock, crop plots, the story circle
+        kind[b.id] = b.key == "dock" ? 2 : (b.key == "garden" || b.key == "fields" || b.key == "herbs" || b.key == "circle") ? 0 : 1;
+    }
+    for (int i = 0; i < GW * GH; i++) if (bOcc[i] >= 0) if (auto it = kind.find(bOcc[i]); it != kind.end()) walkCache[i] = it->second;
+    return walkCache;
+}
+
 std::vector<std::pair<float, float>> Sim::findPath(float fx, float fy, float tx, float ty) {
     int sx = std::clamp(int(fx), 0, GW - 1), sy = std::clamp(int(fy), 0, GH - 1);
     int gx = std::clamp(int(tx), 0, GW - 1), gy = std::clamp(int(ty), 0, GH - 1);
@@ -17,13 +35,16 @@ std::vector<std::pair<float, float>> Sim::findPath(float fx, float fy, float tx,
     std::vector<int> came(N, -1);
     std::vector<uint8_t> closed(N, 0);
     int s = idx(sx, sy), goal = idx(gx, gy);
-    Project* dock = built("dock");
+    // buildings are solid; you may still leave the one you stand in and enter the one you are going to
+    const auto& solid = walkGrid();
+    int from = bOcc[s], to = bOcc[goal];
     auto walkable = [&](int x, int y) {
         if (!inb(x, y)) return false;
         int i = idx(x, y);
-        if (tt[i] >= 2) return true;
-        if (dock && bOcc[i] == dock->id) return true;
-        return i == goal;
+        if (i == goal) return true;
+        if (solid[i] == 2) return true;                                  // a dock over the water
+        if (solid[i] == 1 && bOcc[i] != from && bOcc[i] != to) return false;
+        return tt[i] >= 2;
     };
     using QE = std::pair<float, int>;
     std::priority_queue<QE, std::vector<QE>, std::greater<QE>> open;
@@ -356,7 +377,7 @@ void Sim::workQ(Person& p) {
     if (dExplore > 0 && day() >= 4) {
         int land = 0, known = 0;
         for (int i = 0; i < GW * GH; i++) if (tt[i] >= 2) { land++; known += explored[i]; }
-        if (land && known < land * .3f) dExplore += .22f;
+        if (land && known < land * .4f) dExplore += .35f;
     }
     Poi* hp = nullptr;
     for (auto& q : pois) if (q.type == "hermit" && q.found && !q.joined) hp = &q;
