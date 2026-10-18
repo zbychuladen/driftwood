@@ -35,7 +35,7 @@ float Sim::needOf(const std::string& k) {
     if (k == "herbs") { bool sick = false; for (auto* p : m) if (p->sick > 0) sick = true; return sick || (lastSick && day() - lastSick < 8) ? .7f : .2f; }
     if (k == "pottery") return stock.food > 30 ? .5f : .25f;
     if (k == "loomhouse") return season() >= 2 ? .7f : .2f;
-    if (k == "circle") return avgRapport() / 120;
+    if (k == "circle") return avgBuyIn() / 120;
     if (k == "school") { for (auto* p : m) if (p->child) return .6f; return .1f; }
     if (k == "infirmary") return pop > 10 ? .5f : .2f;
     if (k == "signal" || k == "boatyard") return .3f;
@@ -304,7 +304,7 @@ void Sim::finish(Project& b) {
     }
     if (b.key == "boatyard")
         for (int y = 0; y < GH; y++) for (int x = 0; x < GW; x++) if (tt[idx(x, y)] >= 2 && distSea[idx(x, y)] <= 2) reveal(x, y, .8f);
-    if (b.voiced) for (auto* p : members()) p->rapport = std::min(100.f, p->rapport + 5);
+    if (b.voiced) for (auto* p : members()) p->buyIn = std::min(100.f, p->buyIn + 5);
     for (auto* p : ws) {
         p->esteemPts = std::min(100.f, p->esteemPts + 12);
         p->mood = std::min(100.f, p->mood + 8);

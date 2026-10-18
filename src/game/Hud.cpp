@@ -107,6 +107,16 @@ void Game::drawTopBar() {
     chip("WEATHER", cat(wx, " ", int(std::lround(sim.temp())), "\xC2\xB0""C"));
     chip("ISLAND KNOWN", cat(explored * 100 / (GW * GH), "%"));
     chip("PEOPLE", cat(int(sim.members().size())));
+    // the narrator's rapport: what requests are paid from
+    {
+        float mw = 150;
+        text(F.bold, "RAPPORT", x, 9, 11, T.muted);
+        std::string inc = cat("+", std::lround(sim.rapportIncome() * 10) / 10.0, " a day");
+        text(F.body, inc, x + mw - measure(F.body, inc, 11).x, 9, 11, T.muted);
+        bar({x, 30, mw - 40, 10}, sim.rapport / Sim::RAPPORT_MAX, T.narrator, T.panel2);
+        text(F.bold, cat(int(sim.rapport)), x + mw - 32, 24, 19, T.narrator);
+        x += mw + 30;
+    }
     float bx = rTop.width - 16;
     auto btn = [&](const char* l, float w, bool active) { bx -= w; bool r = button({bx, 14, w, 30}, l, true, active, 14); bx -= 6; return r; };
     if (btn("New island", 104, false)) newGame(uint32_t(GetRandomValue(1, 1 << 30)));
@@ -184,7 +194,7 @@ float Game::settlerCard(Person& p, float x, float y, float w, bool d) {
         std::string desc = cat(p.name, " is ", traits, p.calling.empty() ? "" : ", a " + lower(callingInfo().at(p.calling).n) + " at heart", ". Best at ", best, ".");
         if (partner) desc += " Partner: " + partner->name + ".";
         else if (friendP) desc += " Closest to " + friendP->name + ".";
-        desc += cat("\nGifts: ", p.gifts.empty() ? "none, a jack of all trades" : sim.giftText(p), ". Charisma ", p.charisma, "/10 (", Sim::charWord(p.charisma), "). Rapport with the narrator: ", int(p.rapport), ".");
+        desc += cat("\nGifts: ", p.gifts.empty() ? "none, a jack of all trades" : sim.giftText(p), ". Charisma ", p.charisma, "/10 (", Sim::charWord(p.charisma), "). Buys into the narrator ", Sim::buyInWord(p.buyIn), ".");
         if (sim.contrary(p)) desc += "\nContrary: narrated once too often, and doing the opposite for now.";
         else if (p.weary) desc += "\nTired of being narrated.";
         if (sim.agenda && sim.agenda->by == p.id) desc += "\nCurrently setting the camp's agenda.";
@@ -206,7 +216,7 @@ void Game::drawSettlers(Rectangle a) {
     float y = a.y - sideScroll.y, x = a.x, w = a.width - 8;
     auto m = sim.members();
     y += sectionTitle(cat("The Settlers"), x, y);
-    text(F.body, cat(int(m.size()), " souls, rapport ", int(sim.avgRapport())), x + 140, y - 25, 13, T.muted);
+    text(F.body, cat(int(m.size()), " souls"), x + 140, y - 25, 13, T.muted);
     for (auto* p : m) { y += settlerCard(*p, x, y, w, true) + 4; }
     for (auto& p : sim.people) if (!p.dead && p.status != "member") y += settlerCard(p, x, y, w, true) + 4;
     endScroll(a, sideScroll, y + sideScroll.y - a.y + 20);
@@ -215,12 +225,11 @@ void Game::drawSettlers(Rectangle a) {
 void Game::drawNarrator(Rectangle a) {
     beginScroll(a, sideScroll);
     float x = a.x, w = a.width - 10, y = a.y - sideScroll.y;
-    // rapport
-    y += sectionTitle("Rapport", x, y);
-    float f = sim.avgRapport();
-    bar({x, y + 6, w - 60, 10}, f / 100, T.narrator, T.panel2);
-    text(F.head, cat(int(f)), x + w - 44, y - 4, 26, T.narrator);
-    y += 30;
+    // how much they buy in, on average: a feel, not a number (the rapport to spend is in the top bar)
+    y += sectionTitle("How much they buy in", x, y);
+    float f = sim.avgBuyIn();
+    bar({x, y + 6, w, 10}, f / 100, T.narrator, T.panel2);
+    y += 26;
     y += wrapped(F.body, f > 75 ? "They chat with the narrator like an old friend and mostly go along with the story." : f > 50 ? "They take the narration in their stride and usually play along." : f > 25 ? "They put up with being narrated, some days more than others." : "They are tired of being narrated. Lines rarely land.", x, y, w, 14, T.muted) + 18;
     // narrate one settler
     y += sectionTitle("Narrate", x, y);
@@ -228,20 +237,22 @@ void Game::drawNarrator(Rectangle a) {
     if (!p || p->status != "member" || p->child) {
         y += wrapped(F.body, "Select an adult settler on the map or in the Settlers tab, then narrate what they do next. Lines land more often with those you get on with.", x, y, w, 14, T.muted) + 16;
     } else {
-        y += wrapped(F.body, cat(p->name, ", rapport ", int(p->rapport), ". ", sim.contrary(*p) ? "Contrary right now: they will do the opposite." : p->lastTold == sim.day() ? "Already narrated today. Push too often and they turn contrary." : "Once a day is welcome."), x, y, w, 14, T.text) + 8;
-        y += wrapped(F.body, "Choose what happens next. Each line costs rapport if they go along; more than they have, and they won't.", x, y, w, 14, T.muted) + 6;
+        y += wrapped(F.body, cat(p->name, " buys in ", Sim::buyInWord(p->buyIn), ". ", sim.contrary(*p) ? "Contrary right now: they will do the opposite." : p->lastTold == sim.day() ? "Already narrated today. Push too often and they turn contrary." : "Once a day is welcome."), x, y, w, 14, T.text) + 8;
+        y += wrapped(F.body, "Choose what happens next. If they go along, the line's price comes out of your rapport. The less they buy in, the more it costs and the likelier they say no.", x, y, w, 14, T.muted) + 6;
         for (auto& l : sim.linesFor(*p)) {
             float tw = w - 28 - 52;
             float th = wrapped(F.hand, l.text, 0, 0, tw, 19, T.text, false);
             Rectangle r{x, y, w, th + 16};
-            bool hot = hovered(r), afford = float(l.cost) <= p->rapport;
+            bool afford = float(l.cost) <= sim.rapport, hot = afford && hovered(r);
+            std::string will = sim.likely(*p, l);
             DrawRectangleRounded(r, .14f, 6, hot ? T.hover : T.panel2);
             DrawRectangle(int(x), int(y + 6), 3, int(th + 4), T.narrator);
             wrapped(F.hand, l.text, x + 14, y + 6, tw, 19, afford ? T.text : T.muted);
-            std::string price = cat("-", l.cost);
+            std::string price = cat(l.cost);
+            const char* hint = !afford ? "can't afford" : will == "agreed" ? "will" : will == "haggled" ? "later" : "won't";
             text(F.bold, price, x + w - 14 - measure(F.bold, price, 15).x, y + 8, 15, afford ? T.narrator : T.berry);
-            text(F.body, afford ? "rapport" : "too dear", x + w - 14 - measure(F.body, afford ? "rapport" : "too dear", 11).x, y + 26, 11, T.muted);
-            if (clicked(r)) sim.narrate(*p, l);
+            text(F.body, hint, x + w - 14 - measure(F.body, hint, 11).x, y + 26, 11, will == "refused" || !afford ? T.berry : T.muted);
+            if (afford && clicked(r)) sim.narrate(*p, l);
             y += r.height + 6;
         }
         y += 4;

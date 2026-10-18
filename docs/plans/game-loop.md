@@ -77,7 +77,8 @@ Each phase lands as its own PR with tests and screenshots, stacked like before. 
 ### Phase 1: Rapport as currency
 
 - **What a request costs.** `Sim::cost(person, request)` prices it as a base by size, times how far it is from what they would choose anyway, measured from their needs, calling, status (later), mood and skill. A request that matches their needs is cheap; one against them is expensive.
-- **Paying.** Accepted requests deduct the price from that person. A request costing more than their rapport is refused, and a refusal costs nothing. With barely enough (under 1.4 times the price) they haggle and do it later.
+- **Two measures** (changed 2026-10-18): the narrator's **rapport** is a spendable meter in the top bar (0 to 100), and each settler's **buy-in** (shown in words, never a number) is how much they go along with the narrator. Buy-in sets the price and whether they agree, and the average buy-in is rapport's daily income.
+- **Paying.** An accepted request takes its price from the narrator's rapport; a line you cannot afford cannot be said. A settler whose buy-in is under 2.5 times the price refuses (free); under 4 times, they haggle and do it later.
 - **Earning.** Rapport comes back when outcomes land: a project the narrator placed pays off, a trial goes well, a petition is met, nobody dies in a season.
 - **Losing.** Rapport drops when a plan backfires (a building on a bad site, a trial not prepared for), a petition lapses, or someone dies.
 - **On screen.** Every line in the Narrate panel shows its price.

@@ -14,6 +14,18 @@ const std::string& pickBy(uint32_t h, const std::vector<std::string>& v) { retur
 
 float Sim::tolerance(const Person& p) { return p.has("easygoing") ? 5 : p.has("obstinate") ? 2 : 3; }
 
+float Sim::rapportIncome() { return avgBuyIn() / 20; }
+
+std::string Sim::likely(const Person& p, const Line& line) const {
+    bool social = line.job == "peace" || line.job == "talk";
+    if (float(line.cost) > p.buyIn / 2.5f) return "refused";
+    if (!social && float(line.cost) > p.buyIn / 4) return "haggled";
+    return "agreed";
+}
+
+const char* Sim::buyInWord(float b) { return b > 75 ? "wholeheartedly" : b > 55 ? "readily" : b > 35 ? "somewhat" : b > 18 ? "grudgingly" : "hardly at all"; }
+void Sim::earn(float n) { rapport = std::clamp(rapport + n, 0.f, RAPPORT_MAX); }
+
 int Sim::price(const Person& p, const std::string& job, float fit) {
     // a day's request, cheaper the more it is what they want anyway
     bool social = job == "peace" || job == "talk";
@@ -23,6 +35,7 @@ int Sim::price(const Person& p, const std::string& job, float fit) {
     if (p.has("easygoing")) c *= .8f;
     bool work = job == "food" || job == "wood" || job == "build" || job == "explore" || job == "hermit";
     if (work && p.needs.fatigue > 75) c *= 1.5f;
+    c *= 1.4f - p.buyIn / 100 * .8f;   // those who hardly buy in cost more to ask
     return std::max(2, int(std::lround(c)));
 }
 
@@ -78,6 +91,7 @@ std::string Sim::narrate(Person& p, const std::string& job, Person* target) {
 
 std::string Sim::narrate(Person& p, const Line& line) {
     lastToldName = p.name;
+    if (float(line.cost) > rapport) { lastSaid.clear(); return lastReply = "unaffordable"; }   // the narrator has not the rapport to ask
     const std::string& job = line.job;
     Person* target = line.target >= 0 ? person(line.target) : nullptr;
     int today = day();
@@ -87,7 +101,7 @@ std::string Sim::narrate(Person& p, const Line& line) {
     if (contrary(p) || p.pressure >= tolerance(p)) {
         bool already = contrary(p);
         p.contraryUntil = std::max(p.contraryUntil, tMin + 36 * 60);
-        p.rapport = std::max(0.f, p.rapport - 3);
+        p.buyIn = std::max(0.f, p.buyIn - 3);
         if ((job == "peace" || job == "talk") && target) {
             affAdd(p, target->id, -8);
             said("I'll talk to " + target->name + " when I feel like it", 80);
@@ -105,22 +119,25 @@ std::string Sim::narrate(Person& p, const Line& line) {
         return lastReply = "contrary";
     }
     if (p.lastTold == today) {
-        p.rapport = std::max(0.f, p.rapport - 6);
+        p.buyIn = std::max(0.f, p.buyIn - 6);
         said("Twice in one day?", 60);
         note(cat(p.name, " rolled their eyes. \"Twice in one day?\" They go along a little less willingly now."), "narrator");
         return lastReply = "pushed";
     }
     p.lastTold = today;
     bool social = (job == "peace" || job == "talk") && target;
-    // a request costs rapport: more than they have and they say no, which costs nothing but the day
-    if (float(line.cost) > p.rapport) {
+    // the narrator pays from its rapport; whether they go along is their buy-in against the price
+    std::string will = likely(p, line);
+    if (will == "refused") {
         said(pickBy(mix(p.id, today), {"I did not decide that.", "Not today.", "Says who?", "I'd want a better reason than that."}), 60);
         note(cat("\"", line.text, "\" \"", lastSaid, "\" said ", p.name, ", and carried on as before."), "narrator");
         return lastReply = "refused";
     }
-    p.rapport = std::max(0.f, p.rapport - float(line.cost));
-    if (!social && p.rapport + float(line.cost) < float(line.cost) * 1.4f) {
-        // only just enough trust: they will, in their own time
+    earn(-float(line.cost));
+    // asked for what they wanted anyway, they warm to the narrator; asked against the grain, they cool a little
+    p.buyIn = std::clamp(p.buyIn + (line.cost <= 4 ? 1.f : line.cost >= 9 ? -1.f : 0.f), 0.f, 100.f);
+    if (will == "haggled") {
+        // only just enough: they will, in their own time
         p.told = Narration{job, tMin + 12 * 60, false, tMin + 3 * 60};
         said(pickBy(mix(p.id, today + 1), {"After lunch.", "Once I've finished this.", "In a bit."}), 70);
         note(cat(line.text, " \"", lastSaid, "\" ", p.name, " said, and meant it."), "narrator");
@@ -196,20 +213,21 @@ bool Sim::answer(int questionId, int reply) {
     Person* o = q.about >= 0 ? person(q.about) : nullptr;
     note(cat(p->name, " asked the narrator, \"", q.text, "\" and was told, \"", r.text, "\""), "narrator");
     if (r.kind == "honest") {
-        p->rapport = std::min(100.f, p->rapport + 4);
+        p->buyIn = std::min(100.f, p->buyIn + 4);
         if (q.topic == "friend" && o && q.truth) affAdd(*p, o->id, 5);
         if (q.topic == "winter" && !q.truth) boost["food"] = std::max(boost["food"], tMin + 24 * 60);
         if (q.topic == "skill" && q.truth) p->esteemPts += 5;
+        earn(2);
         bubble(*p, "Thank you.", 50);
     } else if (r.kind == "teasing") {
         // a laugh makes them feel part of things; the sensitive take it to heart
         p->needs.social = std::max(0.f, p->needs.social - 15);
         p->mood = std::min(100.f, p->mood + 3);
-        if (p->has("gloomy")) { p->rapport = std::max(0.f, p->rapport - 4); bubble(*p, "Oh. Right.", 50); }
-        else { p->rapport = std::min(100.f, p->rapport + 1); bubble(*p, "Ha!", 50); }
+        if (p->has("gloomy")) { p->buyIn = std::max(0.f, p->buyIn - 4); bubble(*p, "Oh. Right.", 50); }
+        else { p->buyIn = std::min(100.f, p->buyIn + 1); bubble(*p, "Ha!", 50); }
     } else {
         // what they wanted to hear, for now
-        p->rapport = std::min(100.f, p->rapport + 2);
+        p->buyIn = std::min(100.f, p->buyIn + 2);
         p->mood = std::min(100.f, p->mood + 5);
         std::string reveal = q.topic == "friend" && o ? (q.truth ? cat(p->name, " found out ", o->name, " likes them after all, no thanks to the narrator.") : cat(p->name, " found out ", o->name, " never said any such thing, and is cross with the narrator."))
                            : q.topic == "winter" ? cat(p->name, " counted the stores and saw the narrator had not told them the truth about winter.")
@@ -226,7 +244,7 @@ void Sim::talkHourly() {
     // a question nobody answered lapses after a day
     for (size_t i = 0; i < questions.size();) {
         if (questions[i].expires > tMin) { i++; continue; }
-        if (auto* p = person(questions[i].pid)) { p->rapport = std::max(0.f, p->rapport - 1); if (!p->dead) bubble(*p, "Never mind, then.", 40); }
+        if (auto* p = person(questions[i].pid)) { p->buyIn = std::max(0.f, p->buyIn - 1); if (!p->dead) bubble(*p, "Never mind, then.", 40); }
         questions.erase(questions.begin() + long(i));
     }
     // misleading answers come out, most of the time
@@ -236,8 +254,9 @@ void Sim::talkHourly() {
         fibs.erase(fibs.begin() + long(i));
         Person* p = person(f.pid);
         if (!p || p->dead || std::uniform_real_distribution<float>(0, 1)(talkGen) >= .75f) continue;
-        p->rapport = std::max(0.f, p->rapport - 10);
+        p->buyIn = std::max(0.f, p->buyIn - 10);
         p->mood = std::max(0.f, p->mood - 6);
+        earn(-5);
         note(f.reveal, "narrator");
     }
     // now and then, in daylight, someone asks the narrator something

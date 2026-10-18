@@ -705,8 +705,8 @@ void Sim::callingJob(Person& p) {
         auto* sh = built("circle");
         float sx = sh ? sh->x + 2.3f : pondX + 2.6f, sy = sh ? sh->y + 1.f : pondY + .5f;
         return setQ(p, "calling", "Turning the story over", {walkA(sx, sy), workA(120, "Thinking", "sit", done([this](Person& q) {
-            q.rapport = std::min(100.f, q.rapport + 5);
-            for (auto* o : members()) o->rapport = std::min(100.f, o->rapport + .8f);
+            q.buyIn = std::min(100.f, q.buyIn + 5);
+            for (auto* o : members()) o->buyIn = std::min(100.f, o->buyIn + .8f);
             if (rnd() < .2f) {
                 auto fr = frontier();
                 if (!fr.empty()) {

@@ -157,6 +157,7 @@ void Sim::hourly() {
 void Sim::daily() {
     int d = day(), s = season(), prevS = ((d - 2) / 10) % 4;
     auto m = members();
+    earn(rapportIncome());   // the day's rapport, from how much they buy in
     for (auto* p : m) if (p->contraryUntil > 0 && !contrary(*p)) { p->contraryUntil = 0; note(cat(p->name, " has stopped bristling at the narrator, and will hear a line again.")); }
     // a well-placed store or smokehouse keeps food better; a damp or out-of-the-way one worse
     float rate = (built("smoke") ? .006f * (2 - siteQ("smoke")) : built("store") ? .01f * (2 - siteQ("store")) : built("rack") ? .035f : .07f) * (1 - std::min(.6f, pots * .04f));
@@ -187,7 +188,7 @@ void Sim::daily() {
     if (wasStorm && rnd() < .3f && d - newcomerDay > 4) { newcomerDay = d; spawnNewcomers(1 + (rnd() < .35f ? 1 : 0), "wreck"); }
     auto* sig = built("signal"); auto* lh = built("lighthouse");
     if ((sig || lh) && d - newcomerDay > 5 && rnd() < (lh ? .2f : .09f)) { newcomerDay = d; spawnNewcomers(lh ? 2 + ri(2) : 1 + ri(2), lh ? "light" : "signal"); }
-    if (built("circle")) for (auto* p : m) p->rapport = std::min(100.f, p->rapport + .6f);
+    if (built("circle")) for (auto* p : m) p->buyIn = std::min(100.f, p->buyIn + .6f);
     if (s != prevS && d > 1) {
         std::string spring = "Spring returned. Green shoots everywhere.";
         if (yearN() > 1) spring += cat(" We have survived ", yearN() - 1, yearN() > 2 ? " years" : " year", " on this island.");
@@ -195,7 +196,8 @@ void Sim::daily() {
         note(lines[s], "big");
         // a season with nobody lost: they give the narrator some of the credit
         if (lostThisSeason == 0) {
-            for (auto* p : m) if (!p->child) p->rapport = std::min(100.f, p->rapport + 5);
+            earn(10);
+            for (auto* p : m) if (!p->child) p->buyIn = std::min(100.f, p->buyIn + 5);
             note("Nobody was lost last season. Over supper someone said the narrator had a hand in that, and nobody argued.", "narrator");
         }
         lostThisSeason = 0;
@@ -261,8 +263,8 @@ void Sim::daily() {
     if (totalBeds(true) < int(m.size()) && !pendingHut) mkProj(*projectDef("hut"));
     bool haveCircle = false;
     for (auto& b : plan) if (b.key == "circle") haveCircle = true;
-    if (avgRapport() > 75 && !haveCircle) { mkProj(*projectDef("circle"), true); note("They talk back to the narrator now, and laugh about it. Tonight they decided to make a story circle, to tell the island's tales out loud.", "narrator"); }
-    for (auto* p : m) if (p->rapport < 12 && !p->weary) { p->weary = true; note(cat(p->name, " is tired of being narrated. \"Tell someone else's story for a while.\"")); }
+    if (avgBuyIn() > 75 && !haveCircle) { mkProj(*projectDef("circle"), true); note("They talk back to the narrator now, and laugh about it. Tonight they decided to make a story circle, to tell the island's tales out loud.", "narrator"); }
+    for (auto* p : m) if (p->buyIn < 12 && !p->weary) { p->weary = true; note(cat(p->name, " is tired of being narrated. \"Tell someone else's story for a while.\"")); }
     bool allDone = true;
     for (auto& b : plan) if (!b.done && !b.skip && giftOk(b) && prereqOk(b)) allDone = false;
     if (allDone && !firsts.count("complete")) { firsts.insert("complete"); note(cat("Everything we can build right now is built. ", villageName.empty() ? "The camp" : villageName, " is a real village. Perhaps the narrator has new ideas."), "big"); }

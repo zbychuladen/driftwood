@@ -309,6 +309,8 @@ void Sim::siteJudged(Project& b, bool finished) {
         bubble(*who, lead.perceived < .85f ? "here? really?" : lead.perceived > 1.1f ? "good spot" : "it will do", 90);
         return;
     }
+    // the narrator's own spot pays off or backfires
+    if (b.sited) earn(std::clamp((b.siteQuality - 1) * 40, -8.f, 8.f));
     // living with it: those who thought it a poor spot are put out, the rest pleased
     for (auto& o : ops) {
         Person* p = person(o.pid);
@@ -316,10 +318,10 @@ void Sim::siteJudged(Project& b, bool finished) {
         // the narrator chose the spot (b.sited): a good one earns trust, a bad one costs it, most of all with the specialist
         if (o.perceived < .85f) {
             p->mood = std::max(0.f, p->mood - 3 - 6 * o.expertise);
-            if (b.sited) p->rapport = std::max(0.f, p->rapport - 1 - 3 * o.expertise);
+            if (b.sited) p->buyIn = std::max(0.f, p->buyIn - 1 - 3 * o.expertise);
         } else if (o.perceived > 1.1f) {
             p->mood = std::min(100.f, p->mood + 2 + 3 * o.expertise);
-            if (b.sited) p->rapport = std::min(100.f, p->rapport + 2 + 3 * o.expertise);
+            if (b.sited) p->buyIn = std::min(100.f, p->buyIn + 2 + 3 * o.expertise);
         }
     }
     if (lead.expertise >= .45f && lead.perceived < .85f)

@@ -7,9 +7,9 @@
 
 namespace dw {
 
-float Sim::avgRapport() {
+float Sim::avgBuyIn() {
     float s = 0; int n = 0;
-    for (auto* p : members()) if (!p->child) { s += p->rapport; n++; }
+    for (auto* p : members()) if (!p->child) { s += p->buyIn; n++; }
     return n ? s / n : 0;
 }
 
@@ -35,7 +35,7 @@ std::string Sim::writeSand(const std::string& raw) {
     std::vector<const Key*> hits;
     for (auto& k : KEYS) if (std::regex_search(txt, k.re)) hits.push_back(&k);
     if (hits.empty()) {
-        for (auto* p : members()) p->rapport = std::min(100.f, p->rapport + .5f);
+        for (auto* p : members()) p->buyIn = std::min(100.f, p->buyIn + .5f);
         note(cat(finder->name, " found words in the sand at dawn. Nobody could agree on what they meant."));
         return "They found it, and argued about what it meant.";
     }
@@ -47,7 +47,7 @@ std::string Sim::writeSand(const std::string& raw) {
         if (b == "guard") mods["guard"] = day() + 3;
         if (b == "purpose") for (auto* p : members()) { if (!p->calling.empty()) p->callingNeed = std::min(100.f, p->callingNeed + 30); else if (!p->child) p->goodDays++; }
     }
-    for (auto* p : members()) p->rapport = std::min(100.f, p->rapport + (p->has("obstinate") ? .5f : 2.5f));
+    for (auto* p : members()) p->buyIn = std::min(100.f, p->buyIn + (p->has("obstinate") ? .5f : 2.5f));
     note(cat(finder->name, " found words in the sand at dawn and read them aloud. ", hits[0]->r));
     return "They found your words. Watch how they respond.";
 }
@@ -74,7 +74,7 @@ void Sim::propose(const std::string& key) {
     Vote v; v.name = o->name;
     auto hasAny = [](Person* p, const std::vector<std::string>& ts) -> std::string { for (auto& t : ts) if (p->has(t.c_str())) return t; return ""; };
     for (auto* p : voters) {
-        float s = .38f + (p->rapport - 40) / 110 + (p->has("hardworking") ? .08f : 0);
+        float s = .38f + (p->buyIn - 40) / 110 + (p->has("hardworking") ? .08f : 0);
         std::string why = "likes the idea";
         auto lk = hasAny(p, o->like), dl = hasAny(p, o->dislike);
         if (!lk.empty()) { s += .28f; why = "is " + traitNames().at(lk); }
@@ -83,19 +83,19 @@ void Sim::propose(const std::string& key) {
         if (days < 4 && !o->food) s -= .35f;
         if (p->mood < 30) s -= .15f;
         bool yes = rnd() < clampf(s, .05f, .95f);
-        if (!yes) why = days < 4 && !o->food ? "says food comes first" : !dl.empty() ? "is " + traitNames().at(dl) : p->rapport < 25 ? "is tired of the narrator" : p->mood < 30 ? "is too tired" : "thinks it is a waste";
-        else if (p->rapport > 65) why = "likes where the story is going";
+        if (!yes) why = days < 4 && !o->food ? "says food comes first" : !dl.empty() ? "is " + traitNames().at(dl) : p->buyIn < 25 ? "is tired of the narrator" : p->mood < 30 ? "is too tired" : "thinks it is a waste";
+        else if (p->buyIn > 65) why = "likes where the story is going";
         v.rows.push_back({p->id, yes, why});
         if (yes) v.y++; else v.n++;
     }
-    v.pass = v.y > v.n || (v.y == v.n && avgRapport() > 50);
+    v.pass = v.y > v.n || (v.y == v.n && avgBuyIn() > 50);
     Person* proposer = voters.empty() ? nullptr : pick(voters);
     note(cat(proposer ? proposer->name : "Someone", " heard the narrator float an idea over breakfast: a ", lower(o->name), ". The group voted ", v.y, " to ", v.n, ". ", v.pass ? "It will be built." : "The idea was dropped."), "narrator");
     if (v.pass) {
         mkProj(*o, true);
-        for (auto& r : v.rows) if (r.yes) if (auto* p = person(r.pid)) p->rapport = std::min(100.f, p->rapport + 2);
+        for (auto& r : v.rows) if (r.yes) if (auto* p = person(r.pid)) p->buyIn = std::min(100.f, p->buyIn + 2);
     } else {
-        for (auto& r : v.rows) if (auto* p = person(r.pid)) p->rapport = std::max(0.f, p->rapport - 1);
+        for (auto& r : v.rows) if (auto* p = person(r.pid)) p->buyIn = std::max(0.f, p->buyIn - 1);
     }
     vote = v;
 }
@@ -135,7 +135,7 @@ void Sim::applyFate(const Fate& f) {
         std::shuffle(adults.begin(), adults.end(), gen);
         if (adults.size() > 2) adults.resize(2);
         for (auto* p : adults) { p->sick = 30; clearQ(*p); }
-        for (auto* p : m) p->rapport = std::min(100.f, p->rapport + 8);
+        for (auto* p : m) p->buyIn = std::min(100.f, p->buyIn + 8);
         lastSick = day();
         note(cat(listNames(adults), " fell sick with fever. The others sat up with them and asked the narrator, half joking, how this part ends."), "sad");
     } else if (id == "dream") {
@@ -143,7 +143,7 @@ void Sim::applyFate(const Fate& f) {
         for (auto& p : pois) if (!p.found) t.push_back(&p);
         if (!t.empty()) { auto* p = pick(t); reveal(p->x, p->y, 6); }
         else for (int k = 0; k < 4; k++) reveal(ri(GW), ri(GH), 6);
-        for (auto* q : m) q->rapport = std::min(100.f, q->rapport + 4);
+        for (auto* q : m) q->buyIn = std::min(100.f, q->buyIn + 4);
         note("Everyone woke having dreamed of the same distant place. The narrator had described it in the night, and now they know it is real.", "narrator");
     } else if (id == "driftwood") {
         stock.wood += 45;
@@ -156,7 +156,7 @@ void Sim::applyFate(const Fate& f) {
     } else if (id == "smoke") {
         for (auto& h : pois) if (h.type == "hermit") reveal(h.x, h.y, 4);
     }
-    for (auto* p : m) p->rapport = std::min(100.f, p->rapport + 1);
+    for (auto* p : m) p->buyIn = std::min(100.f, p->buyIn + 1);
 }
 
 void Sim::spawnNewcomers(int n, const std::string& how) {
@@ -169,7 +169,7 @@ void Sim::spawnNewcomers(int n, const std::string& how) {
     std::vector<Person*> group;
     for (int i = 0; i < n; i++) {
         auto& p = makePerson(newName(), pick(TUN), s.x + .5f + i * .4f, s.y + .5f);
-        p.status = "arriving"; p.needs.hunger = 55; p.rapport = 20 + rnd() * 30;
+        p.status = "arriving"; p.needs.hunger = 55; p.buyIn = 20 + rnd() * 30;
         group.push_back(&p);
     }
     reveal(s.x, s.y, 3);

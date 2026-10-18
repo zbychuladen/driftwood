@@ -48,7 +48,7 @@ const std::vector<ProjectDef>& allProjects() {
         };
         o(P("signal", "Signal fire", 1, 1, 30, 6, 400), "A great pyre on high ground. Passing ships may see it and bring newcomers.", {"social", "curious"}, {"loner"}, 0, 0);
         o(P("smoke", "Smokehouse", 2, 1, 26, 10, 480), "Smoked fish barely spoils, and catches go further.", {"angler", "hardworking"}, {}, 3, 7)->food = true;
-        o(P("circle", "Story circle", 2, 2, 12, 24, 520), "Log seats round a fire, where people gather to tell tales. Rapport and spirits rise every day.", {"easygoing"}, {"obstinate"}, 5, 10);
+        o(P("circle", "Story circle", 2, 2, 12, 24, 520), "Log seats round a fire, where people gather to tell tales. Buy-in and spirits rise every day.", {"easygoing"}, {"obstinate"}, 5, 10);
         o(P("boatyard", "Boatyard", 2, 2, 40, 0, 620), "A small sailing boat. Better fishing, and they can chart the whole coastline.", {"angler", "curious"}, {}, 0, 0, "sailor", 4, "dock");
         o(P("lighthouse", "Lighthouse", 1, 1, 40, 40, 900), "A beacon that draws ships from far away. More newcomers.", {"social"}, {}, 0, 0, "mason", 6, "signal");
         o(P("school", "Schoolhouse", 2, 2, 36, 10, 600), "Children learn faster and grow up sooner.", {"cheerful", "social"}, {}, 4, 8, "carpenter", 4, "child");
