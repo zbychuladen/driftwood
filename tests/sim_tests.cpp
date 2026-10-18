@@ -1397,6 +1397,28 @@ static void testEndings() {
     }
 }
 
+// How a run begins: kinds of island and starting situations, kept with the save.
+static void testStartOptions() {
+    std::printf("islands and landings\n");
+    auto with = [](const char* island, const char* start) { auto s = std::make_unique<Sim>(); s->newWorld(4242, StartOptions{island, start}); return s; };
+    auto count = [](Sim& s, const char* type) { int n = 0; for (auto& o : s.objs) n += !o.dead && o.type == type; return n; };
+    auto known = [](Sim& s) { int n = 0; for (auto e : s.explored) n += e; return n; };
+    auto base = with("standard", "ordinary");
+    auto rocky = with("rocky", "ordinary"), lush = with("lush", "ordinary"), misty = with("misty", "ordinary");
+    CHECK(count(*rocky, "rock") > count(*base, "rock") * 1.3f, "a rocky isle has far more boulders");
+    CHECK(count(*lush, "bush") > count(*base, "bush") * 1.5f, "a lush isle has far more berry bushes");
+    CHECK(known(*misty) < known(*base) * .7f, "on a misty isle little is known at the start");
+    CHECK(base->members().size() == 5 && with("standard", "sixth")->members().size() == 6, "a landing with six castaways has six");
+    auto winter = with("standard", "winter");
+    CHECK(winter->season() == 3 && base->season() == 0, "a winter landing starts in winter");
+    auto tools = with("standard", "tools");
+    CHECK(tools->mods.count("tools") && !base->mods.count("tools"), "a chest of tools helps for the first days");
+    CHECK(with("standard", "trusted")->rapport > base->rapport + 20, "trusted from the first starts with more rapport");
+    Sim c;
+    c.load(rocky->save());
+    CHECK(c.startOpts.island == "rocky" && c.startOpts.start == "ordinary", "how a run began is kept with the save");
+}
+
 int main() {
     for (uint32_t seed : {20261017u, 777u, 4242u}) testSurvival(seed);
     testNoSmithNoForge();
@@ -1418,6 +1440,7 @@ int main() {
     testPetitionsAndTrials();
     testRival();
     testEndings();
+    testStartOptions();
     testDeterminism();
     testFocus(20261017);
     testFocus(777);

@@ -130,9 +130,11 @@ void Sim::placePOI(const std::string& type, std::function<bool(int)> ok, float m
     }
 }
 
-void Sim::newWorld(uint32_t s) {
+void Sim::newWorld(uint32_t s, const StartOptions& start) {
     *this = Sim();
     seed = s;
+    startOpts = start;
+    const bool rocky = start.island == "rocky", lush = start.island == "lush", misty = start.island == "misty";
     gen.seed(s * 2654435761u + 7);
     talkGen.seed(s * 40503u + 11);
     wear.assign(GW * GH, 0);
@@ -214,7 +216,8 @@ void Sim::newWorld(uint32_t s) {
             }
             if (R() < (t == FOREST ? .55f : .04f)) { o.type = "tree"; o.conifer = fbm(n3, x / 6.f + 30, y / 6.f) > .52f; o.size = .8f + R() * .45f; addObj(o); continue; }
             if (fbm(n3, x / 5.f + 50, y / 5.f + 50) > .68f && R() < .35f) { o.type = "rock"; o.stone = 6; o.size = .8f + R() * .5f; addObj(o); continue; }
-            if (t == GRASS && R() < .035f) { o.type = "bush"; o.berries = 2 + int(R() * 3); addObj(o); }
+            if (rocky && R() < .07f) { o.type = "rock"; o.stone = 7; o.size = .8f + R() * .6f; addObj(o); continue; }   // a rocky island: boulders everywhere
+            if (t == GRASS && R() < (lush ? .1f : .035f)) { o.type = "bush"; o.berries = 2 + int(R() * 3) + (lush ? 1 : 0); addObj(o); }
         }
         auto ensure = [&](const std::string& type, int want, float minD) {
             int c2 = 0;
@@ -258,7 +261,8 @@ void Sim::newWorld(uint32_t s) {
     std::shuffle(names.begin(), names.end(), gen);
     std::vector<uint32_t> tun = TUNICS;
     std::shuffle(tun.begin(), tun.end(), gen);
-    for (int i = 0; i < 5; i++) {
+    int castaways = start.start == "sixth" ? 6 : 5;
+    for (int i = 0; i < castaways; i++) {
         auto& p = makePerson(names[i], tun[i], boatX + .5f + (i % 3) * .4f - .4f, boatY + .5f + (i / 3) * .5f - .2f);
         p.status = "member";
         usedNames.insert(names[i]);
@@ -271,9 +275,20 @@ void Sim::newWorld(uint32_t s) {
         h.gifts = {{"herbalist", 7 + ri(3)}}; h.charisma = 3;
         hp.who = h.id;
     }
-    reveal(campX, campY, START_REVEAL);
+    reveal(campX, campY, misty ? START_REVEAL * .55f : START_REVEAL);
     reveal(boatX, boatY, START_REVEAL / 2);
-    note(cat("The storm spat our little boat onto an unknown island. Five of us: ", listNames(members()), ". A hatchet, a knife, and a sack of seeds."), "big");
+    note(cat("The storm spat our little boat onto an unknown island. ", castaways == 6 ? "Six" : "Five", " of us: ", listNames(members()), ". A hatchet, a knife, and a sack of seeds."), "big");
+    if (misty) note("A mist hangs over this island and will not lift. We can barely see past the beach.");
+    if (rocky) note("Boulders everywhere, as if the island were dropped from a height. Good stone, hard going.");
+    if (lush) note("The island is thick with berry bushes. Nobody will go hungry this first season.");
+    // the starting situation
+    if (start.start == "winter") {
+        tMin = 30 * 1440 + 7 * 60;   // wrecked at the start of winter
+        lastDay = day(); lastHour = 7;
+        note("We came ashore as the first snow fell. Winter, with nothing.", "sad");
+    }
+    if (start.start == "tools") { mods["tools"] = day() + 20; note("A sea chest came ashore with us: iron axes, a saw, a hammer. Everything goes faster.", "big"); }
+    if (start.start == "trusted") { rapport = 60; for (auto* p : members()) p->buyIn = std::min(100.f, p->buyIn + 15); note("From the first day they listened to the narrator as if they had always known it.", "narrator"); }
     {
         std::vector<std::string> know;
         for (auto* p : members()) if (!p->gifts.empty()) {

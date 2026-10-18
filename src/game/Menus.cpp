@@ -42,6 +42,7 @@ void Game::loadFrom(int slot) {
     inspected = {};
     yearsShown = int(sim.years.size());
     endingSeen = !sim.ending.empty();
+    endingRecorded = !sim.ending.empty();
     journalVersionCached = -1;
     sandText.clear();
     sandNote.clear();
@@ -62,6 +63,8 @@ void Game::drawTitle() {
     wrapped(F.body, "Five castaways, an island, and you: the narrator they have all got used to.", x, y + 82, cw, 17, T.muted);
     float by = y + 150;
     if (button({x, by, cw, 46}, "New game", true, true, 17)) {
+        profile.runs++;
+        legacy::save(profile);
         newGame(uint32_t(GetRandomValue(1, 1 << 30)));
         screen = Screen::PLAYING;
     }
@@ -69,6 +72,26 @@ void Game::drawTitle() {
     if (button({x, by + 58, cw, 46}, anySave ? "Load game" : "Load game (no saves yet)", anySave, false, 17)) { picker = Picker::LOAD; confirmSlot = -1; }
     if (button({x, by + 116, cw, 46}, "Quit", true, false, 17)) quit = true;
     text(F.body, "In game: Esc for the menu, F5 to quick save, F9 to quick load.", x, by + 186, 13, T.muted);
+    // the legacy: endings reached, and the islands and landings they have opened up
+    float lx = x + cw + 90, ly = y - 34, lw = 380;
+    panel({lx - 24, ly, lw + 48, 420}, draw::withA(T.panel, .94f), T.line, .04f);
+    ly += 24;
+    text(F.head, "Legacy", lx, ly, 28, T.text);
+    ly += 40;
+    std::string reached;
+    for (auto e : {"haven", "homeward", "awakening", "overruled", "lost", "divided"}) if (profile.endings.count(e)) reached += (reached.empty() ? "" : ", ") + std::string(dw::Sim::endingTitle(e));
+    ly += wrapped(F.body, cat(profile.runs, profile.runs == 1 ? " run, " : " runs, ", int(profile.endings.size()), " of 6 endings", reached.empty() ? std::string(".") : ": " + reached + "."), lx, ly, lw, 14, T.muted) + 14;
+    auto chooser = [&](const char* label, const std::vector<legacy::Option>& opts, int& choice) {
+        const auto& o = opts[size_t(choice)];
+        bool open = legacy::unlocked(profile, o);
+        text(F.bold, label, lx, ly, 12, T.muted);
+        ly += 18;
+        if (button({lx, ly, lw, 38}, open ? o.name : cat(o.name, " (locked)"), true, false, 14)) choice = (choice + 1) % int(opts.size());
+        ly += 44;
+        ly += wrapped(F.body, open ? o.desc : legacy::unlockHint(o) + " to open this.", lx, ly, lw, 13, open ? T.text : T.berry) + 14;
+    };
+    chooser("ISLAND (click to change)", legacy::islands(), islandChoice);
+    chooser("LANDING", legacy::starts(), startChoice);
 }
 
 void Game::drawMenu() {
