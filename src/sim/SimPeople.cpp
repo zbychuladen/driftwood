@@ -88,11 +88,23 @@ void Sim::birth(Person& a, Person& b, bool twin) {
 }
 
 void Sim::assignBeds() {
-    std::vector<Project*> beds;
-    for (auto k : {"longhouse", "hut", "leanto"}) for (auto* b : builtAll(k)) for (int i = 0; i < b->beds; i++) beds.push_back(b);
+    // a household sleeps in its own home first; spare beds there take lodgers,
+    // and everyone else sleeps in the longhouse or a lean-to
     auto m = members();
     std::stable_sort(m.begin(), m.end(), [](Person* a, Person* b) { return int(a->child) < int(b->child); });
-    for (size_t i = 0; i < m.size(); i++) m[i]->bed = i < beds.size() ? beds[i]->id : -1;
+    std::map<int, int> free;
+    for (auto& b : plan) if (b.done && b.beds) free[b.id] = b.beds;
+    for (auto* p : m) p->bed = -1;
+    for (auto* p : m) {
+        auto* h = householdOf(p->id);
+        if (h && h->home >= 0 && free[h->home] > 0) { p->bed = h->home; free[h->home]--; }
+    }
+    std::vector<Project*> spare;
+    for (auto k : {"longhouse", "manor", "house", "cottage", "hut", "leanto"}) for (auto* b : builtAll(k)) spare.push_back(b);
+    for (auto* p : m) {
+        if (p->bed >= 0) continue;
+        for (auto* b : spare) if (free[b->id] > 0) { p->bed = b->id; free[b->id]--; break; }
+    }
 }
 
 int Sim::totalBeds(bool plannedToo) {

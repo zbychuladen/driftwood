@@ -18,7 +18,7 @@ float hash01(uint32_t a, uint32_t b, uint32_t c) {
     return (x & 0xffffff) / float(0x1000000);
 }
 
-bool homeKey(const std::string& k) { return k == "hut" || k == "longhouse" || k == "leanto"; }
+bool homeKey(const std::string& k) { return k == "hut" || k == "longhouse" || k == "leanto" || k == "cottage" || k == "house" || k == "manor"; }
 bool quietKey(const std::string& k) { return k == "school" || k == "infirmary" || k == "herbs"; }
 bool noisyKey(const std::string& k) { return k == "forge" || k == "mine"; }
 

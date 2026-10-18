@@ -128,6 +128,7 @@ struct ProjectDef {
     int w = 1, h = 1, wood = 0, stone = 0, work = 100, beds = 0;
     float r0 = 3, r1 = 8;
     bool autoPlan = false, food = false;
+    bool upgrade = false;                     // a home level reached only by improving a home (cottage, house, manor)
     std::string gift, req, desc;
     int min = 0;
     std::vector<std::string> like, dislike;
@@ -171,6 +172,12 @@ struct Fib { int pid = -1; double due = 0; std::string reveal; };
 // be asked to do; empty when no one can simply be asked (a missing herbalist).
 struct Candidate { int pid = -1; int cost = 0; std::string why; };
 struct Gap { std::string id, text, job, fix; std::vector<Candidate> candidates; };
+// A household: a couple and their children, or one person on their own. Its
+// home is a project id; rising and falling count the days its needs have been
+// met for the next level, or lapsed for its own.
+struct Household { int id = 0; std::vector<int> members; int home = -1; int rising = 0, falling = 0; bool noRoom = false; };
+struct HomeNeed { std::string id, text; bool met = false; };
+struct HomeCost { int wood = 0, stone = 0; };
 struct VoteRow { int pid; bool yes; std::string why; };
 struct Vote { std::string name; std::vector<VoteRow> rows; bool pass = false; int y = 0, n = 0; };
 struct Wolf { float x, y, sx, sy; std::string state; int face = 1; float ph = 0; };
@@ -230,7 +237,7 @@ public:
     // The whole game as bytes, and back. Settlers' half-done actions are not
     // kept: after a load everyone picks their next task. load() leaves the sim
     // as it was and returns false, with a reason, for anything it cannot read.
-    static constexpr int SAVE_VERSION = 7;   // 2: site quality and pending placement; 3: rapport, contrariness, the story circle; 4: lines, questions; 5: deaths this season; 6: the narrator's rapport and buy-in; 7: duties and roles
+    static constexpr int SAVE_VERSION = 8;   // 2: site quality and pending placement; 3: rapport, contrariness, the story circle; 4: lines, questions; 5: deaths this season; 6: the narrator's rapport and buy-in; 7: duties and roles; 8: households
     struct SaveInfo { std::string village; int day = 0, year = 0, season = 0, people = 0; uint32_t seed = 0; };
     std::string save() const;
     bool load(const std::string& data, std::string* error = nullptr);
@@ -305,6 +312,24 @@ public:
     void revoke(Person& p);
     std::string appeal(const std::string& job);
     static const char* roleName(const std::string& job);   // woodcutter, forager, builder, explorer
+
+    // Households and homes. Status is the level of a household's home: 0 none of
+    // their own (castaway), 1 hut (settler), 2 cottage (villager), 3 house
+    // (householder), 4 manor (notable).
+    std::deque<Household> households;
+    int nextHousehold = 1;
+    static constexpr int RISE_DAYS = 3, FALL_DAYS = 5;
+    static int homeLevel(const std::string& key);
+    static const char* statusName(int level);
+    static const char* levelKey(int level);
+    Household* household(int id);
+    Household* householdOf(int pid);
+    int status(const Household& h);
+    std::string householdName(const Household& h);
+    std::vector<HomeNeed> homeNeeds(const Household& h, int level);   // what that level asks of their home
+    static HomeCost upgradeCost(int level);
+    int reach(const std::string& key, int x, int y);   // walking tiles to the nearest built key (over 14: out of reach)
+    float beauty(int x, int y);
     std::string writeSand(const std::string& text);
     std::vector<const ProjectDef*> proposalList();
     void propose(const std::string& key);
@@ -362,7 +387,12 @@ private:
     void startProject(Project& b);
     void siteJudged(Project& b, bool finished);
     void talkHourly();
-    void dutiesDaily();                       // seasons ending, roles' upkeep                        // new questions, lapsed ones, fibs coming out
+    void dutiesDaily();                       // seasons ending, roles' upkeep
+    void updateHouseholds();
+    void homesDaily();                        // homes rise and fall
+    bool setHomeLevel(Project& b, int level);
+    struct ReachMap { int built = -1; std::vector<uint8_t> dist; };
+    std::map<std::string, ReachMap> reachCache;                        // new questions, lapsed ones, fibs coming out
 
     // world gen
     void placePOI(const std::string& type, std::function<bool(int)> ok, float minD);

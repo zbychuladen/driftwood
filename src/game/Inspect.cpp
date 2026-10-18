@@ -23,6 +23,9 @@ static std::string purpose(const Project& b) {
         {"leanto", "A slanted roof of branches. Five can sleep under it, out of the rain."},
         {"rack", "Fish and meat dry here, so food keeps for longer."},
         {"hut", "A round hut of wattle and thatch, with room for two."},
+        {"cottage", "A snug cottage with a chimney and proper windows, for a household that is getting on."},
+        {"house", "A two-storey house, the home of a household that has done well."},
+        {"manor", "A manor of stone and slate. Whoever lives here is somebody."},
         {"dock", "Planks out over the water, for fishing beyond the surf."},
         {"tower", "A lookout over the island and the first place to spot trouble."},
         {"garden", "Turned earth for vegetables, tended by whoever has the knack."},
@@ -61,6 +64,26 @@ static Info building(Sim& s, Project& b) {
         std::string word = q >= 1.15f ? "Excellent" : q >= 1.03f ? "Good" : q >= .92f ? "Fair" : q >= .8f ? "Poor" : "Bad";
         std::string why = r.factors.empty() ? "" : ", " + (q < 1 ? r.factors.front().text : r.factors.back().text);
         in.rows.push_back({"Spot", cat(word, why, b.sited ? " (your choice)" : "")});
+    }
+    if (b.done && Sim::homeLevel(b.key)) {
+        // whose home it is, their standing, and what the next level asks of it
+        Household* hh = nullptr;
+        for (auto& h : s.households) if (h.home == b.id) hh = &h;
+        if (!hh) in.rows.push_back({"Home of", "nobody yet"});
+        else {
+            int lv = Sim::homeLevel(b.key);
+            in.rows.push_back({"Home of", cat(s.householdName(*hh), ", ", Sim::statusName(lv), "s")});
+            std::string lacking;
+            for (auto& n : s.homeNeeds(*hh, lv)) if (!n.met) lacking += (lacking.empty() ? "" : ", ") + n.text;
+            if (!lacking.empty()) in.rows.push_back({"Slipping", cat("short of ", lacking, hh->falling ? cat(" (", Sim::FALL_DAYS - hh->falling, " days before it falls back)") : "")});
+            if (lv < 4) {
+                std::string next;
+                for (auto& n : s.homeNeeds(*hh, lv + 1)) next += (next.empty() ? "" : "; ") + std::string(n.met ? "has " : "needs ") + n.text;
+                HomeCost c = Sim::upgradeCost(lv + 1);
+                next += cat("; ", c.wood, " wood and ", c.stone, " stone");
+                in.rows.push_back({cat("To a ", Sim::levelKey(lv + 1)), next});
+            }
+        }
     }
     if (const bld::Design* d = art::designFor(s, b)) {
         // what this one was built from: its own materials, not just its type's

@@ -21,7 +21,13 @@ float Sim::needOf(const std::string& k) {
     int pop = int(m.size());
     if (k == "fire") return 5;
     if (k == "leanto") return totalBeds(false) == 0 ? 2.2f : 0;
-    if (k == "hut") { int bd = totalBeds(false); return bd < pop ? 1.f : bd < pop + 2 ? .35f : .05f; }
+    if (k == "hut") {
+        // every household wants a home of its own, beyond a bed in the longhouse
+        int homeless = 0;
+        for (auto& h : households) homeless += h.home < 0;
+        int bd = totalBeds(false);
+        return bd < pop ? 1.f : homeless > 0 ? .6f : bd < pop + 2 ? .35f : .05f;
+    }
     if (k == "rack") return .45f;
     if (k == "garden") return foodDays() < 8 ? .75f : .35f;
     if (k == "fields") return (pop > 8 ? .5f : .15f) + (foodDays() < 6 ? .35f : 0);

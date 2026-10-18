@@ -375,7 +375,7 @@ void WorldView::draw(Sim& s, Rectangle map, int selectedId, float realDt, float 
         auto toS = [&](V2 w) { return GetWorldToScreen2D(w, cam); };
         if (auto* f = s.fire(); f && f->fuel > 0)
             lights.push_back({toS(wp(f->x + .5f, f->y + .5f)), (130 + std::sin(float(t * .7)) * 8 + std::sin(float(t * 1.9)) * 4) * std::min(1.f, .55f + f->fuel / 6) * cam.zoom, Color{255, 150, 60, 70}});
-        for (auto& b : s.plan) if (b.done && (b.key == "hut" || b.key == "longhouse" || b.key == "school" || b.key == "infirmary"))
+        for (auto& b : s.plan) if (b.done && (b.key == "hut" || b.key == "cottage" || b.key == "house" || b.key == "manor" || b.key == "longhouse" || b.key == "school" || b.key == "infirmary"))
             lights.push_back({toS(wp(b.x + b.w / 2.f, b.y + b.h / 2.f)), 55 * cam.zoom, Color{255, 170, 80, 40}});
         for (auto key : {"tower", "signal", "lighthouse", "forge"}) if (auto* b = s.built(key)) {
             float up = std::string(key) == "lighthouse" ? px(scale::LIGHTHOUSE - .9f) : std::string(key) == "tower" ? px(scale::TOWER - 1.8f) : px(1.5f);

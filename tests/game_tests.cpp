@@ -618,7 +618,8 @@ static void testFigures() {
 static void testBuildings() {
     std::printf("assembled buildings\n");
     struct T { const char* key; int w, h; float tall; };
-    const T types[] = {{"hut", 2, 2, scale::HUT_WALL + scale::HUT_ROOF}, {"leanto", 3, 1, scale::LEANTO}, {"longhouse", 4, 2, scale::LONGHOUSE_WALL + scale::LONGHOUSE_ROOF},
+    const T types[] = {{"hut", 2, 2, scale::HUT_WALL + scale::HUT_ROOF}, {"cottage", 2, 2, scale::COTTAGE_WALL + scale::COTTAGE_ROOF},
+                       {"house", 2, 2, scale::HOUSE_WALL + scale::HOUSE_ROOF}, {"manor", 3, 3, scale::MANOR_WALL + scale::MANOR_ROOF}, {"leanto", 3, 1, scale::LEANTO}, {"longhouse", 4, 2, scale::LONGHOUSE_WALL + scale::LONGHOUSE_ROOF},
                        {"store", 2, 2, scale::STORE_WALL + scale::STORE_ROOF}, {"school", 2, 2, scale::SCHOOL_WALL + scale::SCHOOL_ROOF}, {"forge", 2, 2, scale::FORGE_CHIMNEY},
                        {"smoke", 2, 1, scale::SMOKE_WALL + scale::SMOKE_ROOF}, {"loomhouse", 2, 2, scale::LOOM_WALL + scale::LOOM_ROOF}, {"infirmary", 2, 2, scale::INFIRMARY_WALL + scale::INFIRMARY_ROOF},
                        {"cookhouse", 2, 2, scale::COOK_WALL + scale::COOK_ROOF},
@@ -652,6 +653,9 @@ static void testBuildings() {
                 if (!d.openSide && (!count(bld::DOOR) || d.doorWidth <= 0)) lack += " door";
             }
             if (k == "longhouse" && (d.windows < 2 || !d.smokes)) lack += " windows or smoke outlet";
+            if (k == "cottage" && (d.windows < 2 || !d.chimney)) lack += " two windows and a chimney";
+            if (k == "house" && (d.windows < 4 || !d.chimney)) lack += " two rows of windows and a chimney";
+            if (k == "manor" && (d.windows < 6 || !d.chimney || !d.porch)) lack += " two rows of windows, chimneys and a porch";
             if (k == "forge" && (!d.chimney || !d.openSide || count(bld::EXTRA) < 2)) lack += " chimney, open front or anvil";
             if (k == "store" && d.doorWidth < 1.6f) lack += " wide door";
             if (k == "school" && d.windows < 3) lack += " three windows";

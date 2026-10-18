@@ -707,6 +707,64 @@ static void testLedger() {
     CHECK(r.save() == a1, "reading the ledger never changes the game");
 }
 
+// Households own homes; a home rises a level when its household's needs are met
+// and the materials are in, and falls back when they lapse.
+static void untilMidnight(Sim& s) { while (s.hour() < 23.5) { s.step(30); if (!s.pendingFate.empty()) { auto f = s.pendingFate[0]; s.pendingFate.clear(); s.applyFate(f); } } }
+static void pastMidnight(Sim& s) { int d = s.day(); while (s.day() == d) s.step(30); s.pendingFate.clear(); }
+
+static void testHouseholds() {
+    std::printf("households and homes\n");
+    Sim s;
+    s.newWorld(20261017);
+    runDays(s, 60);
+    // everyone belongs to exactly one household; partners share one; children live with a parent
+    bool once = true, partners = true, kids = true;
+    for (auto* p : s.members()) {
+        int n = 0;
+        for (auto& h : s.households) for (int m : h.members) n += m == p->id;
+        if (n != 1) once = false;
+        if (p->partner >= 0 && s.person(p->partner) && !s.person(p->partner)->dead && s.householdOf(p->id) != s.householdOf(p->partner)) partners = false;
+        if (p->child) { bool withParent = p->parents.empty(); for (int par : p->parents) withParent |= s.householdOf(par) == s.householdOf(p->id); if (!withParent) kids = false; }
+    }
+    CHECK(once && partners && kids, "everyone is in one household, partners share it, children live with a parent");
+    std::set<int> homes;
+    bool shared = false;
+    for (auto& h : s.households) if (h.home >= 0) { shared |= homes.count(h.home) > 0; homes.insert(h.home); }
+    CHECK(!homes.empty() && !shared, "households have homes of their own, one each");
+
+    // a hut whose household has what a cottage needs, and the materials, becomes a cottage
+    Household* h = nullptr;
+    for (auto& x : s.households) if (x.home >= 0 && s.projectById(x.home)->key == "hut") h = &x;
+    if (!h) { CHECK(false, "a household lives in a hut"); return; }
+    int hid = h->id;
+    Project* home = s.projectById(h->home);
+    for (int yy = home->y; yy < home->y + 2; yy++) s.fresh[Sim::idx(home->x - 1, yy)] = 1;   // a spring beside it
+    for (int d = 0; d < Sim::RISE_DAYS + 1; d++) { untilMidnight(s); s.stock.food = 400; s.pots = 10; s.stock.wood = 100; s.stock.stone = 100; pastMidnight(s); }
+    home = s.projectById(s.household(hid)->home);
+    CHECK(home && home->key == "cottage" && home->beds == 3 && s.status(*s.household(hid)) == 2, "a household with what a cottage needs turns its hut into a cottage");
+    CHECK(s.stock.stone < 100, "rising a level uses materials");
+    // and when the pots run out for long enough, it falls back to a hut, with a warning first
+    bool warned = false;
+    for (int d = 0; d < Sim::FALL_DAYS + 1; d++) {
+        untilMidnight(s); s.pots = 0; s.stock.food = 400; pastMidnight(s);
+        for (auto& g : s.ledger()) warned |= g.id == "home";
+        while (s.hour() < 10) s.step(30);
+    }
+    home = s.projectById(s.household(hid)->home);
+    CHECK(home && home->key == "hut" && warned, "a cottage short of pots for days falls back to a hut, and the ledger warns first");
+
+    // services reach homes by walking: water in the way makes the way longer
+    Sim a, b;
+    a.newWorld(777); b.newWorld(777);
+    runDays(a, 3); runDays(b, 3);
+    Project* f = a.fire();
+    if (!f) { CHECK(false, "a campfire to measure from"); return; }
+    int tx = f->x + 6, ty = f->y;
+    for (int yy = f->y - 12; yy <= f->y + 12; yy++) if (Sim::inb(f->x + 3, yy)) b.tt[Sim::idx(f->x + 3, yy)] = 0;
+    int open = a.reach("fire", tx, ty), walled = b.reach("fire", tx, ty);
+    CHECK(open <= 7 && walled > open + 2, cat("a service's reach follows the way people walk (", open, " tiles, or ", walled, " round the water)").c_str());
+}
+
 int main() {
     for (uint32_t seed : {20261017u, 777u, 4242u}) testSurvival(seed);
     testNoSmithNoForge();
@@ -718,6 +776,7 @@ int main() {
     testQuestions();
     testRapportCurrency();
     testLedger();
+    testHouseholds();
     testDeterminism();
     testFocus(20261017);
     testFocus(777);
