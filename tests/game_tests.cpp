@@ -723,6 +723,7 @@ static void testDoors() {
     std::map<int, bool> inside;
     std::map<int, double> passed;
     for (auto& p : s.people) inside[p.id] = p.hidden;
+    v.updateDoors(s);   // the view starts from the same picture of who is indoors
     int passes = 0, openWhenPassing = 0, shutAfter = 0, checkedShut = 0;
     for (int i = 0; i < 3 * 24 * 12; i++) {   // three days in five-minute steps
         s.step(5);
@@ -730,7 +731,8 @@ static void testDoors() {
         v.updateDoors(s);
         for (auto& p : s.people) {
             if (p.dead) continue;
-            if (inside.count(p.id) && inside[p.id] != p.hidden && s.projectById(p.bed)) {
+            // the lean-to is an open shelter with no door to open
+            if (inside.count(p.id) && inside[p.id] != p.hidden && s.projectById(p.bed) && s.projectById(p.bed)->key != "leanto") {
                 passes++;
                 passed[p.bed] = s.tMin;
                 if (v.doorOpen(p.bed) == 1) openWhenPassing++;

@@ -261,6 +261,10 @@ public:
     static bool inb(int x, int y) { return x >= 0 && y >= 0 && x < GW && y < GH; }
     bool isWater(int x, int y) const { return !inb(x, y) || tt[idx(x, y)] < 2; }
     bool isExplored(float x, float y) const;
+    // A walking route over land, round buildings (except docks, crop plots and the
+    // story circle); the building you start in and the one you are going to are
+    // let through. Tile centres, the last step to the goal itself left off.
+    std::vector<std::pair<float, float>> findPath(float sx, float sy, float tx, float ty);
 
     // buildings
     Project* built(const std::string& key);
@@ -398,6 +402,9 @@ private:
     // and enough of it raises the gift a level (to 10).
     void practise(Person& p, const std::string& gift);
     void updateHouseholds();
+    const std::vector<uint8_t>& walkGrid();
+    std::vector<uint8_t> walkCache;
+    long walkSig = -1;
     void homesDaily();                        // homes rise and fall
     bool setHomeLevel(Project& b, int level);
     struct ReachMap { int built = -1; std::vector<uint8_t> dist; };
@@ -436,7 +443,6 @@ private:
     void updateAgenda();
 
     // jobs
-    std::vector<std::pair<float, float>> findPath(float sx, float sy, float tx, float ty);
     Action walkA(float x, float y);
     Action workA(float dur, const std::string& label, const std::string& anim, std::function<void(Person&)> done = {});
     float skillF(Person& p, const std::string& k);
