@@ -32,6 +32,15 @@ const std::vector<ProjectDef>& allProjects() {
         { auto d = P("cottage", "Cottage", 2, 2, 20, 8, 1); d.beds = 3; d.upgrade = true; add(d, 0, 0, false); }
         { auto d = P("house", "House", 2, 2, 30, 20, 1); d.beds = 4; d.upgrade = true; add(d, 0, 0, false); }
         { auto d = P("manor", "Manor", 3, 3, 50, 40, 1); d.beds = 6; d.upgrade = true; add(d, 0, 0, false); }
+        // drawn up only by the narrator: shaping the land, and small things for beauty (SimVillage)
+        auto hand = [&](ProjectDef d, std::string desc) { d.byHand = true; d.desc = desc; add(d, 2, 9, false); };
+        hand(P("clearing", "Clear a grove", 3, 3, 0, 0, 320), "Fell the trees on a patch of ground, for the timber and the open space.");
+        hand(P("orchard", "Orchard", 3, 3, 12, 0, 420), "Fruit trees in rows: fruit in summer and autumn, and a pleasant place to walk.");
+        hand(P("bridge", "Footbridge", 1, 5, 30, 4, 420), "Planks across a stretch of water, so the far side is a walk instead of a swim.");
+        hand(P("flowers", "Flower bed", 1, 1, 0, 2, 90), "Wild flowers dug in by a doorstep. The homes around look cared for.");
+        hand(P("lantern", "Lantern post", 1, 1, 4, 2, 120), "A lamp on a post, lit at dusk. The village looks warm at night.");
+        hand(P("bench", "Bench", 1, 1, 6, 0, 110), "Somewhere to sit and talk. A little more pleasant to live near.");
+        hand(P("banner", "Banner", 1, 1, 5, 0, 120), "A banner in the village colours, for all to see.");
         // raised when a notable commissions it (SimStatus)
         { auto d = P("monument", "Monument", 1, 1, 10, 30, 600); d.commissioned = true; d.desc = "A carved stone raised by a notable household, for everyone to see. The village is more beautiful for it."; add(d, 2, 6, false); }
         add(P("dock", "Fishing dock", 1, 3, 31, 0, 580), 0, 0, true);

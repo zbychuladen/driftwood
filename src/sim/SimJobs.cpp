@@ -19,7 +19,8 @@ const std::vector<uint8_t>& Sim::walkGrid() {
     for (auto& b : plan) {
         if (!b.placed || (!b.done && b.progress <= 0)) continue;
         // places people walk into by design: a dock, crop plots, the story circle
-        kind[b.id] = b.key == "dock" ? 2 : (b.key == "garden" || b.key == "fields" || b.key == "herbs" || b.key == "circle") ? 0 : 1;
+        kind[b.id] = b.key == "dock" || (b.key == "bridge" && b.done) ? 2
+                   : (b.key == "garden" || b.key == "fields" || b.key == "herbs" || b.key == "circle" || b.key == "orchard" || b.key == "clearing" || b.key == "flowers" || b.key == "bridge") ? 0 : 1;
     }
     for (int i = 0; i < GW * GH; i++) if (bOcc[i] >= 0) if (auto it = kind.find(bOcc[i]); it != kind.end()) walkCache[i] = it->second;
     return walkCache;
@@ -63,7 +64,7 @@ std::vector<std::pair<float, float>> Sim::findPath(float fx, float fy, float tx,
             if (!walkable(nx, ny)) continue;
             if (dx && dy && (!walkable(cx + dx, cy) || !walkable(cx, cy + dy))) continue;
             int ni = idx(nx, ny);
-            float ng = g[cur] + (dx && dy ? 1.414f : 1.f);
+            float ng = g[cur] + (dx && dy ? 1.414f : 1.f) * (onPath(nx, ny) ? .7f : 1.f);   // worn paths are easier going
             if (ng < g[ni]) { g[ni] = ng; came[ni] = cur; open.push({ng + std::hypot(float(nx - gx), float(ny - gy)), ni}); }
         }
     }
@@ -274,7 +275,7 @@ std::deque<Action> Sim::deliver(const std::string& label) {
             auto& c = *p.carry;
             if (c.t == "wood") stock.wood += c.n;
             else if (c.t == "stone") stock.stone += c.n;
-            else if (c.t == "berries" || c.t == "fish" || c.t == "greens" || c.t == "grain") {
+            else if (c.t == "berries" || c.t == "fish" || c.t == "greens" || c.t == "grain" || c.t == "fruit") {
                 stock.food += c.n;
                 if (c.n > 0) { foodSeen[c.t] = day(); if (c.t == "fish" && (built("smoke") || built("rack"))) foodSeen["smoked"] = day(); }
             }
@@ -343,6 +344,7 @@ void Sim::plan_(Person& p) {
 std::string Sim::gardenJob(Project& g) {
     int s = season();
     if (g.state == "ripe") return "harvest";
+    if (g.key == "orchard") return "";   // the trees bear by themselves
     if (g.state == "empty" && (s <= 1 || (s == 2 && (day() - 1) % 10 < 3))) return "plant";
     return "";
 }
@@ -364,6 +366,7 @@ void Sim::workQ(Person& p) {
     Project* g = built("garden");
     std::string gw = g ? gardenJob(*g) : "";
     if (auto* fl = built("fields")) { auto fw = gardenJob(*fl); if (!fw.empty() && (gw.empty() || fw == "harvest")) { g = fl; gw = fw; } }
+    if (auto* oc = built("orchard"); oc && oc->state == "ripe" && gw != "harvest") { g = oc; gw = "harvest"; }
     float dFarm = gw.empty() ? 0 : 1.5f;
     float dCraft = 0;
     std::string craftKind;
@@ -608,8 +611,9 @@ void Sim::farmJob(Person& p, Project& g, const std::string& job) {
     auto q = std::deque<Action>{walkA(sx, sy), workA(70 * farmPace / skillF(p, "farm"), "Harvesting", "farm", [this, gp](Person& p) {
         if (p.gifts.count("farmer")) practise(p, "farmer");
         int n = int(std::lround(((gp->key == "fields" ? 30 : 14) + p.sk["farm"] * .8f) * (1 + (p.gifts.count("farmer") ? p.gifts["farmer"] : 0) * .06f) * gp->siteQuality));
-        gp->state = "empty"; gp->growth = 0;
-        p.carry = Carry{gp->key == "fields" ? "grain" : "greens", n};
+        if (gp->key == "orchard") { gp->state = "growing"; gp->growth = .3f; n = n * 3 / 4; }   // the trees fruit again
+        else { gp->state = "empty"; gp->growth = 0; }
+        p.carry = Carry{gp->key == "fields" ? "grain" : gp->key == "orchard" ? "fruit" : "greens", n};
         gain(p, "farm");
         if (!firsts.count("harvest")) { firsts.insert("harvest"); note(cat("First harvest! ", p.name, " carried in ", n, " baskets of squash and beans."), "big"); }
     })};

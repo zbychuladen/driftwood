@@ -39,7 +39,8 @@ constexpr float STORE_WALL = 2.6f, STORE_ROOF = 1.8f;
 constexpr float SMOKE_WALL = 2.2f, SMOKE_ROOF = 1.2f;
 constexpr float LONGHOUSE_WALL = 2.4f, LONGHOUSE_ROOF = 3.f;
 // homes as a household rises: a cottage, a two-storey house, a manor
-constexpr float MONUMENT = 3.2f;     // a notable's carved stone, to the top
+constexpr float MONUMENT = 3.2f;
+constexpr float FRUIT_TREE = 2.6f, LANTERN = 2.2f, BANNER = 3.f, BENCH = .45f;   // the village by hand     // a notable's carved stone, to the top
 constexpr float WORKSHOP_WALL = 2.5f, WORKSHOP_ROOF = 1.8f;
 constexpr float STOREY = 2.4f;                       // floor to floor
 constexpr float COTTAGE_WALL = 2.5f, COTTAGE_ROOF = 2.3f;

@@ -134,6 +134,13 @@ float Sim::beauty(int x, int y) {
     if (near("bath", 6)) b += 1;
     if (near("garden", 4)) b += .5f;
     if (near("monument", 6)) b += 2;
+    if (near("orchard", 5)) b += 1;
+    if (near("lantern", 4)) b += .5f;
+    if (near("bench", 3)) b += .5f;
+    if (near("banner", 5)) b += .7f;
+    int beds = 0;
+    for (auto* p : builtAll("flowers")) beds += std::abs(p->x - x) <= 3 && std::abs(p->y - y) <= 3;
+    b += std::min(2, beds);
     if (near("forge", 5)) b -= 3;
     if (near("mine", 5)) b -= 2;
     return b;

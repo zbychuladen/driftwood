@@ -54,7 +54,7 @@ static std::string workingOn(Sim& s, Focus::Kind kind, int id) {
 }
 
 static Info building(Sim& s, Project& b) {
-    Info in{b.name, "Building", purpose(b), {}};
+    Info in{s.nameOf(b), b.customName.empty() ? "Building" : "Building, the " + lower(b.name), purpose(b), {}};
     float pct = b.work > 0 ? b.progress / b.work : 0;
     in.rows.push_back({"Status", b.done ? "Built" : b.progress > 0 ? cat("Being built, ", int(pct * 100), "%") : "Planned"});
     in.rows.push_back({"Size", cat(int(b.w * scale::TILE_M), " by ", int(b.h * scale::TILE_M), " m")});

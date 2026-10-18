@@ -567,7 +567,7 @@ static void plinth(float x, float y, float w, float h, bool snow) {
 
 // Assembled buildings: one design per building, made the first time it is drawn
 // and again only if it moves, turns or gets snow on its roof.
-struct CachedDesign { std::string key; int x, y, front; bool snow; bld::Design d; };
+struct CachedDesign { std::string key; int x, y, front; bool snow; int style; bld::Design d; };
 static std::unordered_map<int, CachedDesign> designs;
 static std::unordered_map<int, float> doors;
 
@@ -576,15 +576,16 @@ const bld::Design* designFor(const dw::Sim& s, const dw::Project& b) {
     int front = bld::sideToward(b.x + b.w / 2.f, b.y + b.h / 2.f, s.campX + .5f, s.campY + .5f);
     bool snow = s.season() == 3 && b.done;
     auto it = designs.find(b.id);
-    if (it == designs.end() || it->second.key != b.key || it->second.x != b.x || it->second.y != b.y || it->second.front != front || it->second.snow != snow)
-        it = designs.insert_or_assign(b.id, CachedDesign{b.key, b.x, b.y, front, snow, bld::make(b.key, b.id, b.x, b.y, b.w, b.h, front, snow, b.dx, b.dy)}).first;
+    // the narrator's choice of look reseeds the recipe: other materials and roof
+    if (it == designs.end() || it->second.key != b.key || it->second.x != b.x || it->second.y != b.y || it->second.front != front || it->second.snow != snow || it->second.style != b.style)
+        it = designs.insert_or_assign(b.id, CachedDesign{b.key, b.x, b.y, front, snow, b.style, bld::make(b.key, b.id + b.style * 7919, b.x, b.y, b.w, b.h, front, snow, b.dx, b.dy)}).first;
     return &it->second.d;
 }
 void setDoor(int id, float open) { doors[id] = open; }
 void resetDoors() { doors.clear(); designs.clear(); }
 float doorOf(int id) { auto it = doors.find(id); return it == doors.end() ? 0.f : it->second; }
 
-bool isFlat(const std::string& k) { return k == "garden" || k == "dock" || k == "herbs" || k == "bath" || k == "fields"; }
+bool isFlat(const std::string& k) { return k == "garden" || k == "dock" || k == "herbs" || k == "bath" || k == "fields" || k == "orchard" || k == "clearing" || k == "bridge" || k == "flowers"; }
 
 void building(const Ctx& c, dw::Project& b) {
     if (!b.placed || b.skip) return;
@@ -668,6 +669,76 @@ void building(const Ctx& c, dw::Project& b) {
             }
         }
         if (s == 3 && b.done) foot(x, y, w, h, rgba(255, 255, 255, .55f));
+    } else if (k == "orchard") {
+        // young fruit trees in rows, on mown grass
+        foot(x + .05f, y + .05f, w - .1f, h - .1f, s == 3 ? rgba(240, 244, 246, .6f) : rgba(120, 150, 80, .35f));
+        float gr = b.done ? (b.state == "ripe" ? 1.f : .55f + b.growth * .45f) : .3f;
+        for (int r = 0; r < 3; r++) for (int cc = 0; cc < 3; cc++) {
+            V2 q = P(x + .5f + cc, y + .5f + r);
+            float hgt = px(scale::FRUIT_TREE) * (.6f + .4f * gr);
+            ellipse(q.x + 3, q.y + 1, 7 * gr + 3, 3, SHADOW);
+            line(q.x, q.y, q.x, q.y - hgt * .45f, 2, hex(0x6e5440));
+            if (s == 3) { line(q.x, q.y - hgt * .45f, q.x - 5, q.y - hgt * .8f, 1.2f, hex(0x6e5440)); line(q.x, q.y - hgt * .45f, q.x + 5, q.y - hgt * .85f, 1.2f, hex(0x6e5440)); continue; }
+            float cr = hgt * .32f;
+            circle(q.x, q.y - hgt * .68f, cr, s == 2 ? hex(0x8a8a3a) : hex(0x4f8a42));
+            {
+                NoInk ni;
+                circle(q.x - cr * .3f, q.y - hgt * .74f, cr * .55f, s == 2 ? hex(0xb0a048) : hex(0x6fa85a));
+                if (s == 0) for (int f = 0; f < 4; f++) circle(q.x + (f - 1.5f) * cr * .4f, q.y - hgt * .7f + (f % 2) * 2, 1.2f, hex(0xf7e4ec));
+                if (b.state == "ripe") for (int f = 0; f < 5; f++) circle(q.x + std::cos(f * 1.3f) * cr * .6f, q.y - hgt * .66f + std::sin(f * 1.3f) * cr * .5f, 1.6f, f % 2 ? hex(0xd8462e) : hex(0xe8a23a));
+            }
+        }
+    } else if (k == "bridge") {
+        // planks across the water on posts, with a rail each side
+        bool alongX = w > h;
+        for (int i = 0; i < int(alongX ? w : h); i++) {
+            float bx = alongX ? x + i : x, by = alongX ? y : y + i;
+            foot(alongX ? bx : bx + .15f, alongX ? by + .15f : by, alongX ? 1 : .7f, alongX ? .7f : 1, hex(s == 3 ? 0xb8a890 : 0x8a6a48), 2);
+            NoInk ni;
+            for (int pl = 1; pl < 4; pl++) {
+                V2 a = alongX ? P(bx + pl * .25f, by + .15f, 2) : P(bx + .15f, by + pl * .25f, 2), e = alongX ? P(bx + pl * .25f, by + .85f, 2) : P(bx + .85f, by + pl * .25f, 2);
+                line(a.x, a.y, e.x, e.y, 1, hex(0x6a4e34));
+            }
+        }
+        if (b.done) for (float side : {.15f, .85f}) {
+            V2 a = alongX ? P(x, y + side, px(.9f)) : P(x + side, y, px(.9f)), e = alongX ? P(x + w, y + side, px(.9f)) : P(x + side, y + h, px(.9f));
+            line(a.x, a.y, e.x, e.y, 1.6f, hex(0x5e4636));
+        }
+    } else if (k == "flowers") {
+        foot(x + .2f, y + .2f, .6f, .6f, s == 3 ? rgba(240, 244, 246, .8f) : hex(0x6a4a2e));
+        if (b.done && s != 3) {
+            static const uint32_t PET[4] = {0xe85a6a, 0xf2c84a, 0xb07ae0, 0xf4f0e8};
+            for (int f = 0; f < 9; f++) {
+                V2 q = P(x + .3f + (f % 3) * .2f, y + .3f + (f / 3) * .2f);
+                circle(q.x, q.y - 1, 2.2f, hex(0x4f8a42));
+                circle(q.x + .5f, q.y - 3, 1.6f, hex(PET[(f + b.id) % 4]));
+            }
+        }
+    } else if (k == "lantern") {
+        V2 q = P(x + .5f, y + .5f);
+        float hgt = px(scale::LANTERN);
+        ellipse(q.x + 3, q.y + 1, 5, 2, SHADOW);
+        line(q.x, q.y, q.x, q.y - hgt, 2.4f, hex(0x4a3a2c));
+        line(q.x, q.y - hgt, q.x + 6, q.y - hgt, 1.6f, hex(0x4a3a2c));
+        rect(q.x + 3, q.y - hgt + 1, 6, 8, b.done && night ? hex(0xffd27a) : hex(0xc8c0a0));
+        if (b.done && night) radial(q.x + 6, q.y - hgt + 5, 14, 14, rgba(255, 210, 120, .45f), rgba(255, 210, 120, 0));
+    } else if (k == "bench") {
+        V2 a = P(x + .2f, y + .5f), e = P(x + .8f, y + .5f);
+        float seat = px(scale::BENCH);
+        ellipse((a.x + e.x) / 2 + 3, (a.y + e.y) / 2 + 1, 12, 3, SHADOW);
+        line(a.x, a.y, a.x, a.y - seat, 2, hex(0x5e4636));
+        line(e.x, e.y, e.x, e.y - seat, 2, hex(0x5e4636));
+        poly({{a.x - 2, a.y - seat - 2}, {e.x + 2, e.y - seat - 2}, {e.x + 2, e.y - seat + 1}, {a.x - 2, a.y - seat + 1}}, hex(0x8a6440));
+        line(a.x, a.y - seat - 2, a.x, a.y - seat - 9, 1.6f, hex(0x5e4636));
+        line(e.x, e.y - seat - 2, e.x, e.y - seat - 9, 1.6f, hex(0x5e4636));
+        line(a.x, a.y - seat - 8, e.x, e.y - seat - 8, 2.4f, hex(0x8a6440));
+    } else if (k == "banner") {
+        V2 q = P(x + .5f, y + .5f);
+        float hgt = px(scale::BANNER), sw = std::sin(float(t * .05 + b.id)) * 3;
+        static const uint32_t CLOTH[4] = {0xc8553d, 0x3d7ec8, 0xe0b13a, 0x5a9a5b};
+        ellipse(q.x + 3, q.y + 1, 5, 2, SHADOW);
+        line(q.x, q.y, q.x, q.y - hgt, 2, hex(0x5e4636));
+        poly({{q.x, q.y - hgt + 2}, {q.x + 14 + sw, q.y - hgt + 4}, {q.x + 12 + sw * .6f, q.y - hgt + 12}, {q.x + 15 + sw, q.y - hgt + 20}, {q.x, q.y - hgt + 18}}, hex(CLOTH[(b.id + b.style) % 4]));
     } else if (k == "bath") {
         foot(x + .15f, y + .15f, w - .3f, h - .3f, hex(0x8d918a));
         foot(x + .4f, y + .4f, w - .8f, h - .8f, s == 3 ? hex(0x7fb3c4) : hex(0x5fa7b8), 2);

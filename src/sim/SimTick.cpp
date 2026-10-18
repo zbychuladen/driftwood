@@ -53,7 +53,8 @@ void Sim::updatePerson(Person& p, double dmd) {
     if (a->cancel && a->cancel()) { clearQ(p); plan_(p); return; }
     if (a->type == Action::WALK) {
         if (!a->hasPath) { a->path = findPath(p.x, p.y, a->x, a->y); a->path.push_back({a->x, a->y}); a->hasPath = true; }
-        float sp = .075f * dm * (p.child ? .85f : 1) * (p.sick > 0 ? .6f : 1) * (weather == "storm" ? .8f : 1);
+        float sp = .075f * dm * (p.child ? .85f : 1) * (p.sick > 0 ? .6f : 1) * (weather == "storm" ? .8f : 1) * (onPath(int(p.x), int(p.y)) ? 1.25f : 1);
+        int tx0 = int(p.x), ty0 = int(p.y);
         size_t k = 0;
         while (sp > 0 && k < a->path.size()) {
             auto [tx, ty] = a->path[k];
@@ -63,6 +64,8 @@ void Sim::updatePerson(Person& p, double dmd) {
             else { p.x += dx / d * sp; p.y += dy / d * sp; sp = 0; }
         }
         a->path.erase(a->path.begin(), a->path.begin() + k);
+        // every step onto a new tile wears the ground a little
+        if ((int(p.x) != tx0 || int(p.y) != ty0) && inb(int(p.x), int(p.y)) && wear.size() == size_t(GW * GH)) { auto& w = wear[idx(int(p.x), int(p.y))]; w = uint8_t(std::min(250, w + 3)); }
         p.moving = true; p.phase += dm * .55f; p.anim.clear();
         if (p.status == "member" && std::fmod(tMin, 30.0) < dm) reveal(p.x, p.y, 4.5f);
         if (a->path.empty()) { p.q.pop_front(); p.moving = false; }
@@ -160,6 +163,7 @@ void Sim::daily() {
     auto m = members();
     earn(rapportIncome());   // the day's rapport, from how much they buy in
     dutiesDaily();
+    villageDaily();
     homesDaily();
     statusDaily();
     for (auto* p : m) if (p->contraryUntil > 0 && !contrary(*p)) { p->contraryUntil = 0; note(cat(p->name, " has stopped bristling at the narrator, and will hear a line again.")); }
@@ -173,6 +177,7 @@ void Sim::daily() {
         if (o.type == "stump" && d >= o.regrow) { o.type = "tree"; o.sapling = true; o.grow = 0; }
         if (o.type == "tree" && o.sapling) { o.grow += .2f; if (o.grow >= 1) o.sapling = false; }
     }
+    if (auto* o = built("orchard"); o && o->state == "growing") { o->growth += (s <= 2 ? .1f : 0) * grow * siteQ("orchard"); if (o->growth >= 1) o->state = "ripe"; }
     for (auto key : {"garden", "fields"}) {
         auto* g = built(key);
         if (!g || g->state != "growing") continue;

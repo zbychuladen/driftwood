@@ -134,6 +134,7 @@ void Sim::newWorld(uint32_t s) {
     seed = s;
     gen.seed(s * 2654435761u + 7);
     talkGen.seed(s * 40503u + 11);
+    wear.assign(GW * GH, 0);
     const int N = GW * GH;
     for (int tries = 0;; tries++) {
         Mulberry R(seed + tries * 7919);

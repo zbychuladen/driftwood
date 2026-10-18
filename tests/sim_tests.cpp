@@ -1084,6 +1084,133 @@ static void testWorkmanship() {
     }
 }
 
+// The village by hand: worn paths, clearings, orchards, footbridges, decorations, names.
+static Project* drawUp(Sim& s, const char* key, int x, int y) {
+    // a blueprint placed at a chosen spot, then built at once
+    int id = s.blueprint(key);
+    if (id < 0) return nullptr;
+    Project* b = s.projectById(id);
+    if (x >= 0 && !s.placeAt(id, x, y)) { s.cancelBlueprint(); return nullptr; }
+    if (x < 0) s.placeSuggested(id);
+    return b;
+}
+
+static void testVillageByHand() {
+    std::printf("the village by hand\n");
+    // paths wear in where people walk, and walking on them is quicker
+    Sim s;
+    s.newWorld(20261017);
+    runDays(s, 30);
+    int worn = 0;
+    for (auto w : s.wear) worn += w >= Sim::PATH;
+    CHECK(worn >= 10, cat("paths wear in where people walk (", worn, " tiles)").c_str());
+    float moved[2];
+    for (int pass = 0; pass < 2; pass++) {
+        Sim t;
+        t.newWorld(777);
+        runDays(t, 1);
+        Person& p = *t.members()[0];
+        for (auto* q : t.members()) if (q != &p) q->q.clear();
+        int y = int(p.y);
+        for (int x = int(p.x) - 12; x <= int(p.x) + 12; x++) if (Sim::inb(x, y)) t.wear[Sim::idx(x, y)] = pass ? 200 : 0;
+        Action a; a.type = Action::WALK; a.x = p.x + 8; a.y = p.y; a.hasPath = true; a.path = {{p.x + 8, p.y}};
+        p.q.clear(); p.q.push_back(a);
+        float x0 = p.x;
+        t.step(10);
+        moved[pass] = p.x - x0;
+    }
+    CHECK(moved[1] > moved[0] * 1.15f, "walking along a worn path is quicker");
+    // paths fade where nobody walks
+    int far = -1;
+    for (int i = 0; i < GW * GH && far < 0; i++) if (s.tt[i] >= 2 && !s.explored[i]) far = i;
+    if (far >= 0) { s.wear[size_t(far)] = 200; runDays(s, 3); CHECK(s.wear[size_t(far)] < 200, "a path nobody walks fades"); }
+
+    // the narrator's hand: unlock everything for the rest
+    Sim v;
+    v.newWorld(20261017);
+    v.askPlacement = true;
+    runDays(v, 8);
+    for (auto* p : v.members()) p->tiers = {90, 90, 90, 90, 10};
+    // a clearing: the trees come down as the work is done, and the timber goes to the stores
+    std::pair<int, int> grove{-1, -1};
+    int best = 0;
+    for (int y = v.campY - 14; y <= v.campY + 14; y++) for (int x = v.campX - 14; x <= v.campX + 14; x++) {
+        if (!v.evaluateSite(*projectDef("clearing"), x, y).legal) continue;
+        int n = 0;
+        for (int yy = y; yy < y + 3; yy++) for (int xx = x; xx < x + 3; xx++) if (v.objAt[Sim::idx(xx, yy)] >= 0 && v.objs[size_t(v.objAt[Sim::idx(xx, yy)])].type == "tree") n++;
+        if (n > best) { best = n; grove = {x, y}; }
+    }
+    Project* cl = best > 0 ? drawUp(v, "clearing", grove.first, grove.second) : nullptr;
+    CHECK(cl && cl->placed, cat("a clearing is drawn up over a grove (", best, " trees)").c_str());
+    if (cl) {
+        float wood0 = v.stock.wood;
+        int id = cl->id;
+        for (int h = 0; h < 24 * 30 && !v.projectById(id)->done; h++) { v.step(60); if (!v.pendingFate.empty()) { auto f = v.pendingFate[0]; v.pendingFate.clear(); v.applyFate(f); } }
+        int left = 0;
+        for (int yy = grove.second; yy < grove.second + 3; yy++) for (int xx = grove.first; xx < grove.first + 3; xx++) if (v.objAt[Sim::idx(xx, yy)] >= 0 && v.objs[size_t(v.objAt[Sim::idx(xx, yy)])].type == "tree") left++;
+        bool freed = true;
+        for (int yy = grove.second; yy < grove.second + 3; yy++) for (int xx = grove.first; xx < grove.first + 3; xx++) freed &= v.bOcc[Sim::idx(xx, yy)] != id;
+        CHECK(v.projectById(id)->done && left == 0 && freed && v.stock.wood > wood0 - 60, "once cleared, the trees are gone, the timber stacked and the ground open");
+    }
+    // an orchard bears fruit, a new kind of food, and makes the homes round it pleasanter
+    Project* oc = drawUp(v, "orchard", -1, -1);
+    if (oc) {
+        float before = v.beauty(oc->x + 2, oc->y + 1);
+        oc->done = true; oc->progress = float(oc->work); oc->state = "ripe";
+        if (v.active == oc->id) v.active = -1;
+        CHECK(v.beauty(oc->x + 2, oc->y + 1) > before, "an orchard makes its surroundings more beautiful");
+        bool fruit = false;
+        for (int h = 0; h < 24 * 6 && !fruit; h++) { v.step(60); if (!v.pendingFate.empty()) { auto f = v.pendingFate[0]; v.pendingFate.clear(); v.applyFate(f); } fruit = v.foodSeen.count("fruit"); }
+        CHECK(fruit && oc->state != "ripe", "ripe fruit is picked and brought in as its own kind of food");
+    } else CHECK(false, "an orchard can be drawn up");
+    // flowers by a home
+    Household* hh = nullptr;
+    for (auto& h : v.households) if (h.home >= 0 && v.projectById(h.home)) hh = &h;
+    if (hh) {
+        Project* home = v.projectById(hh->home);
+        float b0 = v.beauty(home->x, home->y);
+        Project fl;
+        static_cast<ProjectDef&>(fl) = *projectDef("flowers");
+        fl.id = v.nextProjId++; fl.done = fl.placed = true; fl.x = home->x + 2; fl.y = home->y;
+        v.plan.push_back(fl);
+        CHECK(v.beauty(home->x, home->y) > b0, "a flower bed by a home makes it more beautiful");
+    }
+    // a footbridge: legal only over water with land at both ends, and once built it can be walked
+    // anywhere on the island (explored), either way round
+    for (auto& e : v.explored) e = 1;
+    std::pair<int, int> spot{-1, -1};
+    ProjectDef br = *projectDef("bridge");
+    for (int turn = 0; turn < 2 && spot.first < 0; turn++) {
+        if (turn) std::swap(br.w, br.h);
+        for (int y = 0; y < GH && spot.first < 0; y++) for (int x = 0; x < GW; x++) if (v.evaluateSite(br, x, y).legal) { spot = {x, y}; break; }
+    }
+    CHECK(spot.first >= 0 && !v.evaluateSite(br, v.campX, v.campY).legal, "a footbridge goes only over water, with land at both ends");
+    if (spot.first >= 0) {
+        Project bp;
+        static_cast<ProjectDef&>(bp) = br;
+        bp.id = v.nextProjId++; bp.placed = true; bp.x = spot.first; bp.y = spot.second;
+        v.plan.push_back(bp);
+        int len = std::max(br.w, br.h);
+        float ex = spot.first + .5f + (br.w > br.h ? len - 1 : 0), ey = spot.second + .5f + (br.w > br.h ? 0 : len - 1);
+        for (int k = 0; k < len; k++) v.bOcc[Sim::idx(spot.first + (br.w > br.h ? k : 0), spot.second + (br.w > br.h ? 0 : k))] = bp.id;
+        auto before = v.findPath(spot.first + .5f, spot.second + .5f, ex, ey);
+        v.plan.back().done = true;
+        auto after = v.findPath(spot.first + .5f, spot.second + .5f, ex, ey);
+        CHECK(!after.empty() && int(after.size()) <= len && (before.empty() || before.size() > after.size()), cat("once built, a footbridge is a short walk across (", int(after.size()), " steps, ", int(before.size()), " before)").c_str());
+    }
+    // names and looks are the narrator's, and are kept
+    Project* named = nullptr;
+    for (auto& b : v.plan) if (b.done && !b.byHand) { named = &b; break; }
+    if (named) {
+        v.rename(named->id, "  The Old Mill  ");
+        v.restyle(named->id);
+        Sim w;
+        w.load(v.save());
+        Project* again = w.projectById(named->id);
+        CHECK(again && again->customName == "The Old Mill" && again->style == 1 && w.nameOf(*again) == "The Old Mill", "a building's name and look are kept");
+    }
+}
+
 int main() {
     for (uint32_t seed : {20261017u, 777u, 4242u}) testSurvival(seed);
     testNoSmithNoForge();
@@ -1101,6 +1228,7 @@ int main() {
     testGoods();
     testStatusAndWork();
     testWorkmanship();
+    testVillageByHand();
     testDeterminism();
     testFocus(20261017);
     testFocus(777);

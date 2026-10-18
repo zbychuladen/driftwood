@@ -72,6 +72,10 @@ void Game::drawInspect() {
     float h = pad + 16 + wrapped(F.head, in.title, 0, 0, tw - 30, 22, WHITE, false, 1.1f) + 4;
     if (!in.desc.empty()) h += wrapped(F.body, in.desc, 0, 0, tw, 14.5f, WHITE, false) + 10;
     for (auto& [k, v] : in.rows) h += std::max(20.f, wrapped(F.body, v, 0, 0, tw - 104, 14, WHITE, false) + 6);
+    // a standing building can be named, and given another look
+    Project* bp = inspected.kind == Drawable::BUILDING ? sim.projectById(inspected.id) : nullptr;
+    bool canName = bp && bp->done, canRestyle = canName && bld::assembled(bp->key);
+    if (canName) h += renaming == bp->id ? 44 : 38;
     h += pad - 4;
     inspectH = h;
     Rectangle r{x, y, w, h};
@@ -86,6 +90,16 @@ void Game::drawInspect() {
         text(F.bold, k, x + pad, yy, 13, T.muted);
         float vh = wrapped(F.body, v, x + pad + 104, yy - 1, tw - 104, 14, T.text);
         yy += std::max(20.f, vh + 6);
+    }
+    if (canName) {
+        yy += 4;
+        if (renaming == bp->id) {
+            bool enter = textField({x + pad, yy, tw - 84, 34}, renameText, renameFocus, 24, "A name for it...");
+            if (button({x + pad + tw - 76, yy + 2, 76, 30}, "Name it", true, true, 13) || enter) { sim.rename(bp->id, renameText); renaming = -1; renameFocus = false; }
+        } else {
+            if (button({x + pad, yy, 100, 30}, bp->customName.empty() ? "Name it" : "Rename", true, false, 13)) { renaming = bp->id; renameText = bp->customName; renameFocus = true; }
+            if (canRestyle && button({x + pad + 108, yy, 120, 30}, "Another look", true, false, 13)) sim.restyle(bp->id);
+        }
     }
 }
 
