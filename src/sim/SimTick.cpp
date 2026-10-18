@@ -33,7 +33,7 @@ void Sim::updatePerson(Person& p, double dmd) {
         n.thirst = std::min(100.f, n.thirst + hrs * (asleep ? 2.f : 4.8f) * (inventions.count("skins") ? .8f : 1));
         if (!p.calling.empty()) p.callingNeed = std::min(100.f, p.callingNeed + hrs * 1.1f);
         if (asleep) {
-            float r = p.sleepIn == "longhouse" ? 16.f : p.sleepIn == "hut" ? 15.f : p.sleepIn == "leanto" ? 11.f : 7.f;
+            float r = p.sleepIn == "manor" ? 18.f : p.sleepIn == "house" ? 17.f : p.sleepIn == "longhouse" || p.sleepIn == "cottage" ? 16.f : p.sleepIn == "hut" ? 15.f : p.sleepIn == "leanto" ? 11.f : 7.f;
             n.fatigue = std::max(0.f, n.fatigue - hrs * r);
         } else n.fatigue = std::min(100.f, n.fatigue + hrs * (p.sick > 0 ? 2.f : 4.3f));
         n.social = std::min(100.f, n.social + hrs * (p.has("social") ? 3.f : p.has("loner") ? 1.f : 2.f));
@@ -159,6 +159,7 @@ void Sim::daily() {
     auto m = members();
     earn(rapportIncome());   // the day's rapport, from how much they buy in
     dutiesDaily();
+    homesDaily();
     for (auto* p : m) if (p->contraryUntil > 0 && !contrary(*p)) { p->contraryUntil = 0; note(cat(p->name, " has stopped bristling at the narrator, and will hear a line again.")); }
     // a well-placed store or smokehouse keeps food better; a damp or out-of-the-way one worse
     float rate = (built("smoke") ? .006f * (2 - siteQ("smoke")) : built("store") ? .01f * (2 - siteQ("store")) : built("rack") ? .035f : .07f) * (1 - std::min(.6f, pots * .04f));
@@ -261,7 +262,10 @@ void Sim::daily() {
     }
     bool pendingHut = false;
     for (auto& b : plan) if (b.key == "hut" && !b.done && !b.skip) pendingHut = true;
-    if (totalBeds(true) < int(m.size()) && !pendingHut) mkProj(*projectDef("hut"));
+    int homeless = 0, plannedHuts = 0;
+    for (auto& h : households) homeless += h.home < 0;
+    for (auto& b : plan) plannedHuts += b.key == "hut" && !b.done && !b.skip;
+    if ((totalBeds(true) < int(m.size()) || homeless > plannedHuts) && !pendingHut) mkProj(*projectDef("hut"));
     bool haveCircle = false;
     for (auto& b : plan) if (b.key == "circle") haveCircle = true;
     if (avgBuyIn() > 75 && !haveCircle) { mkProj(*projectDef("circle"), true); note("They talk back to the narrator now, and laugh about it. Tonight they decided to make a story circle, to tell the island's tales out loud.", "narrator"); }

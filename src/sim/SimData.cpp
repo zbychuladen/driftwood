@@ -28,6 +28,10 @@ const std::vector<ProjectDef>& allProjects() {
         { auto d = P("leanto", "Lean-to shelter", 3, 1, 22, 0, 300); d.beds = 5; add(d, 2.5f, 4, true); }
         add(P("rack", "Drying rack", 1, 1, 11, 0, 170), 2.5f, 4.5f, true);
         { auto d = P("hut", "Round hut", 2, 2, 34, 8, 540); d.beds = 2; add(d, 3.5f, 7, true); }
+        // better homes, reached only by improving a hut (SimHomes)
+        { auto d = P("cottage", "Cottage", 2, 2, 20, 8, 1); d.beds = 3; d.upgrade = true; add(d, 0, 0, false); }
+        { auto d = P("house", "House", 2, 2, 30, 20, 1); d.beds = 4; d.upgrade = true; add(d, 0, 0, false); }
+        { auto d = P("manor", "Manor", 3, 3, 50, 40, 1); d.beds = 6; d.upgrade = true; add(d, 0, 0, false); }
         add(P("dock", "Fishing dock", 1, 3, 31, 0, 580), 0, 0, true);
         add(P("tower", "Watchtower", 1, 1, 48, 11, 810), 6, 11, true);
         // specialist projects

@@ -50,6 +50,7 @@ struct Builder {
     float base = 0;     // plinth height
     V3 wc;              // middle of the walls' base
     float wx = 0, wy = 0, wallH = 0;   // walls' half-sizes and height
+    float winLift = 0;  // raises windows to an upper storey
 
     void add(const Solid& s, Part p, Stage st, bool grows = false) { d.pieces.push_back({s, p, st, grows}); }
     V3 n(int side) const { return SIDES[side]; }
@@ -121,7 +122,7 @@ struct Builder {
     bool window(int side, float along, int style) {
         float half = style == 2 ? .14f : style == 1 ? .26f : .34f;
         if (std::abs(along) + half + .2f > across(side)) return false;
-        float wz = base + std::min(1.05f, wallH * .4f), hgt = style == 2 ? .7f : style == 1 ? .5f : .68f;
+        float wz = base + std::min(1.05f, wallH * .4f) + winLift, hgt = style == 2 ? .7f : style == 1 ? .5f : .68f;
         V3 face = wc - V3{0, 0, base} + n(side) * out(side) + t(side) * along + V3{0, 0, wz};
         float yaw = yawOf(side);
         add(upright(solid::BOX, face + n(side) * .02f, half * 2 + .12f, .06f, hgt + .12f, yaw, FRAMEWOOD), WINDOW, WALLS);
@@ -212,7 +213,7 @@ V3 cross2(V3 v) { return {-v.y, v.x, 0}; }
 
 bool assembled(const std::string& k) {
     static const char* keys[] = {"hut", "leanto", "longhouse", "store", "school", "forge", "smoke", "loomhouse", "infirmary", "cookhouse",
-                                 "well", "rack", "tower", "lighthouse", "signal", "mine", "dock", "circle", "pottery", "boatyard"};
+                                 "well", "rack", "tower", "lighthouse", "signal", "mine", "dock", "circle", "pottery", "boatyard", "cottage", "house", "manor"};
     for (auto s : keys) if (k == s) return true;
     return false;
 }
@@ -595,6 +596,10 @@ Design make(const std::string& key, int id, int x, int y, int w, int h, int fron
         else if (key == "loomhouse") R = {scale::LOOM_WALL, scale::LOOM_ROOF, {&TIMBER, &DAUB, &PLANKS}, {&THATCH, &SHINGLE}, 2, 3, 0, false, false, false, true};
         else if (key == "infirmary") R = {scale::INFIRMARY_WALL, scale::INFIRMARY_ROOF, {&DAUB, &TIMBER}, {&SHINGLE, &SLATE}, 2, 4, 0, false, false, false, true};
         else if (key == "cookhouse") R = {scale::COOK_WALL, scale::COOK_ROOF, {&PLANKS, &TIMBER, &STONE}, {&SHINGLE, &THATCH, &PLANKROOF}, 1, 3, -1, false, false, false, true};
+        // homes as a household rises: a cottage, a two-storey house, a manor
+        else if (key == "cottage") R = {scale::COTTAGE_WALL, scale::COTTAGE_ROOF, {&DAUB, &TIMBER, &STONE}, {&THATCH, &SHINGLE}, 2, 3, 0, false, false, false, true};
+        else if (key == "house") R = {scale::HOUSE_WALL, scale::HOUSE_ROOF, {&TIMBER, &PLANKS, &STONE}, {&SHINGLE, &SLATE}, 2, 3, 0, false, false, false, true};
+        else if (key == "manor") R = {scale::MANOR_WALL, scale::MANOR_ROOF, {&STONE, &TIMBER}, {&SLATE, &SHINGLE}, 3, 5, 0, false, false, true, true};
         else R = {scale::HUT_WALL, scale::HUT_ROOF, {&DAUB, &BOARDS}, {&THATCH}, 1, 2, 1, false, false, false, false};   // a square cottage hut
         const Mat& wm = *R.walls[r.pick(int(R.walls.size()))];
         const Mat& rm = *R.roofs[r.pick(int(R.roofs.size()))];
@@ -621,13 +626,24 @@ Design make(const std::string& key, int id, int x, int y, int w, int h, int fron
         int want = R.minWin + r.pick(R.maxWin - R.minWin + 1);
         int style = R.winStyle >= 0 ? R.winStyle : r.pick(2);
         b.windows(front, want, style, along, doorW);
+        if (key == "house" || key == "manor") {
+            // the upper storey: a second row of windows, the door's place left clear
+            b.winLift = scale::STOREY;
+            b.windows(front, d.windows + want, style, along, doorW);
+            b.winLift = 0;
+        }
         solid::Kind kind = rm.tex == solid::THATCH || r.chance(.35f) ? solid::HIP : solid::GABLE;
         if (key == "forge" || key == "store") kind = solid::GABLE;
         b.roof(kind, rm, R.roofH, rm.tex == solid::THATCH ? .45f : .32f, wm);
         if (R.chimney) b.chimney(scale::FORGE_CHIMNEY - R.wall, r.chance(.5f) ? -.55f : .55f);
         else if (R.holeOk && (key == "smoke" || r.chance(.5f))) b.smokeHole(R.roofH);
-        else if (key == "longhouse" || key == "cookhouse") b.chimney(R.roofH + .15f, r.chance(.5f) ? -.6f : .6f);
-        if (R.porchOk && r.chance(.55f)) b.porch(front, along, doorW);
+        else if (key == "longhouse" || key == "cookhouse" || key == "cottage" || key == "house" || key == "manor") {
+            float side = r.chance(.5f) ? -.6f : .6f;
+            b.chimney(R.roofH + .15f, side);
+            if (key == "manor") b.chimney(R.roofH + .15f, -side);
+            d.chimney = true;
+        }
+        if (R.porchOk && (key == "manor" || r.chance(.55f))) b.porch(front, along, doorW);
         // a few things outside, beside the walls and clear of the door
         int extras = key == "store" ? 2 + r.pick(2) : r.pick(3);
         for (int i = 0; i < extras; i++) {

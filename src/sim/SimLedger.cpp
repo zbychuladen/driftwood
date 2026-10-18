@@ -53,6 +53,16 @@ std::vector<Gap> Sim::ledger() {
     for (int i = 0; i < GW * GH; i++) if (tt[i] >= 2) { land++; known += explored[i]; }
     if (working && day() >= 4 && land && known < land / 4 && on({"explore"}) == 0) gap("explore", "Most of the island is still unknown, and nobody is exploring.", "explore", "An explorer for the season.");
 
+    // a home about to fall back a level
+    for (auto& h : households) {
+        if (h.falling < 2) continue;
+        auto* b = h.home >= 0 ? projectById(h.home) : nullptr;
+        if (!b) continue;
+        int lv = homeLevel(b->key);
+        std::string lack;
+        for (auto& n : homeNeeds(h, lv)) if (!n.met) { lack = n.text; break; }
+        gap("home", cat(householdName(h), "'s ", lower(b->name), " is short of ", lack, ". In ", FALL_DAYS - h.falling, FALL_DAYS - h.falling == 1 ? " day" : " days", " it falls back to a ", levelKey(lv - 1), "."), "", "Find what it lacks, or a service within reach of it.");
+    }
     // who could do it, cheapest first: the price, their skill, and the gap their going would leave
     for (auto& g : out) {
         if (g.job.empty()) continue;

@@ -55,7 +55,7 @@ std::string Sim::writeSand(const std::string& raw) {
 std::vector<const ProjectDef*> Sim::proposalList() {
     std::vector<const ProjectDef*> v;
     for (auto& d : allProjects()) {
-        if (d.autoPlan) continue;
+        if (d.autoPlan || d.upgrade) continue;
         bool have = false;
         for (auto& b : plan) if (b.key == d.key && !b.skip) have = true;
         if (!have && prereqOk(d)) v.push_back(&d);

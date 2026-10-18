@@ -62,6 +62,7 @@ template <class A> void io(A& a, Reply& v);
 template <class A> void io(A& a, Question& v);
 template <class A> void io(A& a, Fib& v);
 template <class A> void io(A& a, Duty& v);
+template <class A> void io(A& a, Household& v);
 
 // ---- plain values
 template <class A> void io(A& a, int& v) { a.pod(v); }
@@ -140,6 +141,7 @@ template <class A> void io(A& a, Question& v) {
 }
 template <class A> void io(A& a, Fib& v) { io(a, v.pid); io(a, v.due); io(a, v.reveal); }
 template <class A> void io(A& a, Duty& v) { io(a, v.job); io(a, v.until); io(a, v.role); }
+template <class A> void io(A& a, Household& v) { io(a, v.id); io(a, v.members); io(a, v.home); io(a, v.rising); io(a, v.falling); io(a, v.noRoom); }
 template <class A> void io(A& a, Focus& v) {
     int k = int(v.kind);
     io(a, k);
@@ -192,7 +194,7 @@ template <class A> void body(A& a, Sim& s) {
     io(a, s.totems); io(a, s.vote); io(a, s.pendingFate); io(a, s.nextProjId); io(a, s.nextPid); io(a, s.active);
     io(a, s.fuelRes); io(a, s.dockRes); io(a, s.toolWear); io(a, s.pots); io(a, s.cloth); io(a, s.herbs); io(a, s.ironTools);
     io(a, s.hasHerb); io(a, s.agenda); io(a, s.lastToldName); io(a, s.lastReply); io(a, s.pendingPlacement);
-    io(a, s.questions); io(a, s.fibs); io(a, s.nextQuestion); io(a, s.lastSaid); io(a, s.lostThisSeason); io(a, s.rapport);
+    io(a, s.questions); io(a, s.fibs); io(a, s.nextQuestion); io(a, s.lastSaid); io(a, s.lostThisSeason); io(a, s.rapport); io(a, s.households); io(a, s.nextHousehold);
     // the behaviour random generator, so a loaded game goes on the same way every time
     std::string rng;
     if constexpr (!A::reading) { std::ostringstream o; o << s.gen; rng = o.str(); }

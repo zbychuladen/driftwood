@@ -38,6 +38,11 @@ constexpr float WELL_CURB = 0.8f, WELL_ROOF = 2.6f;
 constexpr float STORE_WALL = 2.6f, STORE_ROOF = 1.8f;
 constexpr float SMOKE_WALL = 2.2f, SMOKE_ROOF = 1.2f;
 constexpr float LONGHOUSE_WALL = 2.4f, LONGHOUSE_ROOF = 3.f;
+// homes as a household rises: a cottage, a two-storey house, a manor
+constexpr float STOREY = 2.4f;                       // floor to floor
+constexpr float COTTAGE_WALL = 2.5f, COTTAGE_ROOF = 2.3f;
+constexpr float HOUSE_WALL = 4.8f, HOUSE_ROOF = 2.5f;
+constexpr float MANOR_WALL = 5.2f, MANOR_ROOF = 3.2f;
 constexpr float SCHOOL_WALL = 2.7f, SCHOOL_ROOF = 2.f;
 constexpr float FORGE_WALL = 2.5f, FORGE_ROOF = 1.3f, FORGE_CHIMNEY = 5.f;
 constexpr float LOOM_WALL = 2.5f, LOOM_ROOF = 1.6f;
