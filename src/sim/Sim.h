@@ -406,7 +406,7 @@ public:
     std::string ending;
     int endedDay = 0;
     std::vector<YearSummary> years;
-    int yBirths = 0, yDeaths = 0, yMet = 0, yLapsed = 0, lastDeathDay = 0, dividedDays = 0;
+    int yBirths = 0, yDeaths = 0, yMet = 0, yLapsed = 0, lastDeathDay = 0, dividedDays = 0, awakeningDays = 0;
     std::vector<Entry> chronicle;                 // the story so far: every journal entry that matters, kept whole
     static const char* endingTitle(const std::string& e);
     static const char* endingLine(const std::string& e);

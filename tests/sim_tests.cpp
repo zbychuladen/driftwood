@@ -1361,13 +1361,15 @@ static void testEndings() {
     }
     {
         auto s = fresh();
-        while (s->yearN() < 2) s->step(240);
+        while (s->yearN() < 3) s->step(240);
         s->pendingFate.clear();
+        s->awakeningDays = 58;   // the philosopher has been at it for most of a season and a half
         bool hasRuins = false;
         for (auto& p : s->pois) if (p.type == "ruins") { p.found = true; hasRuins = true; }
         addBuilt(*s, "circle", s->campX + 5, s->campY + 5);
+        addBuilt(*s, "school", s->campX - 6, s->campY + 5);
         std::string e = endingAfter(*s, 2, [](Sim& t) { t.members()[0]->calling = "philosopher"; });
-        CHECK(hasRuins && e == "awakening", ("a philosopher, the ruins found and a story circle: Awakening (" + e + ")").c_str());
+        CHECK(hasRuins && e == "awakening", ("a philosopher at the ruins for a season and a half, with a story circle and a school: Awakening (" + e + ")").c_str());
     }
     {
         auto s = fresh();

@@ -205,7 +205,7 @@ template <class A> void body(A& a, Sim& s) {
     io(a, s.fuelRes); io(a, s.dockRes); io(a, s.toolWear); io(a, s.goods); io(a, s.foodSeen); io(a, s.ironTools);
     io(a, s.hasHerb); io(a, s.agenda); io(a, s.lastToldName); io(a, s.lastReply); io(a, s.pendingPlacement);
     io(a, s.questions); io(a, s.fibs); io(a, s.nextQuestion); io(a, s.lastSaid); io(a, s.lostThisSeason); io(a, s.rapport); io(a, s.households); io(a, s.nextHousehold); io(a, s.nextShip); io(a, s.wear); io(a, s.petitions); io(a, s.nextPetition); io(a, s.trials); io(a, s.rival); io(a, s.rivalAhead); io(a, s.overruledSince); io(a, s.overruledDays);
-    io(a, s.ending); io(a, s.endedDay); io(a, s.years); io(a, s.yBirths); io(a, s.yDeaths); io(a, s.yMet); io(a, s.yLapsed); io(a, s.lastDeathDay); io(a, s.dividedDays); io(a, s.chronicle); io(a, s.startOpts.island); io(a, s.startOpts.start);
+    io(a, s.ending); io(a, s.endedDay); io(a, s.years); io(a, s.yBirths); io(a, s.yDeaths); io(a, s.yMet); io(a, s.yLapsed); io(a, s.lastDeathDay); io(a, s.dividedDays); io(a, s.awakeningDays); io(a, s.chronicle); io(a, s.startOpts.island); io(a, s.startOpts.start);
     // the behaviour random generator, so a loaded game goes on the same way every time
     std::string rng;
     if constexpr (!A::reading) { std::ostringstream o; o << s.gen; rng = o.str(); }

@@ -14,7 +14,7 @@ const char* Sim::endingTitle(const std::string& e) {
 const char* Sim::endingLine(const std::string& e) {
     if (e == "haven") return "A balanced, beautiful village that looks after its own. Nobody here needs rescuing any more.";
     if (e == "homeward") return "The notables paid for a ship, the rest built it, and one bright morning everyone sailed for home.";
-    if (e == "awakening") return "In the ruins they found the truth: the narrator is the story they tell about themselves, and always was.";
+    if (e == "awakening") return "Someone could read the carvings in the ruins at last, and they found the truth: the narrator is the story they tell about themselves, and always was.";
     if (e == "overruled") return "For a whole year the village followed someone else. The story goes on, but it is no longer the narrator's.";
     if (e == "lost") return "The last fire went out. The island keeps the shape of the village for a while, then the trees come back.";
     if (e == "divided") return "The ones who never rose packed up and left to start a camp of their own. Two villages now, and no peace between them.";
@@ -60,11 +60,15 @@ void Sim::endingsDaily() {
         return;
     }
     for (auto& b : plan) if (b.key == "ship" && b.done) { endWith("homeward"); return; }
-    // the ruins' secret: a philosopher, the ruins found, and a story circle where the village tells its tales
+    // the ruins' secret: a philosopher, the ruins found, a story circle where the village tells its tales
     bool ruins = false, thinker = false;
     for (auto& p : pois) ruins |= p.type == "ruins" && p.found;
     for (auto* p : adults) thinker |= p->calling == "philosopher";
-    if (ruins && thinker && built("circle") && yearN() >= 2) { endWith("awakening"); return; }
+    // the philosopher has to keep at it: a season and a half of thinking it through, from the third year
+    // and a schoolhouse, so someone can read the carvings at last
+    awakeningDays = ruins && thinker && built("circle") && built("school") ? awakeningDays + 1 : 0;
+    if (awakeningDays == 30) note("The philosopher keeps going back to the ruins, and comes back quieter each time.", "narrator");
+    if (awakeningDays >= 60 && yearN() >= 3) { endWith("awakening"); return; }
     // haven: a year with nobody lost, no bitterness, most households risen, homes pleasant and served, and trust
     if (yearN() >= 3 && d - lastDeathDay >= 40 && avgBuyIn() >= 60) {
         bool calm = std::none_of(adults.begin(), adults.end(), [](Person* p) { return p->resentment >= 40; });
