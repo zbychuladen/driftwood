@@ -58,7 +58,8 @@ void Game::drawHud() {
     drawSidebar();
     drawJournal();
     drawInspect();
-    drawDecisions();
+    if (!sim.pendingPlacement) drawDecisions();   // the placement card says the same while a spot is being chosen
+    else decisionsR.height = 0;
     if (!sim.pendingFate.empty()) drawFate();
 }
 
@@ -131,13 +132,14 @@ void Game::drawTopBar() {
 void Game::drawSidebar() {
     DrawRectangleRec(rSide, T.panel);
     DrawLine(int(rSide.x), int(rSide.y), int(rSide.x), int(rSide.y + rSide.height), T.line);
-    const char* tabs[3] = {"Settlers", "Narrator", "Camp"};
-    float tw = (rSide.width - 32) / 3;
-    for (int i = 0; i < 3; i++)
-        if (button({rSide.x + 16 + i * tw, rSide.y + 12, tw - 6, 32}, tabs[i], true, tab == i, 15)) { tab = i; sideScroll.y = 0; }
+    const char* tabs[4] = {"Settlers", "Narrator", "Build", "Camp"};
+    float tw = (rSide.width - 32) / 4;
+    for (int i = 0; i < 4; i++)
+        if (button({rSide.x + 16 + i * tw, rSide.y + 12, tw - 6, 32}, tabs[i], true, tab == i, 14)) { tab = i; sideScroll.y = 0; }
     Rectangle area{rSide.x + 12, rSide.y + 56, rSide.width - 20, rSide.height - 64};
     if (tab == 0) drawSettlers(area);
     else if (tab == 1) drawNarrator(area);
+    else if (tab == 2) drawBuild(area);
     else drawCamp(area);
 }
 
@@ -600,4 +602,40 @@ float Game::drawLedger(float x, float y, float w) {
         }
     }
     return y + 14;
+}
+
+// The build menu: every blueprint, what it costs, whether it is unlocked and
+// who it needs. Placing one hands it to the placement screen; the settlers
+// build it when they see fit.
+void Game::drawBuild(Rectangle a) {
+    beginScroll(a, sideScroll);
+    float x = a.x, w = a.width - 10, y = a.y - sideScroll.y;
+    y += sectionTitle("Blueprints", x, y);
+    if (settlersPlace) {
+        y += wrapped(F.body, "The settlers are choosing every building and its spot themselves. Switch to \"Building spots: you choose\" in the pause menu to draw up blueprints.", x, y, w, 14, T.muted) + 12;
+        endScroll(a, sideScroll, y + sideScroll.y - a.y + 20);
+        return;
+    }
+    y += wrapped(F.body, cat("Mark out a spot and the settlers build it when they see fit. Homes, the campfire, lean-tos and racks they build themselves. The village has cleared ", sim.villageLevel(), " of 5 levels of need; more blueprints unlock as it rises."), x, y, w, 14, T.muted) + 12;
+    for (auto* d : sim.blueprints()) {
+        std::string why;
+        bool open = sim.unlocked(d->key, &why);
+        int built = 0, waiting = 0;
+        for (auto& b : sim.plan) if (b.key == d->key && !b.skip) { if (b.done) built++; else if (b.placed) waiting++; }
+        std::string sub = cat(d->wood, " wood", d->stone ? cat(", ", d->stone, " stone") : std::string());
+        if (built) sub += cat(", ", built, " built");
+        if (waiting) sub += cat(", ", waiting, " marked out");
+        std::string need = !open ? why : !d->gift.empty() && !sim.giftHolder(d->gift, d->min) ? cat("Needs a ", lower(giftInfo().at(d->gift).n), d->min > 1 ? cat(" of level ", d->min) : std::string(), "; it will wait for one.") : !sim.prereqOk(*d) ? cat("Needs a ", d->req == "child" ? std::string("child in the village") : lower(projectDef(d->req)->name), " first.") : "";
+        float th = 22 + 18 + (need.empty() ? 0 : wrapped(F.body, need, 0, 0, w - 110, 12.5f, T.muted, false) + 2);
+        Rectangle r{x, y, w, th + 12};
+        DrawRectangleRounded(r, .12f, 6, T.panel2);
+        text(F.bold, d->name, x + 12, y + 8, 15, open ? T.text : T.muted);
+        text(F.body, sub, x + 12, y + 30, 12.5f, T.muted);
+        if (!need.empty()) wrapped(F.body, need, x + 12, y + 48, w - 110, 12.5f, open ? T.ember : T.muted);
+        if (button({x + w - 84, y + 10, 74, 30}, "Place", open && !sim.pendingPlacement, false, 13)) {
+            if (sim.blueprint(d->key) < 0) say("There is nowhere it can go yet. Explore more of the island, or clear some ground.");
+        }
+        y += r.height + 6;
+    }
+    endScroll(a, sideScroll, y + sideScroll.y - a.y + 20);
 }

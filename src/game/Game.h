@@ -68,6 +68,7 @@ private:
     void drawPlacement();
     void drawDecisions();
     float drawLedger(float x, float y, float w);
+    void drawBuild(Rectangle area);
     float settlerCard(dw::Person& p, float x, float y, float w, bool drawIt);
     void select(int id, bool center);
 

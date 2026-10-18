@@ -66,6 +66,7 @@ static Info building(Sim& s, Project& b) {
         std::string why = r.factors.empty() ? "" : ", " + (q < 1 ? r.factors.front().text : r.factors.back().text);
         in.rows.push_back({"Spot", cat(word, why, b.sited ? " (your choice)" : "")});
     }
+    if (b.done && b.craftW > 0) in.rows.push_back({"Workmanship", cat(Sim::craftWord(b.craft), b.craft >= 1.12f ? ", built with real care" : b.craft < .85f ? ", it does not work as well as it might" : "")});
     if (b.done && Sim::homeLevel(b.key)) {
         // whose home it is, their standing, and what the next level asks of it
         Household* hh = nullptr;

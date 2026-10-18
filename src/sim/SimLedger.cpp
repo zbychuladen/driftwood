@@ -87,6 +87,9 @@ std::vector<Gap> Sim::ledger() {
         gap("goods", cat("A ", home, " needs ", what, ", and nobody is making any."), "", fix);
     }
     if (sameFood) gap("variety", cat("The same food day after day: ", foodVariety(), foodVariety() == 1 ? " kind" : " kinds", " lately."), "food", "A garden, fields, a dock or a smokehouse add kinds of food.");
+    // what the settlers would build next, if the narrator drew it up
+    if (askPlacement && !pendingPlacement)
+        for (auto* w : wishes()) gap("wish", cat("The camp would like a ", lower(w->name), "."), "", "Open the Build tab and mark out a spot for it. They will start it when they can.");
     // resentment at how much better others live
     {
         std::vector<std::string> bitter;

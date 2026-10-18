@@ -24,7 +24,8 @@ add_library(driftwood_sim STATIC
   src/sim/SimTalk.cpp
   src/sim/SimLedger.cpp
   src/sim/SimHomes.cpp
-  src/sim/SimStatus.cpp)
+  src/sim/SimStatus.cpp
+  src/sim/SimBlueprints.cpp)
 target_include_directories(driftwood_sim PUBLIC src)
 if(MSVC)
   target_compile_options(driftwood_sim PRIVATE /W3 /utf-8)

@@ -266,7 +266,7 @@ std::optional<std::pair<int, int>> Sim::suggestSite(const ProjectDef& d) {
 
 float Sim::siteQ(const std::string& key) {
     auto* b = built(key);
-    return b ? b->siteQuality : 1.f;
+    return b ? std::clamp(b->siteQuality * b->craft, .5f, 1.45f) : 1.f;
 }
 
 bool Sim::placeAt(int id, int x, int y) {
@@ -280,9 +280,12 @@ bool Sim::placeAt(int id, int x, int y) {
     }
     b->siteQuality = r.quality;
     b->sited = pendingPlacement && pendingPlacement->project == id;
+    bool chosen = b->sited && pendingPlacement->chosen;
     if (pendingPlacement && pendingPlacement->project == id) pendingPlacement.reset();
     siteJudged(*b, false);
-    startProject(*b);
+    // a blueprint from the build menu waits its turn: the settlers start it when they see fit
+    if (!chosen) startProject(*b);
+    else { b->waitNoted = false; note(cat("The narrator marked out a spot for a ", lower(b->name), ". The camp will get to it when they can.")); }
     return true;
 }
 
