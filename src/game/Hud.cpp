@@ -345,6 +345,15 @@ void Game::drawCamp(Rectangle a) {
         text(F.body, boxes[i].sub, r.x + 10, r.y + 50, 12, T.muted);
     }
     y += 86;
+    // goods, and the kinds of food lately
+    {
+        std::string g;
+        for (auto& gi : Sim::goodList()) g += (g.empty() ? "" : "   ") + cat(gi.name, " ", int(sim.good(gi.key)));
+        y += wrapped(F.body, g, x, y, w, 13.5f, T.text) + 4;
+        std::string kinds;
+        for (auto& [k, d] : sim.foodSeen) if (d >= sim.day() - 5) kinds += (kinds.empty() ? "" : ", ") + k;
+        y += wrapped(F.body, kinds.empty() ? "No food brought in lately." : cat("Food lately: ", kinds, " (", sim.foodVariety(), sim.foodVariety() == 1 ? " kind)" : " kinds)"), x, y, w, 13.5f, T.muted) + 14;
+    }
     y += sectionTitle("Projects", x, y);
     if (sim.agenda) if (auto* ag = sim.person(sim.agenda->by)) {
         static const std::map<std::string, std::string> verb = {{"stone", "breaking stone"}, {"wood", "hauling timber"}, {"farm", "working the fields"}, {"food", "gathering food"}};

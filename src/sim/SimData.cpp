@@ -46,6 +46,7 @@ const std::vector<ProjectDef>& allProjects() {
         add(P("pottery", "Pottery kiln", 2, 2, 14, 20, 480), 4, 8, true, "potter", 3);
         add(P("loomhouse", "Loom house", 2, 2, 30, 6, 480), 4, 8, true, "weaver", 3);
         add(P("cookhouse", "Cookhouse", 2, 2, 30, 12, 560), 2.5f, 6, true, "cook", 3);
+        add(P("workshop", "Carpenter's workshop", 2, 2, 34, 6, 520), 3, 7, true, "carpenter", 3);
         // proposals (narrator)
         auto o = [&](ProjectDef d, std::string desc, std::vector<std::string> like, std::vector<std::string> dislike, float r0, float r1, std::string gift = "", int min = 0, std::string req = "") {
             d.desc = desc; d.like = like; d.dislike = dislike; return add(d, r0, r1, false, gift, min, req);

@@ -273,7 +273,10 @@ std::deque<Action> Sim::deliver(const std::string& label) {
             auto& c = *p.carry;
             if (c.t == "wood") stock.wood += c.n;
             else if (c.t == "stone") stock.stone += c.n;
-            else if (c.t == "food" || c.t == "fish") stock.food += c.n;
+            else if (c.t == "berries" || c.t == "fish" || c.t == "greens" || c.t == "grain") {
+                stock.food += c.n;
+                if (c.n > 0) { foodSeen[c.t] = day(); if (c.t == "fish" && (built("smoke") || built("rack"))) foodSeen["smoked"] = day(); }
+            }
         }
         p.carry.reset();
     })};
@@ -363,11 +366,15 @@ void Sim::workQ(Person& p) {
     float dFarm = gw.empty() ? 0 : 1.5f;
     float dCraft = 0;
     std::string craftKind;
-    static const std::map<std::string, std::string> WORKSHOP = {{"smith", "forge"}, {"potter", "pottery"}, {"weaver", "loomhouse"}, {"herbalist", "infirmary"}};
+    static const std::map<std::string, std::string> WORKSHOP = {{"smith", "forge"}, {"potter", "pottery"}, {"weaver", "loomhouse"}, {"herbalist", "infirmary"}, {"carpenter", "workshop"}, {"cook", "cookhouse"}};
     for (auto& [gk, lv] : p.gifts) {
         auto it = WORKSHOP.find(gk);
         if (it == WORKSHOP.end() || !built(it->second)) continue;
-        float d = gk == "smith" ? toolWear / 80 : gk == "potter" ? (pots < 14 ? .45f : .05f) : gk == "weaver" ? ((cloth < 14 ? .4f : .05f) + (season() >= 2 ? .25f : 0)) : (herbs < 8 ? .35f : .05f);
+        float d = gk == "smith" ? toolWear / 80 : gk == "potter" ? (good("pots") < 14 ? .45f : .05f)
+                : gk == "weaver" ? ((good("cloth") < 14 || (lv >= 5 && good("finecloth") < 8) ? .4f : .05f) + (season() >= 2 ? .25f : 0))
+                : gk == "carpenter" ? (good("furniture") < 8 ? .38f : .05f)
+                : gk == "cook" ? (good("spices") < 8 && good("herbs") >= 1 ? .3f : 0)
+                : (good("herbs") < 8 ? .35f : .05f);
         if (d > dCraft) { dCraft = d; craftKind = gk; }
     }
     int unexplored = 0;
@@ -486,7 +493,7 @@ void Sim::foodJob(Person& p) {
             Obj& b = objs[bi];
             int n = int(b.berries);
             b.berries -= n;
-            p.carry = Carry{"food", n};
+            p.carry = Carry{"berries", n};
             b.res = -1;
             p.release = nullptr;
             gain(p, "forage");
@@ -583,7 +590,7 @@ void Sim::farmJob(Person& p, Project& g, const std::string& job) {
         if (p.gifts.count("farmer")) practise(p, "farmer");
         int n = int(std::lround(((gp->key == "fields" ? 30 : 14) + p.sk["farm"] * .8f) * (1 + (p.gifts.count("farmer") ? p.gifts["farmer"] : 0) * .06f) * gp->siteQuality));
         gp->state = "empty"; gp->growth = 0;
-        p.carry = Carry{"food", n};
+        p.carry = Carry{gp->key == "fields" ? "grain" : "greens", n};
         gain(p, "farm");
         if (!firsts.count("harvest")) { firsts.insert("harvest"); note(cat("First harvest! ", p.name, " carried in ", n, " baskets of squash and beans."), "big"); }
     })};
@@ -643,8 +650,8 @@ void Sim::friendJob(Person& p) {
 }
 
 void Sim::craftJob(Person& p, const std::string& kind) {
-    static const std::map<std::string, std::string> WORKSHOP = {{"smith", "forge"}, {"potter", "pottery"}, {"weaver", "loomhouse"}, {"herbalist", "infirmary"}};
-    static const std::map<std::string, std::string> LAB = {{"smith", "Forging tools"}, {"potter", "Throwing pots"}, {"weaver", "Weaving blankets"}, {"herbalist", "Preparing remedies"}};
+    static const std::map<std::string, std::string> WORKSHOP = {{"smith", "forge"}, {"potter", "pottery"}, {"weaver", "loomhouse"}, {"herbalist", "infirmary"}, {"carpenter", "workshop"}, {"cook", "cookhouse"}};
+    static const std::map<std::string, std::string> LAB = {{"smith", "Forging tools"}, {"potter", "Throwing pots"}, {"weaver", "Weaving at the loom"}, {"herbalist", "Preparing remedies"}, {"carpenter", "Making furniture"}, {"cook", "Drying spices"}};
     Project* b = built(WORKSHOP.at(kind));
     if (!b) return setQ(p, "idle", "Taking a breather", wanderQ(p));
     int lv0 = p.gifts.count(kind) ? p.gifts[kind] : 1;
@@ -655,9 +662,13 @@ void Sim::craftJob(Person& p, const std::string& kind) {
             toolWear = std::max(0.f, toolWear - (30 + lv * 3) * siteQ("forge"));
             if (!ironTools) { ironTools = true; note(cat(p.name, " forged the first iron tools on the island. Axes that hold an edge! Everyone chops, digs and builds faster now."), "big"); }
         }
-        if (kind == "potter") { pots = std::min(20.f, pots + (1 + lv / 5.f) * siteQ("pottery")); if (!firsts.count("pots")) { firsts.insert("pots"); note(cat(p.name, " fired the first batch of clay pots. Sealed with wax, they keep food from spoiling."), "big"); } }
-        if (kind == "weaver") { cloth = std::min(20.f, cloth + (1 + lv / 5.f) * siteQ("loomhouse")); if (!firsts.count("cloth")) { firsts.insert("cloth"); note(cat(p.name, " wove the first blankets from grass fiber. Nights are warmer already."), "big"); } }
-        if (kind == "herbalist") herbs = std::min(20.f, herbs + 3);
+        if (kind == "potter") { addGood("pots", (1 + lv / 5.f) * siteQ("pottery")); if (!firsts.count("pots")) { firsts.insert("pots"); note(cat(p.name, " fired the first batch of clay pots. Sealed with wax, they keep food from spoiling."), "big"); } }
+        // a practised weaver makes fine cloth once there are blankets enough
+        if (kind == "weaver" && lv >= 5 && good("cloth") >= 6) addGood("finecloth", (.5f + lv / 10.f) * siteQ("loomhouse"));
+        else if (kind == "weaver") { addGood("cloth", (1 + lv / 5.f) * siteQ("loomhouse")); if (!firsts.count("cloth")) { firsts.insert("cloth"); note(cat(p.name, " wove the first blankets from grass fiber. Nights are warmer already."), "big"); } }
+        if (kind == "herbalist") addGood("herbs", 3);
+        if (kind == "carpenter") { addGood("furniture", (.6f + lv / 8.f) * siteQ("workshop")); if (!firsts.count("furniture")) { firsts.insert("furniture"); note(cat(p.name, " finished the first proper table and benches. Nobody wants to eat on the ground any more."), "big"); } }
+        if (kind == "cook" && good("herbs") >= 1) { addGood("herbs", -1); addGood("spices", (1 + lv / 6.f) * siteQ("cookhouse")); if (!firsts.count("spices")) { firsts.insert("spices"); note(cat(p.name, " hung bundles of herbs to dry over the cookhouse fire. Supper tastes of something now."), "big"); } }
         p.esteemPts = std::min(100.f, p.esteemPts + 3);
     });
     w.start = [](Person& p) { p.face = -1; };
@@ -743,7 +754,7 @@ void Sim::callingJob(Person& p) {
                 sick->sick = std::max(0.f, sick->sick - 14); bubble(*sick, "thank you"); affAdd(*sick, q.id, 8);
             }))}, onPerson(*sick));
         if (Obj* b = nearestObj([&](const Obj& o) { return o.type == "bush" && explored[idx(o.x, o.y)]; }, p.x, p.y))
-            return setQ(p, "calling", "Gathering healing herbs", {walkA(b->x + 1.05f, b->y + .5f), workA(70, "Gathering herbs", "forage", done([this](Person&) { herbs = std::min(12.f, herbs + 2); }))}, onObject(b->i));
+            return setQ(p, "calling", "Gathering healing herbs", {walkA(b->x + 1.05f, b->y + .5f), workA(70, "Gathering herbs", "forage", done([this](Person&) { if (good("herbs") < 12) addGood("herbs", std::min(2.f, 12 - good("herbs"))); }))}, onObject(b->i));
     }
     if (c == "teacher") {
         std::vector<Person*> kids;

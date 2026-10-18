@@ -242,7 +242,7 @@ static void testSites() {
     CHECK(n > 50 && errE * 3 < errN, cat("a master smith misjudges forge sites far less than a novice (", int(errE / n * 1000), " vs ", int(errN / n * 1000), " thousandths)").c_str());
     // the settlers' own choice is never a poor one
     std::string poor;
-    for (const char* key : {"forge", "well", "store", "pottery", "school", "cookhouse"}) {
+    for (const char* key : {"forge", "well", "store", "pottery", "school", "cookhouse", "workshop"}) {
         Project* b = projectNamed(s, key);
         if (!b) continue;
         auto all = sites(s, *b, 20);
@@ -764,7 +764,7 @@ static void testHouseholds() {
     // the household's home, if it still has one
     auto homeOf = [&](int id) -> Project* { auto* hh = s.household(id); return hh ? s.projectById(hh->home) : nullptr; };
     for (int d = 0; d < Sim::RISE_DAYS + 1 && homeOf(hid) && homeOf(hid)->key == "hut"; d++) {
-        untilMidnight(s); s.stock.food = 400; s.pots = 10; s.stock.wood = 100; s.stock.stone = 100; pastMidnight(s);
+        untilMidnight(s); s.stock.food = 400; s.goods["pots"] = 10; s.foodSeen["fish"] = s.foodSeen["berries"] = s.day() + 9; s.stock.wood = 100; s.stock.stone = 100; pastMidnight(s);
         used = s.stock.stone < 100;
     }
     home = homeOf(hid);
@@ -773,7 +773,7 @@ static void testHouseholds() {
     // and when the pots run out for long enough, it falls back to a hut, with a warning first
     bool warned = false;
     for (int d = 0; d < Sim::FALL_DAYS + 1; d++) {
-        untilMidnight(s); s.pots = 0; s.stock.food = 400; pastMidnight(s);
+        untilMidnight(s); s.goods["pots"] = 0; s.stock.food = 400; pastMidnight(s);
         for (auto& g : s.ledger()) warned |= g.id == "home";
         while (s.hour() < 10) s.step(30);
     }
@@ -904,6 +904,56 @@ static void testPathsAroundBuildings() {
     }
 }
 
+// Goods are made by gifted workers and used up; homes need them, and food of
+// several kinds; the ledger says what nobody is making.
+static void testGoods() {
+    std::printf("goods and food variety\n");
+    Sim s;
+    s.newWorld(4242);
+    runDays(s, 10);
+    // with nobody to make them, goods run down
+    for (auto* p : s.members()) p->gifts.clear();
+    for (auto k : {"pots", "cloth", "furniture", "spices"}) s.goods[k] = 10;
+    runDays(s, 10);
+    bool down = true;
+    for (auto k : {"pots", "cloth", "furniture", "spices"}) down &= s.good(k) < 10;
+    CHECK(down, "goods run down when nobody makes them");
+    // variety counts the kinds of food brought in over the last five days
+    s.foodSeen = {{"fish", s.day()}, {"berries", s.day() - 2}, {"grain", s.day() - 9}};
+    CHECK(s.foodVariety() == 2, "food variety counts what came in over the last five days");
+
+    // a longer game: furniture gets made once there is a workshop and a carpenter;
+    // a house asks for it, and the ledger names what nobody makes
+    int madeFurniture = 0, gapsRight = 0, gapsWanted = 0;
+    for (uint32_t seed : {20261017u, 777u}) {
+        Sim g;
+        g.newWorld(seed);
+        runDays(g, 160);
+        Project* ws = g.built("workshop");
+        if (ws && g.good("furniture") > 0) madeFurniture++;
+        bool anyMaker = ws && g.giftHolder("carpenter", 1);
+        bool wanted = false;
+        for (auto& h : g.households) {
+            auto* b = h.home >= 0 ? g.projectById(h.home) : nullptr;
+            if (!b) continue;
+            int lv = Sim::homeLevel(b->key);
+            for (int want : {lv, lv + 1}) for (auto& n : g.homeNeeds(h, want)) wanted |= n.id == "furniture" && !n.met;
+        }
+        bool gap = false;
+        for (auto& x : g.ledger()) gap |= x.id == "goods" && x.text.find("furniture") != std::string::npos;
+        if (wanted && !anyMaker) { gapsWanted++; gapsRight += gap; }
+        if (anyMaker) gapsRight += !gap, gapsWanted++;
+    }
+    CHECK(madeFurniture >= 1, "a carpenter at the workshop makes furniture");
+    CHECK(gapsRight == gapsWanted, cat("the ledger names a good homes need that nobody makes, and only then (", gapsRight, " of ", gapsWanted, ")").c_str());
+    Household h{};
+    Project* home = nullptr;
+    for (auto& x : s.households) if (x.home >= 0) { h = x; home = s.projectById(x.home); }
+    bool asks = false;
+    if (home) for (auto& n : s.homeNeeds(h, 3)) asks |= n.id == "furniture";
+    CHECK(asks, "a house needs furniture");
+}
+
 int main() {
     for (uint32_t seed : {20261017u, 777u, 4242u}) testSurvival(seed);
     testNoSmithNoForge();
@@ -918,6 +968,7 @@ int main() {
     testHouseholds();
     testWorkers();
     testPathsAroundBuildings();
+    testGoods();
     testDeterminism();
     testFocus(20261017);
     testFocus(777);

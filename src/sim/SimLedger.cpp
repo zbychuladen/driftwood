@@ -63,6 +63,30 @@ std::vector<Gap> Sim::ledger() {
         for (auto& n : homeNeeds(h, lv)) if (!n.met) { lack = n.text; break; }
         gap("home", cat(householdName(h), "'s ", lower(b->name), " is short of ", lack, ". In ", FALL_DAYS - h.falling, FALL_DAYS - h.falling == 1 ? " day" : " days", " it falls back to a ", levelKey(lv - 1), "."), "", "Find what it lacks, or a service within reach of it.");
     }
+    // goods a household is waiting on, that nobody is making
+    std::map<std::string, std::string> waiting;   // good -> the home level wanting it
+    bool sameFood = false;
+    for (auto& h : households) {
+        auto* b = h.home >= 0 ? projectById(h.home) : nullptr;
+        if (!b) continue;
+        int lv = homeLevel(b->key);
+        for (int want : {lv, lv + 1}) for (auto& n : homeNeeds(h, want)) {
+            if (n.met) continue;
+            if (n.id == "variety") sameFood = true;
+            for (auto& g : goodList()) if (n.id == g.key && !waiting.count(g.key)) waiting[g.key] = levelKey(want);
+        }
+    }
+    for (auto& g : goodList()) {
+        if (!waiting.count(g.key)) continue;
+        bool maker = built(g.building) && giftHolder(g.gift, std::string(g.key) == "finecloth" ? 5 : 1);
+        if (maker) continue;
+        std::string what = lower(g.name), home = waiting[g.key];
+        std::string fix = !built(g.building) ? cat("A ", lower(projectDef(g.building)->name), " and a ", lower(giftInfo().at(g.gift).n), " to work it.")
+                        : std::string(g.key) == "finecloth" ? "A weaver practised enough (level 5) makes fine cloth once there are blankets."
+                        : cat("A ", lower(giftInfo().at(g.gift).n), " to work the ", lower(projectDef(g.building)->name), ". Newcomers may bring one.");
+        gap("goods", cat("A ", home, " needs ", what, ", and nobody is making any."), "", fix);
+    }
+    if (sameFood) gap("variety", cat("The same food day after day: ", foodVariety(), foodVariety() == 1 ? " kind" : " kinds", " lately."), "food", "A garden, fields, a dock or a smokehouse add kinds of food.");
     // who could do it, cheapest first: the price, their skill, and the gap their going would leave
     for (auto& g : out) {
         if (g.job.empty()) continue;

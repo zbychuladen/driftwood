@@ -38,6 +38,7 @@ static std::string purpose(const Project& b) {
         {"herbs", "Healing plants, grown on purpose instead of hunted for."},
         {"pottery", "A kiln for pots, so food and water keep."},
         {"loomhouse", "Looms for cloth, so the cold bites less."},
+        {"workshop", "Saws, planes and a bench, where a carpenter makes the furniture better homes need."},
         {"cookhouse", "A hearth and a long table. Meals here fill people up better, if it is in a good spot."}};
     if (!b.desc.empty()) return b.desc;
     auto it = d.find(b.key);
