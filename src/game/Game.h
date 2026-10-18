@@ -5,6 +5,7 @@
 #include "engine/Ui.h"
 #include "game/Inspect.h"
 #include "game/Legacy.h"
+#include "game/LedgerBoard.h"
 #include "game/WorldView.h"
 #include "sim/Sim.h"
 
@@ -111,6 +112,9 @@ private:
     bool endingRecorded = false;          // this run's ending is in the legacy
     ui::Scroll storyScroll;
     std::string ledgerNote;               // what came of the last nudge from the Ledger
+    LedgerBoard ledger;                   // the Ledger, steadied
+    int narratorView = 0;                 // Ledger, Narrate or Village
+    std::string openGap;                  // the Ledger gap unfolded
     int renaming = -1;                    // the building whose name is being typed
     std::string renameText;
     bool renameFocus = false;

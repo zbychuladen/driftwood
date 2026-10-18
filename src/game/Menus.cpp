@@ -41,6 +41,7 @@ void Game::loadFrom(int slot) {
     selected = -1;
     inspected = {};
     yearsShown = int(sim.years.size());
+    ledger.clear();
     endingSeen = !sim.ending.empty();
     endingRecorded = !sim.ending.empty();
     journalVersionCached = -1;
@@ -211,7 +212,9 @@ void Game::drawPlacement() {
             yy += 22;
         }
     }
-    if (button({x + pad, y + h - pad - 34, 170, 34}, "Let them choose", true, false, 14)) sim.placeSuggested(b->id);
+    Rectangle lc{x + pad, y + h - pad - 34, 170, 34};
+    tip(lc, "The settlers put it where they judge best (the dashed outline). It will be a sound spot, but you earn no rapport for their choice.");
+    if (button(lc, "Let them choose", true, false, 14)) sim.placeSuggested(b->id);
     text(F.body, "The dashed outline is their choice.", x + pad + 186, y + h - pad - 25, 13, T.muted);
 }
 

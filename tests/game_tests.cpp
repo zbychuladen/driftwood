@@ -21,6 +21,7 @@
 #include "game/Iso.h"
 #include "game/Labels.h"
 #include "game/Legacy.h"
+#include "game/LedgerBoard.h"
 #include "game/Saves.h"
 #include "game/Scale.h"
 #include "game/WorldView.h"
@@ -613,6 +614,23 @@ static void testFigures() {
     CHECK(figure::facingToward(1, .2f, figure::NE) == figure::SE && figure::facingToward(-.1f, 1, figure::NE) == figure::SW
           && figure::facingToward(0, -2, figure::SE) == figure::NE && figure::facingToward(-3, 1, figure::SE) == figure::NW
           && figure::facingToward(0, 0, figure::NW) == figure::NW, "a figure faces the way it moves, and keeps its facing when still");
+    // walking a diagonal staircase (a step across, a step down, over and over) the figure does not flip back and forth
+    {
+        Sim s;
+        s.newWorld(20261017);
+        WorldView v;
+        Person& p = *s.members()[0];
+        p.moving = true;
+        int flips = 0, last = -1;
+        for (int i = 0; i < 80; i++) {
+            if (i % 2) p.x += .12f; else p.y += .12f;
+            v.updateFacings(s);
+            int f = v.facingOf(p.id);
+            if (last >= 0 && f != last) flips++;
+            last = f;
+        }
+        CHECK(flips <= 2, cat("walking a diagonal, a figure keeps its facing instead of flipping (", flips, " turns in 80 steps)").c_str());
+    }
 }
 
 // ---------------------------------------------------------------- assembled buildings
@@ -837,6 +855,45 @@ static void testLegacy() {
     fs::remove_all(dir);
 }
 
+// ---------------------------------------------------------------- the steadied ledger
+static void testLedgerBoard() {
+    std::printf("the ledger, steadied\n");
+    auto gap = [](const char* key, int who) { Gap g; g.id = key; g.key = key; g.text = key; g.candidates = {{who, 4, ""}}; return g; };
+    LedgerBoard b;
+    double t = 1000;
+    // a blip: there for half an hour, then gone, never shows
+    for (int m = 0; m < 30; m += 5) b.update({gap("wood", 1)}, t + m);
+    b.update({}, t + 35);
+    bool blipShown = false;
+    for (int m = 35; m < 200; m += 5) { b.update({}, t + m); blipShown |= !b.visible().empty(); }
+    CHECK(!blipShown, "a gap that is there for a moment never shows");
+    // held for an hour: shows, with the same suggestion for the hour even as the reading changes
+    t = 2000;
+    bool shownBy45 = false, steady = true;
+    for (int m = 0; m < 60; m += 5) {   // within the hour (it refreshes on the hour)
+        b.update({gap("food", m < 20 ? 1 : 2)}, t + m);
+        auto v = b.visible();
+        if (m >= 45) shownBy45 |= !v.empty();
+        if (!v.empty() && v[0].gap.candidates[0].pid != 1) steady = false;
+    }
+    CHECK(shownBy45, "a gap that holds for three quarters of an hour shows");
+    CHECK(steady, "who is suggested for it does not change from one moment to the next");
+    // cleared: stays a while marked as sorted, then goes
+    bool sortedShown = false, gone = false;
+    for (int m = 65; m <= 260; m += 5) {
+        b.update({}, t + m);
+        auto v = b.visible();
+        if (m < 150 && !v.empty() && v[0].sorted) sortedShown = true;
+        if (m > 200 && v.empty()) gone = true;
+    }
+    CHECK(sortedShown && gone, "once cleared it lingers as sorted for a while, then goes");
+    // frozen at night it keeps what it has
+    t = 3000;
+    for (int m = 0; m <= 60; m += 5) b.update({gap("tired", 3)}, t + m);
+    for (int m = 65; m <= 400; m += 5) b.update({}, t + m, true);
+    CHECK(!b.visible().empty(), "at night the ledger keeps what it had at sunset");
+}
+
 int main() {
     testProjection();
     testPickPeople(20261017);
@@ -859,6 +916,7 @@ int main() {
     testSaveSlots();
     testGraphicsPass();
     testLegacy();
+    testLedgerBoard();
     std::printf(failures ? "\n%d check(s) failed\n" : "\nall checks passed\n", failures);
     return failures;
 }

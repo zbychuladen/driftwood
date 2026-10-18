@@ -153,6 +153,7 @@ std::vector<HomeNeed> Sim::homeNeeds(const Household& h, int level) {
     int x = home->x, y = home->y;
     float fd = foodDays();
     auto add = [&](const std::string& id, bool met, const std::string& text) { v.push_back({id, text, met}); };
+    auto count = [&](const std::string& id, float have, float need, const std::string& text) { v.push_back({id, text, have >= need, have, need}); };
     bool fresh = false;
     for (int yy = y - 5; yy <= y + 6 && !fresh; yy++) for (int xx = x - 5; xx <= x + 6; xx++) if (inb(xx, yy) && this->fresh[idx(xx, yy)]) { fresh = true; break; }
     int services = 0;
@@ -162,27 +163,27 @@ std::vector<HomeNeed> Sim::homeNeeds(const Household& h, int level) {
     bool standing = false;
     for (int m : h.members) if (auto* p = person(m)) { for (auto& [g, lv] : p->gifts) standing |= lv >= 5; standing |= !p->calling.empty(); }
     if (level == 2) {
-        add("food", fd >= 4, "food for four days in store");
-        add("variety", variety >= 2, "two kinds of food lately");
-        add("pots", good("pots") >= 2, "pots in the village");
+        count("food", fd, 4, "food for four days in store");
+        count("variety", float(variety), 2, "kinds of food lately");
+        count("pots", good("pots"), 2, "pots in the village");
         add("water", reach("well", x, y) <= REACH || fresh, "water close by");
     } else if (level == 3) {
-        add("food", fd >= 7, "food for a week in store");
-        add("variety", variety >= 3, "three kinds of food lately");
-        add("cloth", good("cloth") >= 2, "blankets in the village");
-        add("furniture", good("furniture") >= 1, "furniture");
+        count("food", fd, 7, "food for a week in store");
+        count("variety", float(variety), 3, "kinds of food lately");
+        count("cloth", good("cloth"), 2, "blankets in the village");
+        count("furniture", good("furniture"), 1, "furniture");
         add("water", reach("well", x, y) <= REACH, "a well within reach");
-        add("service", services >= 1, "a bath, school, infirmary, story circle or cookhouse within reach");
-        add("beauty", bt >= 3, "pleasant surroundings");
+        count("service", float(services), 1, "a bath, school, infirmary, story circle or cookhouse within reach");
+        count("beauty", bt, 3, "pleasant surroundings");
     } else {
-        add("food", fd >= 10, "food for ten days in store");
-        add("variety", variety >= 4, "four kinds of food lately");
-        add("finecloth", good("finecloth") >= 1, "fine cloth");
-        add("spices", good("spices") >= 1, "spices");
-        add("furniture", good("furniture") >= 2, "good furniture");
+        count("food", fd, 10, "food for ten days in store");
+        count("variety", float(variety), 4, "kinds of food lately");
+        count("finecloth", good("finecloth"), 1, "fine cloth");
+        count("spices", good("spices"), 1, "spices");
+        count("furniture", good("furniture"), 2, "good furniture");
         add("water", reach("well", x, y) <= REACH, "a well within reach");
-        add("service", services >= 2, "two services within reach (bath, school, infirmary, story circle, cookhouse)");
-        add("beauty", bt >= 5, "beautiful surroundings");
+        count("service", float(services), 2, "services within reach (bath, school, infirmary, story circle, cookhouse)");
+        count("beauty", bt, 5, "beautiful surroundings");
         add("standing", standing, "a gifted or called member");
     }
     return v;

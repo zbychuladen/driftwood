@@ -82,6 +82,10 @@ public:
     Vector2 clickPos() const { return clickAt; }
 
     Camera2D cam{};
+    // Which way each settler faces, judged over a stretch of their walk (called every frame).
+    void updateFacings(dw::Sim& sim);
+    int facingOf(int id) const { auto it = tracks.find(id); return it == tracks.end() ? 0 : it->second.facing; }
+
 private:
     void buildGround(dw::Sim& sim);
     void paintGround(dw::Sim& sim, int x0, int y0, int x1, int y1);
@@ -91,7 +95,6 @@ private:
     void drawWeather(dw::Sim& sim, float dt, float speed);
     void drawLabels(dw::Sim& sim, int selectedId);
     // Which way each settler faces: the way they last moved, or toward their work.
-    void updateFacings(dw::Sim& sim);
     struct Track { float x, y; int facing; };
     std::unordered_map<int, Track> tracks;
     std::unordered_map<int, bool> wasInside;      // person id: hidden in a building last frame

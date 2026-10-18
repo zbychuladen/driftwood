@@ -34,7 +34,7 @@ std::vector<Gap> Sim::ledger() {
         for (auto* p : adults) for (auto k : kinds) if (p->kind == k) { n++; break; }
         return n;
     };
-    auto gap = [&](const std::string& id, const std::string& text, const std::string& job, const std::string& fix) { out.push_back({id, text, job, fix, {}}); };
+    auto gap = [&](const std::string& id, const std::string& text, const std::string& job, const std::string& fix) { out.push_back({id, text, job, fix, {}, id}); };
     float fd = foodDays();
     auto* f = fire();
     int inSeason = (day() - 1) % 10;
@@ -62,6 +62,7 @@ std::vector<Gap> Sim::ledger() {
         std::string lack;
         for (auto& n : homeNeeds(h, lv)) if (!n.met) { lack = n.text; break; }
         gap("home", cat(householdName(h), "'s ", lower(b->name), " is short of ", lack, ". In ", FALL_DAYS - h.falling, FALL_DAYS - h.falling == 1 ? " day" : " days", " it falls back to a ", levelKey(lv - 1), "."), "", "Find what it lacks, or a service within reach of it.");
+        out.back().key = cat("home:", h.id);
     }
     // goods a household is waiting on, that nobody is making
     std::map<std::string, std::string> waiting;   // good -> the home level wanting it
@@ -85,11 +86,12 @@ std::vector<Gap> Sim::ledger() {
                         : std::string(g.key) == "finecloth" ? "A weaver practised enough (level 5) makes fine cloth once there are blankets."
                         : cat("A ", lower(giftInfo().at(g.gift).n), " to work the ", lower(projectDef(g.building)->name), ". Newcomers may bring one.");
         gap("goods", cat("A ", home, " needs ", what, ", and nobody is making any."), "", fix);
+        out.back().key = std::string("goods:") + g.key;
     }
     if (sameFood) gap("variety", cat("The same food day after day: ", foodVariety(), foodVariety() == 1 ? " kind" : " kinds", " lately."), "food", "A garden, fields, a dock or a smokehouse add kinds of food.");
     // what the settlers would build next, if the narrator drew it up
     if (askPlacement && !pendingPlacement)
-        for (auto* w : wishes()) if (std::none_of(petitions.begin(), petitions.end(), [&](const Petition& p) { return p.kind == "building" && p.key == w->key; })) gap("wish", cat("The camp would like a ", lower(w->name), "."), "", "Open the Build tab and mark out a spot for it. They will start it when they can.");
+        for (auto* w : wishes()) if (std::none_of(petitions.begin(), petitions.end(), [&](const Petition& p) { return p.kind == "building" && p.key == w->key; })) gap("wish", cat("The camp would like a ", lower(w->name), "."), "", "Open the Build tab and mark out a spot for it. They will start it when they can."), out.back().key = "wish:" + w->key;
     // the rival winning people over
     if (Person* rv = rival >= 0 ? person(rival) : nullptr) {
         int followers = 0;

@@ -28,10 +28,12 @@ void Game::newGame(uint32_t seed) {
     journalVersionCached = -1;
     yearsShown = 0;
     endingSeen = false;
+    ledger.clear();
 }
 
 void Game::select(int id, bool center) {
     selected = id;
+    if (id >= 0 && tab == 1) { narratorView = 1; sideScroll.y = 0; }   // picking someone in the Narrator tab: narrate them
     if (center) if (auto* p = sim.person(id)) view.centerOnTile(p->x, p->y - .6f);
 }
 
@@ -152,6 +154,7 @@ void Game::frame(float dt) {
     }
     if (picker != Picker::NONE) drawPicker();
     drawToast();
+    ui::drawTip();
     EndDrawing();
 }
 
@@ -386,6 +389,9 @@ int Game::run() {
         }
         sim.flash = 0;
         yearsShown = opt.review && !sim.years.empty() ? int(sim.years.size()) - 1 : int(sim.years.size());
+        // a capture is one moment: show the Ledger as it would stand after watching a while
+        sim.askPlacement = !settlersPlace;
+        ledger.update(sim.ledger(), sim.tMin - LedgerBoard::CONFIRM - 1);
         if (!opt.ending.empty()) sim.endWith(opt.ending);
         endingSeen = opt.ending.empty();
         tab = opt.tab;
