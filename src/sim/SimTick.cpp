@@ -43,7 +43,7 @@ void Sim::updatePerson(Person& p, double dmd) {
         bool inside = p.hidden && asleep;
         if (nearFire || inside || t >= 12) n.cold = std::max(0.f, n.cold - hrs * (nearFire ? 35.f : inside ? 20.f : 12.f) - (built("bath") ? hrs * 5 : 0));
         else n.cold = std::min(100.f, n.cold + hrs * (12 - t) * .55f * (p.has("tough") ? .55f : 1) * (p.sleepIn == "leanto" && asleep ? .5f : 1)
-                                  * (mods.count("wolves") ? .8f : 1) * (1 - std::min(.5f, cloth * .03f)));
+                                  * (mods.count("wolves") ? .8f : 1) * (1 - std::min(.5f, good("cloth") * .03f)));
         if (p.sick > 0) p.sick -= hrs * (built("herbs") ? 1 + .6f * siteQ("herbs") : 1) * (hasHerb ? 1.4f : 1) * (built("infirmary") ? 1 + .5f * siteQ("infirmary") : 1);
         if (n.hunger >= 100) { p.starve += hrs; if (p.starve > 80) { die(p); return; } } else p.starve = 0;
         static const std::set<std::string> needKinds = {"drink", "eat", "sleep", "rest"};
@@ -134,8 +134,8 @@ void Sim::hourly() {
         }
         if (n.cold > 80 && p->sick <= 0 && rnd() < (built("herbs") ? .01f : .02f)) {
             lastSick = day();
-            p->sick = herbs > 0 ? 15.f : 30.f;
-            if (herbs > 0) herbs--;
+            p->sick = good("herbs") > 0 ? 15.f : 30.f;
+            if (good("herbs") > 0) addGood("herbs", -1);
             clearQ(*p);
             note(cat(p->name, " came down with a chill and a fever."), "sad");
         }
@@ -162,7 +162,7 @@ void Sim::daily() {
     homesDaily();
     for (auto* p : m) if (p->contraryUntil > 0 && !contrary(*p)) { p->contraryUntil = 0; note(cat(p->name, " has stopped bristling at the narrator, and will hear a line again.")); }
     // a well-placed store or smokehouse keeps food better; a damp or out-of-the-way one worse
-    float rate = (built("smoke") ? .006f * (2 - siteQ("smoke")) : built("store") ? .01f * (2 - siteQ("store")) : built("rack") ? .035f : .07f) * (1 - std::min(.6f, pots * .04f));
+    float rate = (built("smoke") ? .006f * (2 - siteQ("smoke")) : built("store") ? .01f * (2 - siteQ("store")) : built("rack") ? .035f : .07f) * (1 - std::min(.6f, good("pots") * .04f));
     stock.food -= std::floor(stock.food * rate);
     float grow = mods.count("bounty") && mods["bounty"] >= d ? 2.f : 1.f;
     for (auto& o : objs) {
@@ -209,8 +209,8 @@ void Sim::daily() {
     if (s >= 2 && days < 4 && d % 2 == 0) note(cat("Only ", int(stock.food), " portions of food left. Everyone is anxious."), "sad");
     hasHerb = false;
     for (auto* q : m) if (!q->child && q->gifts.count("herbalist")) hasHerb = true;
-    pots = std::max(0.f, pots - .15f);
-    cloth = std::max(0.f, cloth - .1f);
+    // goods wear out, chip and get used up
+    addGood("pots", -.15f); addGood("cloth", -.1f); addGood("finecloth", -.05f); addGood("furniture", -.03f); addGood("spices", -.1f);
     updateAgenda();
     for (auto* p : m) {
         p->esteemPts = std::max(0.f, p->esteemPts - 1.5f);

@@ -14,7 +14,14 @@ namespace {
 const char* const HOME_KEYS[5] = {"", "hut", "cottage", "house", "manor"};
 const char* const STATUS[5] = {"castaway", "settler", "villager", "householder", "notable"};
 constexpr int REACH = 14;   // tiles a service covers, walking
+const char* const SERVICES[] = {"bath", "school", "infirmary", "circle", "cookhouse"};
 } // namespace
+
+const std::vector<Sim::GoodInfo>& Sim::goodList() {
+    static const std::vector<GoodInfo> v = {{"pots", "Pots", "pottery", "potter"}, {"cloth", "Blankets", "loomhouse", "weaver"}, {"furniture", "Furniture", "workshop", "carpenter"},
+                                            {"finecloth", "Fine cloth", "loomhouse", "weaver"}, {"spices", "Spices", "cookhouse", "cook"}, {"herbs", "Remedies", "infirmary", "herbalist"}};
+    return v;
+}
 
 int Sim::homeLevel(const std::string& key) {
     for (int i = 1; i < 5; i++) if (key == HOME_KEYS[i]) return i;
@@ -141,25 +148,32 @@ std::vector<HomeNeed> Sim::homeNeeds(const Household& h, int level) {
     bool fresh = false;
     for (int yy = y - 5; yy <= y + 6 && !fresh; yy++) for (int xx = x - 5; xx <= x + 6; xx++) if (inb(xx, yy) && this->fresh[idx(xx, yy)]) { fresh = true; break; }
     int services = 0;
-    for (auto k : {"bath", "school", "infirmary", "circle"}) services += reach(k, x, y) <= REACH;
+    for (auto k : SERVICES) services += reach(k, x, y) <= REACH;
+    int variety = foodVariety();
     float bt = beauty(x, y);
     bool standing = false;
     for (int m : h.members) if (auto* p = person(m)) { for (auto& [g, lv] : p->gifts) standing |= lv >= 5; standing |= !p->calling.empty(); }
     if (level == 2) {
         add("food", fd >= 4, "food for four days in store");
-        add("pots", pots >= 2, "pots in the village");
+        add("variety", variety >= 2, "two kinds of food lately");
+        add("pots", good("pots") >= 2, "pots in the village");
         add("water", reach("well", x, y) <= REACH || fresh, "water close by");
     } else if (level == 3) {
         add("food", fd >= 7, "food for a week in store");
-        add("cloth", cloth >= 2, "cloth in the village");
+        add("variety", variety >= 3, "three kinds of food lately");
+        add("cloth", good("cloth") >= 2, "blankets in the village");
+        add("furniture", good("furniture") >= 1, "furniture");
         add("water", reach("well", x, y) <= REACH, "a well within reach");
-        add("service", services >= 1, "a bath, school, infirmary or story circle within reach");
+        add("service", services >= 1, "a bath, school, infirmary, story circle or cookhouse within reach");
         add("beauty", bt >= 3, "pleasant surroundings");
     } else {
         add("food", fd >= 10, "food for ten days in store");
-        add("cloth", cloth >= 4, "plenty of cloth");
+        add("variety", variety >= 4, "four kinds of food lately");
+        add("finecloth", good("finecloth") >= 1, "fine cloth");
+        add("spices", good("spices") >= 1, "spices");
+        add("furniture", good("furniture") >= 2, "good furniture");
         add("water", reach("well", x, y) <= REACH, "a well within reach");
-        add("service", services >= 2, "two of a bath, school, infirmary or story circle within reach");
+        add("service", services >= 2, "two services within reach (bath, school, infirmary, story circle, cookhouse)");
         add("beauty", bt >= 5, "beautiful surroundings");
         add("standing", standing, "a gifted or called member");
     }
@@ -207,6 +221,10 @@ void Sim::homesDaily() {
         if (!b || !b->done) continue;
         int lv = homeLevel(b->key);
         std::string who = householdName(h);
+        // better homes use things up
+        if (lv >= 2) addGood("pots", -.05f);
+        if (lv >= 3) { addGood("cloth", -.05f); addGood("furniture", -.02f); }
+        if (lv >= 4) { addGood("finecloth", -.05f); addGood("spices", -.08f); }
         // keeping what they have
         auto keep = homeNeeds(h, lv);
         bool kept = std::all_of(keep.begin(), keep.end(), [](const HomeNeed& n) { return n.met; });

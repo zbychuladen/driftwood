@@ -213,7 +213,7 @@ V3 cross2(V3 v) { return {-v.y, v.x, 0}; }
 
 bool assembled(const std::string& k) {
     static const char* keys[] = {"hut", "leanto", "longhouse", "store", "school", "forge", "smoke", "loomhouse", "infirmary", "cookhouse",
-                                 "well", "rack", "tower", "lighthouse", "signal", "mine", "dock", "circle", "pottery", "boatyard", "cottage", "house", "manor"};
+                                 "well", "rack", "tower", "lighthouse", "signal", "mine", "dock", "circle", "pottery", "boatyard", "cottage", "house", "manor", "workshop"};
     for (auto s : keys) if (k == s) return true;
     return false;
 }
@@ -600,6 +600,7 @@ Design make(const std::string& key, int id, int x, int y, int w, int h, int fron
         else if (key == "loomhouse") R = {scale::LOOM_WALL, scale::LOOM_ROOF, {&TIMBER, &DAUB, &PLANKS}, {&THATCH, &SHINGLE}, 2, 3, 0, false, false, false, true};
         else if (key == "infirmary") R = {scale::INFIRMARY_WALL, scale::INFIRMARY_ROOF, {&DAUB, &TIMBER}, {&SHINGLE, &SLATE}, 2, 4, 0, false, false, false, true};
         else if (key == "cookhouse") R = {scale::COOK_WALL, scale::COOK_ROOF, {&PLANKS, &TIMBER, &STONE}, {&SHINGLE, &THATCH, &PLANKROOF}, 1, 3, -1, false, false, false, true};
+        else if (key == "workshop") R = {scale::WORKSHOP_WALL, scale::WORKSHOP_ROOF, {&PLANKS, &TIMBER, &BOARDS}, {&SHINGLE, &PLANKROOF}, 1, 2, 1, false, false, true, true};
         // homes as a household rises: a cottage, a two-storey house, a manor
         else if (key == "cottage") R = {scale::COTTAGE_WALL, scale::COTTAGE_ROOF, {&DAUB, &TIMBER, &STONE}, {&THATCH, &SHINGLE}, 2, 3, 0, false, false, false, true};
         else if (key == "house") R = {scale::HOUSE_WALL, scale::HOUSE_ROOF, {&TIMBER, &PLANKS, &STONE}, {&SHINGLE, &SLATE}, 2, 3, 0, false, false, false, true};
@@ -649,13 +650,13 @@ Design make(const std::string& key, int id, int x, int y, int w, int h, int fron
         }
         if (R.porchOk && (key == "manor" || r.chance(.55f))) b.porch(front, along, doorW);
         // a few things outside, beside the walls and clear of the door
-        int extras = key == "store" ? 2 + r.pick(2) : r.pick(3);
+        int extras = key == "store" || key == "workshop" ? 2 + r.pick(2) : r.pick(3);
         for (int i = 0; i < extras; i++) {
             int side = (front + 1 + r.pick(2)) % 4;
             if (side == 3 - front) side = front;
             float a = (r.chance(.5f) ? -1 : 1) * (b.across(side) - .35f);
             if (side == front && std::abs(a - along) < doorW / 2 + .6f) a = -a;
-            int kind2 = key == "store" || key == "cookhouse" ? r.pick(3) : key == "longhouse" || key == "smoke" ? 2 * r.pick(2) : r.pick(4);
+            int kind2 = key == "store" || key == "cookhouse" || key == "workshop" ? r.pick(3) : key == "longhouse" || key == "smoke" ? 2 * r.pick(2) : r.pick(4);
             b.extra(kind2, side, a, kind2 == 3 ? 0 : .3f);
         }
     }

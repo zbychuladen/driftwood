@@ -622,7 +622,7 @@ static void testBuildings() {
                        {"house", 2, 2, scale::HOUSE_WALL + scale::HOUSE_ROOF}, {"manor", 3, 3, scale::MANOR_WALL + scale::MANOR_ROOF}, {"leanto", 3, 1, scale::LEANTO}, {"longhouse", 4, 2, scale::LONGHOUSE_WALL + scale::LONGHOUSE_ROOF},
                        {"store", 2, 2, scale::STORE_WALL + scale::STORE_ROOF}, {"school", 2, 2, scale::SCHOOL_WALL + scale::SCHOOL_ROOF}, {"forge", 2, 2, scale::FORGE_CHIMNEY},
                        {"smoke", 2, 1, scale::SMOKE_WALL + scale::SMOKE_ROOF}, {"loomhouse", 2, 2, scale::LOOM_WALL + scale::LOOM_ROOF}, {"infirmary", 2, 2, scale::INFIRMARY_WALL + scale::INFIRMARY_ROOF},
-                       {"cookhouse", 2, 2, scale::COOK_WALL + scale::COOK_ROOF},
+                       {"cookhouse", 2, 2, scale::COOK_WALL + scale::COOK_ROOF}, {"workshop", 2, 2, scale::WORKSHOP_WALL + scale::WORKSHOP_ROOF},
                        {"well", 1, 1, scale::WELL_ROOF}, {"rack", 1, 1, scale::RACK}, {"tower", 1, 1, scale::TOWER}, {"lighthouse", 1, 1, scale::LIGHTHOUSE},
                        {"signal", 1, 1, scale::SIGNAL}, {"mine", 1, 1, scale::MINE_HILL}, {"dock", 1, 3, .6f}, {"circle", 2, 2, scale::CIRCLE_SEAT},
                        {"pottery", 2, 2, scale::KILN}, {"boatyard", 2, 2, scale::MAST}};
@@ -657,7 +657,7 @@ static void testBuildings() {
             if (k == "house" && (d.windows < 4 || !d.chimney)) lack += " two rows of windows and a chimney";
             if (k == "manor" && (d.windows < 6 || !d.chimney || !d.porch)) lack += " two rows of windows, chimneys and a porch";
             if (k == "forge" && (!d.chimney || !d.openSide || count(bld::EXTRA) < 2)) lack += " chimney, open front or anvil";
-            if (k == "store" && d.doorWidth < 1.6f) lack += " wide door";
+            if ((k == "store" || k == "workshop") && d.doorWidth < 1.6f) lack += " wide door";
             if (k == "school" && d.windows < 3) lack += " three windows";
             if ((k == "loomhouse" || k == "infirmary") && d.windows < 2) lack += " two windows";
             if (!lack.empty() && missing.size() < 300) missing += cat("\n          ", k, " #", id, ":", lack);

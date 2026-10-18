@@ -147,6 +147,13 @@ SiteReport Sim::evaluateSite(const ProjectDef& d, int x, int y, int self) const 
         if (countNear("tree", 8) >= 5) add("wood", .05f, "firewood all around");
         if (dHome < 3) add("homes", -.08f, "kiln smoke over the huts");
     }
+    if (k == "workshop") {
+        // timber in, furniture out to the homes
+        if (countNear("tree", 8) >= 5) add("timber", .1f, "timber close at hand");
+        else add("notimber", -.08f, "a long carry for timber");
+        if (dStock <= 6 || dStore <= 6) add("stores", .08f, "handy for the stockpile");
+        if (dHome < 3) add("homes", -.08f, "sawdust and hammering beside the homes");
+    }
     if (k == "loomhouse") {
         if (dFields <= 8) add("fiber", .1f, "near the fiber in the fields");
         if (dForge < 4) add("soot", -.08f, "soot from the forge on the cloth");

@@ -222,7 +222,19 @@ public:
     std::optional<Vote> vote;
     std::vector<Fate> pendingFate;            // non-empty: the front end should pause and ask
     int nextProjId = 0, nextPid = 1, active = -1, fuelRes = -1, dockRes = -1;
-    float toolWear = 20, pots = 0, cloth = 0, herbs = 0;
+    float toolWear = 20;
+    // Goods in the village, each made by a gifted worker and used up over time:
+    // pots, cloth (blankets), finecloth, furniture, spices, herbs (remedies).
+    std::map<std::string, float> goods;
+    float good(const std::string& k) const { auto it = goods.find(k); return it == goods.end() ? 0.f : it->second; }
+    void addGood(const std::string& k, float n, float cap = 20) { goods[k] = std::clamp(good(k) + n, 0.f, cap); }
+    // The kinds of food brought in, with the last day each was: berries, fish,
+    // greens, grain, smoked. Variety is how many came in over the last five days.
+    std::map<std::string, int> foodSeen;
+    // The goods there are, in order, with what to call them and what makes them.
+    struct GoodInfo { const char* key; const char* name; const char* building; const char* gift; };
+    static const std::vector<GoodInfo>& goodList();
+    int foodVariety() const { int n = 0; for (auto& [k, d] : foodSeen) n += d >= day() - 5; return n; }
     bool ironTools = false, hasHerb = false;
     std::optional<Agenda> agenda;
     // A specialist building waiting for the player to choose its spot. Set only
@@ -238,7 +250,7 @@ public:
     // The whole game as bytes, and back. Settlers' half-done actions are not
     // kept: after a load everyone picks their next task. load() leaves the sim
     // as it was and returns false, with a reason, for anything it cannot read.
-    static constexpr int SAVE_VERSION = 9;   // 2: site quality and pending placement; 3: rapport, contrariness, the story circle; 4: lines, questions; 5: deaths this season; 6: the narrator's rapport and buy-in; 7: duties and roles; 8: households; 9: gift practice
+    static constexpr int SAVE_VERSION = 10;   // 2: site quality and pending placement; 3: rapport, contrariness, the story circle; 4: lines, questions; 5: deaths this season; 6: the narrator's rapport and buy-in; 7: duties and roles; 8: households; 9: gift practice; 10: goods and food kinds
     struct SaveInfo { std::string village; int day = 0, year = 0, season = 0, people = 0; uint32_t seed = 0; };
     std::string save() const;
     bool load(const std::string& data, std::string* error = nullptr);

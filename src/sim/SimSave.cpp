@@ -192,7 +192,7 @@ template <class A> void body(A& a, Sim& s) {
     io(a, s.firsts); io(a, s.usedNames); io(a, s.inventions); io(a, s.pois); io(a, s.mods); io(a, s.boost);
     io(a, s.lastProposal); io(a, s.lastSand); io(a, s.newcomerDay); io(a, s.lastRaid); io(a, s.lastSick); io(a, s.lastFeast);
     io(a, s.totems); io(a, s.vote); io(a, s.pendingFate); io(a, s.nextProjId); io(a, s.nextPid); io(a, s.active);
-    io(a, s.fuelRes); io(a, s.dockRes); io(a, s.toolWear); io(a, s.pots); io(a, s.cloth); io(a, s.herbs); io(a, s.ironTools);
+    io(a, s.fuelRes); io(a, s.dockRes); io(a, s.toolWear); io(a, s.goods); io(a, s.foodSeen); io(a, s.ironTools);
     io(a, s.hasHerb); io(a, s.agenda); io(a, s.lastToldName); io(a, s.lastReply); io(a, s.pendingPlacement);
     io(a, s.questions); io(a, s.fibs); io(a, s.nextQuestion); io(a, s.lastSaid); io(a, s.lostThisSeason); io(a, s.rapport); io(a, s.households); io(a, s.nextHousehold);
     // the behaviour random generator, so a loaded game goes on the same way every time
