@@ -111,29 +111,30 @@ std::string Sim::trialName(const std::string& kind) {
 std::vector<HomeNeed> Sim::trialChecklist(const std::string& kind) {
     std::vector<HomeNeed> v;
     auto add = [&](const std::string& id, bool met, const std::string& text) { v.push_back({id, text, met}); };
+    auto count = [&](const std::string& id, float have, float need, const std::string& text) { v.push_back({id, text, have >= need, have, need}); };
     float fd = foodDays();
     int people = int(members().size());
     if (kind == "winter") {
-        add("food", fd >= 20, "food for twenty days");
-        add("wood", stock.wood >= 40, "forty logs stacked");
-        add("cloth", good("cloth") >= 4, "blankets for the cold");
-        add("beds", totalBeds(false) >= people, "a roof over everyone");
+        count("food", fd, 20, "food for twenty days");
+        count("wood", stock.wood, 40, "forty logs stacked");
+        count("cloth", good("cloth"), 4, "blankets for the cold");
+        count("beds", float(totalBeds(false)), float(people), "a roof over everyone");
     } else if (kind == "sickness") {
         add("herbalist", giftHolder("herbalist", 1) != nullptr, "a herbalist");
-        add("herbs", good("herbs") >= 6, "remedies put by");
+        count("herbs", good("herbs"), 6, "remedies put by");
         add("infirmary", built("infirmary") != nullptr, "an infirmary");
         add("well", built("well") != nullptr, "clean water from a well");
     } else if (kind == "drought") {
         add("well", built("well") != nullptr, "a well that will not dry up");
-        add("food", fd >= 15, "food for fifteen days");
+        count("food", fd, 15, "food for fifteen days");
         add("store", built("store") != nullptr, "a storehouse");
         add("keep", built("smoke") || built("rack"), "a smokehouse or drying rack");
     } else {
         add("store", built("store") != nullptr, "a storehouse to keep food dry");
-        add("wood", stock.wood >= 30, "thirty logs for repairs");
+        count("wood", stock.wood, 30, "thirty logs for repairs");
         int housed = 0;
         for (auto& h : households) housed += h.home >= 0;
-        add("homes", !households.empty() && housed * 2 >= int(households.size()), "proper homes for most");
+        count("homes", float(housed), std::max(1.f, std::ceil(households.size() / 2.f)), "proper homes for most households");
         add("tower", built("tower") != nullptr, "a watchtower to see them coming");
     }
     return v;

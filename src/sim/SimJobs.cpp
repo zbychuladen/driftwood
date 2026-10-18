@@ -7,6 +7,32 @@
 namespace dw {
 
 // ---------------------------------------------------------------- path
+// Whether a tile can be walked to from camp, over land and finished docks and
+// bridges. Worked out again only when the ground people can walk on changes.
+bool Sim::reachable(int x, int y) {
+    if (!inb(x, y)) return false;
+    const auto& solid = walkGrid();
+    if (reachSig != walkSig || reachMap.size() != size_t(GW * GH)) {
+        reachSig = walkSig;
+        reachMap.assign(GW * GH, 0);
+        std::vector<int> q{idx(campX, campY)};
+        reachMap[q[0]] = 1;
+        for (size_t k = 0; k < q.size(); k++) {
+            int cx = q[k] % GW, cy = q[k] / GW;
+            const int D[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+            for (auto& d : D) {
+                int nx = cx + d[0], ny = cy + d[1];
+                if (!inb(nx, ny)) continue;
+                int j = idx(nx, ny);
+                if (reachMap[j] || (tt[j] < 2 && solid[j] != 2)) continue;
+                reachMap[j] = 1;
+                q.push_back(j);
+            }
+        }
+    }
+    return reachMap[idx(x, y)] != 0;
+}
+
 // Which tiles buildings make solid (1), or walkable over water (2, a dock).
 // Rebuilt only when buildings start, finish or move.
 const std::vector<uint8_t>& Sim::walkGrid() {
@@ -27,6 +53,7 @@ const std::vector<uint8_t>& Sim::walkGrid() {
 }
 
 std::vector<std::pair<float, float>> Sim::findPath(float fx, float fy, float tx, float ty) {
+    pathFailed = false;
     int sx = std::clamp(int(fx), 0, GW - 1), sy = std::clamp(int(fy), 0, GH - 1);
     int gx = std::clamp(int(tx), 0, GW - 1), gy = std::clamp(int(ty), 0, GH - 1);
     std::vector<std::pair<float, float>> path;
@@ -52,7 +79,7 @@ std::vector<std::pair<float, float>> Sim::findPath(float fx, float fy, float tx,
     g[s] = 0;
     open.push({0, s});
     int it = 0;
-    while (!open.empty() && it++ < 8000) {
+    while (!open.empty() && it++ < 60000) {
         int cur = open.top().second; open.pop();
         if (cur == goal) break;
         if (closed[cur]) continue;
@@ -68,7 +95,7 @@ std::vector<std::pair<float, float>> Sim::findPath(float fx, float fy, float tx,
             if (ng < g[ni]) { g[ni] = ng; came[ni] = cur; open.push({ng + std::hypot(float(nx - gx), float(ny - gy)), ni}); }
         }
     }
-    if (came[goal] < 0) return path;
+    if (came[goal] < 0) { pathFailed = true; return path; }
     for (int c = goal; c != s && c >= 0; c = came[c]) path.push_back({c % GW + .5f, c / GW + .5f});
     std::reverse(path.begin(), path.end());
     if (!path.empty()) path.pop_back();
@@ -134,7 +161,7 @@ std::vector<std::pair<int, int>> Sim::frontier() {
     if (x1 < x0 || y1 < y0) return out;
     for (int k = 0; k < 600 && out.size() < 40; k++) {
         int x = x0 + ri(x1 - x0 + 1), y = y0 + ri(y1 - y0 + 1), i = idx(x, y);
-        if (!explored[i] || tt[i] < 2) continue;
+        if (!explored[i] || tt[i] < 2 || !reachable(x, y)) continue;   // never a spot on an islet nobody can walk to
         bool f = false;
         for (int yy = -2; yy <= 2 && !f; yy++) for (int xx = -2; xx <= 2; xx++)
             if (inb(x + xx, y + yy) && !explored[idx(x + xx, y + yy)]) { f = true; break; }

@@ -243,98 +243,129 @@ void Game::drawSettlers(Rectangle a) {
     endScroll(a, sideScroll, y + sideScroll.y - a.y + 20);
 }
 
+// What a line, an ask or an appointment would do, in words, for a tooltip.
+static std::string lineTip(Sim& sim, const Person& p, const Line& l) {
+    std::string will = sim.likely(p, l);
+    std::string s = cat("Costs ", l.cost, " rapport if ", p.name, " goes along. ");
+    s += will == "agreed" ? cat(p.name, " would go along now.") : will == "haggled" ? cat(p.name, " would agree but start a few hours later.") : cat(p.name, " would refuse (it costs nothing).");
+    if (sim.contrary(p)) s += cat(" Contrary right now: ", p.name, " would do the opposite.");
+    else if (p.lastTold == sim.day()) s += " Narrated already today: a second line irritates them (less buy-in).";
+    s += cat(" Pushed too often (", int(Sim::tolerance(p)), " lines close together) they turn contrary for a day and a half.");
+    if (l.cost <= 4) s += " It fits what they want, so they warm to the narrator a little.";
+    else if (l.cost >= 9) s += " It goes against what they want, so they cool a little.";
+    return s;
+}
+
 void Game::drawNarrator(Rectangle a) {
-    beginScroll(a, sideScroll);
-    float x = a.x, w = a.width - 10, y = a.y - sideScroll.y;
-    y = drawLedger(x, y, w);
-    // how much they buy in, on average: a feel, not a number (the rapport to spend is in the top bar)
-    y += sectionTitle("How much they buy in", x, y);
-    float f = sim.avgBuyIn();
-    bar({x, y + 6, w, 10}, f / 100, T.narrator, T.panel2);
-    y += 26;
-    if (Person* rv = sim.rival >= 0 ? sim.person(sim.rival) : nullptr) {
-        // the rival's following, on the same scale, for comparison
-        text(F.bold, sim.overruled() ? cat(rv->name, " plans the village now") : cat(rv->name, "'s following"), x, y, 13, T.berry);
-        y += 18;
-        bar({x, y + 2, w, 10}, sim.rivalStanding() / 100, T.berry, T.panel2);
-        y += 20;
-    }
-    y += wrapped(F.body, f > 75 ? "They chat with the narrator like an old friend and mostly go along with the story." : f > 50 ? "They take the narration in their stride and usually play along." : f > 25 ? "They put up with being narrated, some days more than others." : "They are tired of being narrated. Lines rarely land.", x, y, w, 14, T.muted) + 18;
-    // narrate one settler
-    y += sectionTitle("Narrate", x, y);
-    Person* p = sim.person(selected);
-    if (!p || p->status != "member" || p->child) {
-        y += wrapped(F.body, "Select an adult settler on the map or in the Settlers tab, then narrate what they do next. Lines land with those who buy in.", x, y, w, 14, T.muted) + 16;
+    // three views: what needs doing, one settler, the whole village
+    int live = 0;
+    for (auto& e : ledger.visible()) live += !e.sorted;
+    std::string views[3] = {live ? cat("Ledger (", live, ")") : std::string("Ledger"), "Narrate", "Village"};
+    float sw = (a.width - 10) / 3;
+    for (int i = 0; i < 3; i++)
+        if (button({a.x + i * sw, a.y, sw - 6, 28}, views[i], true, narratorView == i, 13)) { narratorView = i; sideScroll.y = 0; }
+    tip({a.x, a.y, sw - 6, 28}, "What is going wrong in the village, the year's trial, and who could help.");
+    tip({a.x + sw, a.y, sw - 6, 28}, "Narrate what the selected settler does next.");
+    tip({a.x + sw * 2, a.y, sw - 6, 28}, "How much the village buys in, the rival, words in the sand and proposals.");
+    Rectangle body{a.x, a.y + 38, a.width, a.height - 38};
+    beginScroll(body, sideScroll);
+    float x = body.x, w = body.width - 10, y = body.y - sideScroll.y;
+    if (narratorView == 0) y = drawLedger(x, y, w);
+    else if (narratorView == 1) {
+        Person* p = sim.person(selected);
+        if (!p || p->status != "member" || p->child) {
+            y += wrapped(F.body, "Select an adult settler on the map or in the Settlers tab, then narrate what they do next. Lines land with those who buy in.", x, y, w, 14, T.muted) + 16;
+        } else {
+            y += sectionTitle(p->name, x, y);
+            y += wrapped(F.body, cat("Buys in ", Sim::buyInWord(p->buyIn), ". ", sim.contrary(*p) ? "Contrary right now: they will do the opposite." : p->lastTold == sim.day() ? "Already narrated today. Push too often and they turn contrary." : "Once a day is welcome."), x, y, w, 14, T.text) + 8;
+            y += wrapped(F.body, "If they go along, the line's price comes out of your rapport. Rest on a line to see what it would do.", x, y, w, 13.5f, T.muted) + 6;
+            for (auto& l : sim.linesFor(*p)) {
+                float tw = w - 28 - 52;
+                float th = wrapped(F.hand, l.text, 0, 0, tw, 19, T.text, false);
+                Rectangle r{x, y, w, th + 16};
+                bool afford = float(l.cost) <= sim.rapport, hot = afford && hovered(r);
+                std::string will = sim.likely(*p, l);
+                DrawRectangleRounded(r, .14f, 6, hot ? T.hover : T.panel2);
+                DrawRectangle(int(x), int(y + 6), 3, int(th + 4), T.narrator);
+                wrapped(F.hand, l.text, x + 14, y + 6, tw, 19, afford ? T.text : T.muted);
+                std::string price = cat(l.cost);
+                const char* hint = !afford ? "can't afford" : will == "agreed" ? "will" : will == "haggled" ? "later" : "won't";
+                text(F.bold, price, x + w - 14 - measure(F.bold, price, 15).x, y + 8, 15, afford ? T.narrator : T.berry);
+                text(F.body, hint, x + w - 14 - measure(F.body, hint, 11).x, y + 26, 11, will == "refused" || !afford ? T.berry : T.muted);
+                tip(r, afford ? lineTip(sim, *p, l) : cat("Costs ", l.cost, " rapport and you have ", int(sim.rapport), ". Rapport comes in every day from how much they buy in."));
+                if (afford && clicked(r)) sim.narrate(*p, l);
+                y += r.height + 6;
+            }
+            y += 4;
+            if (sim.lastToldName == p->name && !sim.lastReply.empty()) {
+                std::string r = sim.lastReply == "agreed" ? p->name + " went along with it." : sim.lastReply == "haggled" ? p->name + " will, in their own time." : sim.lastReply == "refused" ? p->name + " would rather not."
+                              : sim.lastReply == "pushed" ? "Twice in a day. " + p->name + " rolled their eyes." : p->name + " has had enough narrating and is doing the opposite.";
+                if (!sim.lastSaid.empty()) r += " \"" + sim.lastSaid + "\"";
+                y += wrapped(F.body, r, x, y, w, 14, T.narrator) + 6;
+            }
+        }
     } else {
-        y += wrapped(F.body, cat(p->name, " buys in ", Sim::buyInWord(p->buyIn), ". ", sim.contrary(*p) ? "Contrary right now: they will do the opposite." : p->lastTold == sim.day() ? "Already narrated today. Push too often and they turn contrary." : "Once a day is welcome."), x, y, w, 14, T.text) + 8;
-        y += wrapped(F.body, "Choose what happens next. If they go along, the line's price comes out of your rapport. The less they buy in, the more it costs and the likelier they say no.", x, y, w, 14, T.muted) + 6;
-        for (auto& l : sim.linesFor(*p)) {
-            float tw = w - 28 - 52;
-            float th = wrapped(F.hand, l.text, 0, 0, tw, 19, T.text, false);
-            Rectangle r{x, y, w, th + 16};
-            bool afford = float(l.cost) <= sim.rapport, hot = afford && hovered(r);
-            std::string will = sim.likely(*p, l);
-            DrawRectangleRounded(r, .14f, 6, hot ? T.hover : T.panel2);
-            DrawRectangle(int(x), int(y + 6), 3, int(th + 4), T.narrator);
-            wrapped(F.hand, l.text, x + 14, y + 6, tw, 19, afford ? T.text : T.muted);
-            std::string price = cat(l.cost);
-            const char* hint = !afford ? "can't afford" : will == "agreed" ? "will" : will == "haggled" ? "later" : "won't";
-            text(F.bold, price, x + w - 14 - measure(F.bold, price, 15).x, y + 8, 15, afford ? T.narrator : T.berry);
-            text(F.body, hint, x + w - 14 - measure(F.body, hint, 11).x, y + 26, 11, will == "refused" || !afford ? T.berry : T.muted);
-            if (afford && clicked(r)) sim.narrate(*p, l);
-            y += r.height + 6;
+        // how much they buy in, on average: a feel, not a number (the rapport to spend is in the top bar)
+        y += sectionTitle("How much they buy in", x, y);
+        float f = sim.avgBuyIn();
+        bar({x, y + 6, w, 10}, f / 100, T.narrator, T.panel2);
+        tip({x, y, w, 20}, "Buy-in sets what lines cost and whether settlers go along, and the average is where your daily rapport comes from.");
+        y += 26;
+        if (Person* rv = sim.rival >= 0 ? sim.person(sim.rival) : nullptr) {
+            text(F.bold, sim.overruled() ? cat(rv->name, " plans the village now") : cat(rv->name, "'s following"), x, y, 13, T.berry);
+            y += 18;
+            bar({x, y + 2, w, 10}, sim.rivalStanding() / 100, T.berry, T.panel2);
+            tip({x, y - 18, w, 32}, cat("If ", rv->name, "'s following stays above the buy-in for ten days, they take over the planning: blueprints and appointments stop working until the village turns back. Met petitions, trials survived ready and less resentment bring people back."));
+            y += 20;
         }
-        y += 4;
-        if (sim.lastToldName == p->name && !sim.lastReply.empty()) {
-            std::string r = sim.lastReply == "agreed" ? p->name + " went along with it." : sim.lastReply == "haggled" ? p->name + " will, in their own time." : sim.lastReply == "refused" ? p->name + " would rather not."
-                          : sim.lastReply == "pushed" ? "Twice in a day. " + p->name + " rolled their eyes." : p->name + " has had enough narrating and is doing the opposite.";
-            if (!sim.lastSaid.empty()) r += " \"" + sim.lastSaid + "\"";
-            y += wrapped(F.body, r, x, y, w, 14, T.narrator) + 6;
+        y += wrapped(F.body, f > 75 ? "They chat with the narrator like an old friend and mostly go along with the story." : f > 50 ? "They take the narration in their stride and usually play along." : f > 25 ? "They put up with being narrated, some days more than others." : "They are tired of being narrated. Lines rarely land.", x, y, w, 14, T.muted) + 18;
+        // words in the sand
+        y += sectionTitle("Words in the sand", x, y);
+        y += wrapped(F.body, "Write a line. They will find it at dawn and take it to heart. Once a day.", x, y, w, 14, T.muted) + 8;
+        bool enter = textField({x, y, w - 84, 36}, sandText, sandFocus, 120, "Winter will be long and hungry...");
+        Rectangle wr{x + w - 76, y + 3, 76, 30};
+        tip(wr, "Free, once a day. Found at dawn: words about food, building, exploring, wood, peace, danger, joy or purpose push the whole camp that way for a day, and everyone buys in a little more. Words they cannot make sense of only start an argument.");
+        if (button(wr, "Write", true, false, 14) || enter) {
+            auto r = sim.writeSand(sandText);
+            if (!r.empty()) { sandNote = r; if (r.find("tide") == std::string::npos) sandText.clear(); }
+            sandFocus = false;
         }
-        y += 10;
+        y += 44;
+        if (!sandNote.empty()) y += wrapped(F.body, sandNote, x, y, w, 13.5f, T.narrator) + 6;
+        y += 12;
+        // proposals
+        y += sectionTitle("Propose a project", x, y);
+        y += wrapped(F.body, "Plant an idea. The settlers argue and vote. One proposal a day.", x, y, w, 14, T.muted) + 8;
+        bool used = sim.lastProposal == sim.day();
+        auto props = sim.proposalList();
+        if (props.empty()) y += wrapped(F.body, "No new ideas right now. Some unlock later (a dock, a signal fire, children).", x, y, w, 14, T.muted) + 8;
+        for (auto* o : props) {
+            bool gok = sim.giftOk(*o);
+            float top = y;
+            float tw = w - 104;
+            std::string info = o->desc + cat(" ", o->wood, " wood", o->stone ? cat(", ", o->stone, " stone") : "", ".");
+            float hgt = 22 + wrapped(F.body, info, x + 10, 0, tw, 13, T.muted, false);
+            std::string gl;
+            if (!o->gift.empty()) { auto* hld = sim.giftHolder(o->gift, o->min); gl = gok ? giftInfo().at(o->gift).n + ": " + hld->name : "needs a skilled " + lower(giftInfo().at(o->gift).n); hgt += 18; }
+            DrawRectangleRounded({x, top, w, hgt + 14}, .1f, 6, T.panel2);
+            text(F.bold, o->name, x + 10, top + 8, 15, T.text);
+            float yy = top + 30;
+            yy += wrapped(F.body, info, x + 10, yy, tw, 13, T.muted);
+            if (!gl.empty()) text(F.bold, gl, x + 10, yy, 12.5f, gok ? T.ok : T.berry);
+            Rectangle pr{x + w - 92, top + (hgt + 14) / 2 - 15, 82, 30};
+            tip(pr, used ? "One proposal a day; try again tomorrow." : !gok ? "Nobody here has the skill it needs yet." : "Free. The adults vote: passed, it goes on the plan as the narrator's idea and those who voted yes buy in more; turned down, everyone buys in a little less.");
+            if (button(pr, "Propose", !used && gok, false, 13)) sim.propose(o->key);
+            y = top + hgt + 20;
+        }
+        if (sim.vote) {
+            auto& v = *sim.vote;
+            std::string s2 = cat(v.name, ": ", v.pass ? "approved " : "rejected ", v.y, " to ", v.n, ".\n");
+            for (auto& r : v.rows) if (auto* q = sim.person(r.pid)) s2 += q->name + (r.yes ? " yes" : " no") + " (" + r.why + ").  ";
+            DrawRectangle(int(x), int(y), 3, int(wrapped(F.body, s2, x + 12, y + 6, w - 16, 13.5f, T.text, false) + 12), T.narrator);
+            y += wrapped(F.body, s2, x + 12, y + 6, w - 16, 13.5f, T.text) + 18;
+        }
     }
-    // words in the sand
-    y += sectionTitle("Words in the sand", x, y);
-    y += wrapped(F.body, "Write a line. They will find it at dawn and take it to heart. Once a day.", x, y, w, 14, T.muted) + 8;
-    bool enter = textField({x, y, w - 84, 36}, sandText, sandFocus, 120, "Winter will be long and hungry...");
-    if (button({x + w - 76, y + 3, 76, 30}, "Write", true, false, 14) || enter) {
-        auto r = sim.writeSand(sandText);
-        if (!r.empty()) { sandNote = r; if (r.find("tide") == std::string::npos) sandText.clear(); }
-        sandFocus = false;
-    }
-    y += 44;
-    if (!sandNote.empty()) y += wrapped(F.body, sandNote, x, y, w, 13.5f, T.narrator) + 6;
-    y += 12;
-    // proposals
-    y += sectionTitle("Propose a project", x, y);
-    y += wrapped(F.body, "Plant an idea. The settlers argue and vote. One proposal a day.", x, y, w, 14, T.muted) + 8;
-    bool used = sim.lastProposal == sim.day();
-    auto props = sim.proposalList();
-    if (props.empty()) y += wrapped(F.body, "No new ideas right now. Some unlock later (a dock, a signal fire, children).", x, y, w, 14, T.muted) + 8;
-    for (auto* o : props) {
-        bool gok = sim.giftOk(*o);
-        float top = y;
-        float tw = w - 104;
-        std::string info = o->desc + cat(" ", o->wood, " wood", o->stone ? cat(", ", o->stone, " stone") : "", ".");
-        float hgt = 22 + wrapped(F.body, info, x + 10, 0, tw, 13, T.muted, false);
-        std::string gl;
-        if (!o->gift.empty()) { auto* hld = sim.giftHolder(o->gift, o->min); gl = gok ? giftInfo().at(o->gift).n + ": " + hld->name : "needs a skilled " + lower(giftInfo().at(o->gift).n); hgt += 18; }
-        DrawRectangleRounded({x, top, w, hgt + 14}, .1f, 6, T.panel2);
-        text(F.bold, o->name, x + 10, top + 8, 15, T.text);
-        float yy = top + 30;
-        yy += wrapped(F.body, info, x + 10, yy, tw, 13, T.muted);
-        if (!gl.empty()) text(F.bold, gl, x + 10, yy, 12.5f, gok ? T.ok : T.berry);
-        if (button({x + w - 92, top + (hgt + 14) / 2 - 15, 82, 30}, "Propose", !used && gok, false, 13)) sim.propose(o->key);
-        y = top + hgt + 20;
-    }
-    if (sim.vote) {
-        auto& v = *sim.vote;
-        std::string s = cat(v.name, ": ", v.pass ? "approved " : "rejected ", v.y, " to ", v.n, ".\n");
-        for (auto& r : v.rows) if (auto* q = sim.person(r.pid)) s += q->name + (r.yes ? " yes" : " no") + " (" + r.why + ").  ";
-        DrawRectangle(int(x), int(y), 3, int(wrapped(F.body, s, x + 12, y + 6, w - 16, 13.5f, T.text, false) + 12), T.narrator);
-        y += wrapped(F.body, s, x + 12, y + 6, w - 16, 13.5f, T.text) + 18;
-    }
-    endScroll(a, sideScroll, y + sideScroll.y - a.y + 20);
+    endScroll(body, sideScroll, y + sideScroll.y - body.y + 20);
 }
 
 void Game::drawCamp(Rectangle a) {
@@ -538,7 +569,14 @@ void Game::drawDecisions() {
             float rh = wrapped(F.body, r.text, 0, 0, w - pad * 2 - 74, 14, T.text, false) + 14;
             Rectangle rr{x + pad, yy, w - pad * 2, rh};
             int qid = q.id;
+            // what this answer would do
+            std::string why;
+            if (r.kind == "honest") why = cat("The truth. ", p->name, " buys in more (+4) and you gain a little rapport.", q.topic == "winter" && !q.truth ? " Warned, they gather food harder for a day." : q.topic == "friend" && q.truth ? " They warm to their friend too." : "");
+            else if (r.kind == "teasing") why = cat("A joke. ", p->name, " feels more part of things (less lonely, happier)", p->has("gloomy") ? cat(", but ", p->name, " is prone to gloom and will take it badly (less buy-in).") : std::string(" and buys in a little more."));
+            else why = cat("What they want to hear: happier now and a little more buy-in. Most of the time it comes out within one to three days, and then ", p->name, " buys in much less (-10), is unhappy and you lose rapport.");
+            why += cat(" Left unanswered, the question lapses in ", left, left == 1 ? " hour" : " hours", " and they buy in a little less.");
             paint.push_back([=, this] {
+                tip(rr, why);
                 bool hot = hovered(rr);
                 DrawRectangleRounded(rr, .2f, 6, hot ? T.hover : T.panel2);
                 text(F.bold, t, rr.x + 10, rr.y + 7, 13, r.kind == "misleading" ? T.berry : r.kind == "teasing" ? T.ember : T.ok);
@@ -555,7 +593,8 @@ void Game::drawDecisions() {
         if (!hh) continue;
         int left = std::max(0, pt.due - sim.day());
         bool open = openPetition == pt.id;
-        std::string head = sim.householdName(*hh) + (pt.kind == "feast" ? " ask for a feast" : pt.kind == "home" ? " ask for a better home" : " ask a favour"), when = left == 0 ? "today" : cat(left, "d");
+        std::string who = sim.householdName(*hh), verb = who.find(" and ") == std::string::npos ? " asks" : " ask";
+        std::string head = who + verb + (pt.kind == "feast" ? " for a feast" : pt.kind == "home" ? " for a better home" : " a favour"), when = left == 0 ? "today" : cat(left, "d");
         Rectangle hr{x + 6, yy - 4, w - 12, 26};
         rows.push_back({hr, -1000 - pt.id});
         paint.push_back([=] {
@@ -565,6 +604,7 @@ void Game::drawDecisions() {
             text(F.body, when, x + w - pad - measure(F.body, when, 13).x, yy + 1, 13, left <= 2 ? T.berry : T.muted);
         });
         yy += 26;
+        paint.push_back([=, this] { tip(hr, cat("Met by ", sim.petitionNeed(pt), " within ", left, left == 1 ? " day" : " days", ": +6 rapport, and the household buys in more and is happier. If the day passes: -4 rapport, and they feel unheard (less buy-in). Meeting it also draws them back from the rival.")); });
         if (!open) continue;
         std::string say = "\"" + pt.text + "\"", need = "Met by " + sim.petitionNeed(pt) + ".";
         float th = wrapped(F.hand, say, 0, 0, w - pad * 2, 21, T.text, false), nh = wrapped(F.body, need, 0, 0, w - pad * 2, 13.5f, T.muted, false);
@@ -583,7 +623,8 @@ void Game::drawDecisions() {
 }
 
 // The Narrator's Ledger: what is going wrong, who could fix it and what each
-// size of nudge would cost, and the roles and seasons already given out.
+// size of nudge would cost, and the roles and seasons already given out. Read
+// through the steadying board, so gaps do not blink in and out.
 float Game::drawLedger(float x, float y, float w) {
     // the trial the narrator has seen coming this year, and how ready the village is
     for (auto& t : sim.trials) {
@@ -593,61 +634,88 @@ float Game::drawLedger(float x, float y, float w) {
         std::string when = t.active ? cat(Sim::trialName(t.kind), ", day ", sim.day() - t.start + 1, " of 10. We were ", int(t.ready * 100), "% ready.")
                                     : cat(Sim::trialName(t.kind), ", in ", in, in == 1 ? " day." : " days.");
         when[0] = char(std::toupper(when[0]));
-        y += wrapped(F.bold, when, x, y, w, 14, t.active ? T.berry : T.text) + 4;
+        float wh = wrapped(F.bold, when, x, y, w, 14, t.active ? T.berry : T.text) + 4;
+        tip({x, y, w, wh}, t.active ? "For ten days the village pays for whatever it was missing, harder each year. When it ends, rapport and buy-in rise if the village was ready, and fall if not."
+                                    : "Readiness is measured on the day it starts: each line below met makes the trial bite less. Ready, the village earns rapport and buy-in when it ends.");
+        y += wh;
         if (!t.active)
             for (auto& n : sim.trialChecklist(t.kind)) {
                 text(F.bold, n.met ? "+" : "-", x + 4, y, 14, n.met ? T.ok : T.berry);
-                y += wrapped(F.body, n.text, x + 20, y, w - 20, 13.5f, n.met ? T.muted : T.text) + 2;
+                std::string line = n.text;
+                if (n.have >= 0) line += cat(":  ", int(std::floor(std::min(n.have, n.need))), " of ", int(n.need));
+                float lh = wrapped(F.body, line, x + 20, y, w - 50, 13.5f, n.met ? T.muted : T.text);
+                if (n.have >= 0 && !n.met) bar({x + w - 28, y + 5, 24, 6}, n.have / std::max(1.f, n.need), T.ember, T.panel2);
+                y += lh + 2;
             }
         y += 10;
     }
     y += sectionTitle("Ledger", x, y);
-    auto gaps = sim.ledger();
     bool night = sim.hour() < 7 || sim.hour() >= 18;
-    if (gaps.empty()) y += wrapped(F.body, night ? "Evening. The Ledger picks up again in the morning, when the work starts." : "Nothing pressing. The village is managing on its own.", x, y, w, 14, T.muted) + 12;
-    auto small = [&](float bx, float by, const std::string& label, int cost, bool ok) {
+    ledger.update(sim.ledger(), sim.tMin, night);
+    auto shown = ledger.visible();
+    if (shown.empty()) y += wrapped(F.body, night ? "Evening. The Ledger picks up again in the morning, when the work starts." : "Nothing pressing. The village is managing on its own.", x, y, w, 14, T.muted) + 12;
+    else if (night) y += wrapped(F.body, "As things stood at sunset; it picks up again in the morning.", x, y, w, 13, T.muted) + 8;
+    auto small = [&](float bx, float by, const std::string& label, int cost, bool ok, const std::string& why) {
         std::string t = cat(label, " ", cost);
-        float bw = measure(F.bold, t, 12).x + 18;
-        bool r = button({bx, by, bw, 26}, t, ok && float(cost) <= sim.rapport, false, 12);
-        return std::pair<bool, float>{r, bw};
+        float bw = measure(F.bold, t, 12).x + 16;
+        Rectangle r{bx, by, bw, 26};
+        tip(r, why);
+        bool hit = button(r, t, ok && float(cost) <= sim.rapport && !sim.overruled(), false, 12);
+        return std::pair<bool, float>{hit, bw};
     };
-    for (auto& g : gaps) {
-        DrawCircle(int(x + 4), int(y + 9), 4, T.ember);
-        y += wrapped(F.bold, g.text, x + 16, y, w - 16, 14, T.text) + 2;
-        y += wrapped(F.body, g.fix, x + 16, y, w - 16, 13, T.muted) + 6;
-        for (auto& c : g.candidates) {
+    for (auto& e : shown) {
+        const Gap& g = e.gap;
+        bool open = openGap == g.key;
+        // the gap itself: click to see the fix and everyone who could help
+        float th = wrapped(F.bold, g.text, 0, 0, w - 34, 14, T.text, false);
+        Rectangle hr{x, y - 2, w, th + 6};
+        if (hovered(hr)) DrawRectangleRounded(hr, .15f, 6, T.panel2);
+        DrawCircle(int(x + 5), int(y + 8), 4, e.sorted ? T.muted : T.ember);
+        wrapped(F.bold, g.text, x + 16, y, w - 34, 14, e.sorted ? T.muted : T.text);
+        text(F.bold, open ? "-" : "+", x + w - 14, y, 14, T.muted);
+        tip(hr, e.sorted ? "This seems sorted now; it stays a little longer in case it comes back." : open ? "Click to fold it away." : "Click for the longer-term fix and everyone who could help.");
+        if (clicked(hr)) openGap = open ? "" : g.key;
+        y += th + 6;
+        if (e.sorted) { y += wrapped(F.body, "Seems sorted for now.", x + 16, y, w - 16, 12.5f, T.muted) + 8; continue; }
+        if (open) y += wrapped(F.body, g.fix, x + 16, y, w - 16, 13, T.muted) + 6;
+        size_t many = open ? g.candidates.size() : std::min<size_t>(1, g.candidates.size());
+        for (size_t ci = 0; ci < many; ci++) {
+            const auto& c = g.candidates[ci];
             Person* p = sim.person(c.pid);
             if (!p) continue;
             text(F.bold, p->name, x + 16, y + 1, 13, T.text);
             text(F.body, c.why, x + 16 + measure(F.bold, p->name, 13).x + 8, y + 2, 12, T.muted);
             y += 20;
             float bx = x + 16;
-            auto [d, w1] = small(bx, y, "Today", c.cost, true);
+            Line l{g.job, cat(p->name, " decided to help."), -1, c.cost};
+            for (auto& o : sim.linesFor(*p, true)) if (o.job == g.job) l = o;
+            auto [d, w1] = small(bx, y, "Today", c.cost, true, lineTip(sim, *p, l));
             bx += w1 + 6;
-            if (d) {
-                Line l{g.job, cat(p->name, " decided to help."), -1, c.cost};
-                for (auto& o : sim.linesFor(*p, true)) if (o.job == g.job) l = o;
-                ledgerNote = p->name + ": " + sim.narrate(*p, l);
-            }
+            if (d) ledgerNote = p->name + ": " + sim.narrate(*p, l);
             if (g.job != "rest") {
-                auto [s, w2] = small(bx, y, "Season", sim.seasonCost(*p, g.job), true);
+                int next = ((sim.day() - 1) / 10 + 1) * 10 + 1;
+                int sc = sim.seasonCost(*p, g.job), rc = sim.roleCost(*p, g.job);
+                auto [s2, w2] = small(bx, y, "Season", sc, true, cat("Costs ", sc, " rapport now. ", p->name, " spends the rest of the season (until day ", next, ") on it, in daylight. A long ask needs more buy-in than a day's; refused, it costs nothing."));
                 bx += w2 + 6;
-                if (s) ledgerNote = p->name + ": " + sim.askSeason(*p, g.job);
-                auto [r, w3] = small(bx, y, cat("Make ", Sim::roleName(g.job)), sim.roleCost(*p, g.job), !p->duty);
-                if (r) ledgerNote = p->name + ": " + sim.appoint(*p, g.job);
+                if (s2) ledgerNote = p->name + ": " + sim.askSeason(*p, g.job);
+                auto [r2, w3] = small(bx, y, "Role", rc, !p->duty, p->duty ? cat(p->name, " already has a role or a season's work.") : cat("Costs ", rc, " rapport now and 1 a day until you revoke it. ", p->name, " becomes the camp's ", Sim::roleName(g.job), " for good. Refused, they are a little put out (less buy-in)."));
+                if (r2) ledgerNote = p->name + ": " + sim.appoint(*p, g.job);
             }
             y += 32;
         }
-        if (!g.job.empty()) {
-            auto [e, we] = small(x + 16, y, "Ask everyone", sim.appealCost(g.job), true);
-            if (e) ledgerNote = sim.appeal(g.job);
+        if (open && !g.job.empty()) {
+            int yes = 0, all = 0;
+            for (auto* q : sim.members()) if (!q->child) { all++; Line ql{g.job, "", -1, Sim::price(*q, g.job, 1)}; yes += !sim.contrary(*q) && q->sick <= 0 && sim.likely(*q, ql) != "refused"; }
+            int ac = sim.appealCost(g.job);
+            auto [ev, we] = small(x + 16, y, "Ask everyone", ac, true, cat("Costs ", ac, " rapport. Everyone who buys in enough (about ", yes, " of ", all, " now) spends today on it; the rest say no."));
+            if (ev) ledgerNote = sim.appeal(g.job);
             y += 34;
         }
         y += 6;
     }
     if (!ledgerNote.empty()) {
         std::string n = ledgerNote;
-        for (auto [k, v] : std::vector<std::pair<std::string, std::string>>{{"agreed", "agreed"}, {"haggled", "will, later"}, {"refused", "said no"}, {"unaffordable", "not enough rapport"}, {"pushed", "twice in a day, rolled their eyes"}, {"contrary", "is doing the opposite"}})
+        for (auto [k, v] : std::vector<std::pair<std::string, std::string>>{{"agreed", "agreed"}, {"haggled", "will, later"}, {"refused", "said no"}, {"unaffordable", "not enough rapport"}, {"pushed", "twice in a day, rolled their eyes"}, {"contrary", "is doing the opposite"}, {"overruled", "the rival plans now"}})
             if (auto at = n.find(k); at != std::string::npos) { n.replace(at, k.size(), v); break; }
         y += wrapped(F.body, n + (sim.lastSaid.empty() ? "" : " \"" + sim.lastSaid + "\""), x, y, w, 14, T.narrator) + 8;
     }
@@ -661,7 +729,9 @@ float Game::drawLedger(float x, float y, float w) {
             if (!p->duty) continue;
             std::string s = p->duty->role ? cat(p->name, ", the ", Sim::roleName(p->duty->job), " (1 rapport a day)") : cat(p->name, ", ", Sim::roleName(p->duty->job), " until the season turns");
             text(F.body, s, x, y + 5, 13, T.text);
-            if (button({x + w - 74, y, 74, 26}, p->duty->role ? "Revoke" : "Let off", true, false, 12)) sim.revoke(*p);
+            Rectangle rb{x + w - 74, y, 74, 26};
+            tip(rb, p->duty->role ? "Ends the role: no more daily rapport, and they go back to choosing their own work." : "Lets them off the season's work early. Nothing is refunded.");
+            if (button(rb, p->duty->role ? "Revoke" : "Let off", true, false, 12)) sim.revoke(*p);
             y += 30;
         }
     }
@@ -696,7 +766,9 @@ void Game::drawBuild(Rectangle a) {
         text(F.bold, d->name, x + 12, y + 8, 15, open ? T.text : T.muted);
         text(F.body, sub, x + 12, y + 30, 12.5f, T.muted);
         if (!need.empty()) wrapped(F.body, need, x + 12, y + 48, w - 110, 12.5f, open ? T.ember : T.muted);
-        if (button({x + w - 84, y + 10, 74, 30}, "Place", open && !sim.pendingPlacement, false, 13)) {
+        Rectangle pb{x + w - 84, y + 10, 74, 30};
+        tip(pb, !open ? why : cat("Mark out a spot; nothing is spent yet. The settlers build it when they see fit, using ", d->wood, " wood", d->stone ? cat(" and ", d->stone, " stone") : std::string(), ". ", d->desc.empty() ? std::string("") : d->desc + " ", "A good spot works better and earns rapport when it is finished; a bad one works worse and costs some."));
+        if (button(pb, "Place", open && !sim.pendingPlacement, false, 13)) {
             if (sim.blueprint(d->key) < 0) say("There is nowhere it can go yet. Explore more of the island, or clear some ground.");
         }
         y += r.height + 6;

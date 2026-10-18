@@ -667,8 +667,19 @@ void WorldView::updateFacings(Sim& s) {
         auto [it, fresh] = tracks.try_emplace(p.id, Track{p.x, p.y, figure::SE});
         Track& t = it->second;
         int f = t.facing;
+        bool keepRef = false;
         if (p.moving) {
-            f = figure::facingToward(p.x - t.x, p.y - t.y, figure::Facing(f));
+            // judged over a stretch of the walk, not frame by frame, and only turning when the new way
+            // clearly wins: a diagonal path no longer flips the figure back and forth
+            float dx = p.x - t.x, dy = p.y - t.y;
+            if (std::hypot(dx, dy) < .3f) keepRef = true;
+            else {
+                float ax = std::abs(dx), ay = std::abs(dy);
+                bool sameAxis = (f == figure::SE || f == figure::NW) ? ax >= ay * .8f : ay >= ax * .8f;
+                int along = figure::facingToward(dx, dy, figure::Facing(f));
+                bool sameWay = (f == figure::SE && dx > 0) || (f == figure::NW && dx < 0) || (f == figure::SW && dy > 0) || (f == figure::NE && dy < 0);
+                if (!(sameAxis && sameWay)) f = along;
+            }
         } else if (p.anim == "fish") {
             // face the water beside them
             const int D[4][2] = {{1, 0}, {0, 1}, {0, -1}, {-1, 0}};
@@ -678,7 +689,8 @@ void WorldView::updateFacings(Sim& s) {
             FocusTarget ft = focusTarget(s, p.focus);
             if (ft.ok && std::hypot(ft.x - p.x, ft.y - p.y) > .3f) f = figure::facingToward(ft.x - p.x, ft.y - p.y, figure::Facing(f));
         }
-        t = {p.x, p.y, f};
+        if (keepRef) t.facing = f;
+        else t = {p.x, p.y, f};
     }
 }
 

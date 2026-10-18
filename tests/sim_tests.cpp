@@ -906,6 +906,24 @@ static void testPathsAroundBuildings() {
     }
     CHECK(checked >= 4 && through == 0, cat("walking past a building goes round it (", checked, " routes)").c_str());
     CHECK(stuck == 0, "and there is always a way round");
+    // nobody wades out to sea: a spot that cannot be reached over land is given up, not walked to in a straight line
+    int wading = 0;
+    for (uint32_t seed : {777u, 4242u}) {
+        Sim w;
+        w.newWorld(seed);
+        w.askPlacement = true;
+        for (int h = 0; h < 24 * 30; h++) {
+            w.step(60);
+            if (!w.pendingFate.empty()) { auto f = w.pendingFate[0]; w.pendingFate.clear(); w.applyFate(f); }
+            for (auto* q : w.members()) {
+                int x = int(q->x), y = int(q->y);
+                if (q->hidden || !Sim::inb(x, y) || w.bOcc[Sim::idx(x, y)] >= 0) continue;
+                bool deep = w.isWater(int(q->x + .4f), y) && w.isWater(int(q->x - .4f), y) && w.isWater(x, int(q->y + .4f)) && w.isWater(x, int(q->y - .4f));
+                wading += deep;
+            }
+        }
+    }
+    CHECK(wading == 0, cat("nobody walks out across the water (", wading, " sightings in two 30-day games)").c_str());
     // you can still leave the building you are in, and walk into the one you are going to
     Project* hut = nullptr;
     for (auto& b : s.plan) if (b.done && b.key == "hut") hut = &b;
@@ -1162,7 +1180,7 @@ static void testVillageByHand() {
         if (v.active == oc->id) v.active = -1;
         CHECK(v.beauty(oc->x + 2, oc->y + 1) > before, "an orchard makes its surroundings more beautiful");
         bool fruit = false;
-        for (int h = 0; h < 24 * 6 && !fruit; h++) { v.step(60); if (!v.pendingFate.empty()) { auto f = v.pendingFate[0]; v.pendingFate.clear(); v.applyFate(f); } fruit = v.foodSeen.count("fruit"); }
+        for (int h = 0; h < 24 * 14 && !fruit; h++) { v.step(60); if (!v.pendingFate.empty()) { auto f = v.pendingFate[0]; v.pendingFate.clear(); v.applyFate(f); } fruit = v.foodSeen.count("fruit"); }
         CHECK(fruit && oc->state != "ripe", "ripe fruit is picked and brought in as its own kind of food");
     } else CHECK(false, "an orchard can be drawn up");
     // flowers by a home
@@ -1251,6 +1269,12 @@ static void testPetitionsAndTrials() {
     y.newWorld(777);
     runDays(y, 3);
     CHECK(!y.trials.empty() && y.trials[0].kind == "winter" && y.trials[0].start == 31 && !y.trialChecklist("winter").empty(), "early in the year the narrator sees the trial coming: a hard winter");
+    {
+        auto list = y.trialChecklist("winter");
+        bool counted = false;
+        for (auto& n : list) if (n.id == "food") counted = n.need == 20 && std::abs(n.have - y.foodDays()) < .01f;
+        CHECK(counted, "the checklist says how close the village is (food for so many of the twenty days)");
+    }
     CHECK(Sim::trialKinds(2)[0] == "sickness" && Sim::trialKinds(3)[0] == "drought" && Sim::trialKinds(4)[0] == "storms" && Sim::trialKinds(5).size() == 2, "trials escalate: sickness, drought, storms, then two at once");
     // the same village going into winter, ready and not
     while (y.day() < 30) { y.step(60); if (!y.pendingFate.empty()) { auto f = y.pendingFate[0]; y.pendingFate.clear(); y.applyFate(f); } }

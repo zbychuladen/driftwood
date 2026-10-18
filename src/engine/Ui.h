@@ -40,6 +40,10 @@ float wrapped(const Font& f, const std::string& s, float x, float y, float w, fl
 bool hovered(Rectangle r);
 bool clicked(Rectangle r);                // released inside r this frame
 bool button(Rectangle r, const std::string& label, bool enabled = true, bool active = false, float size = 15);
+// A note about what something does, shown near the pointer while it rests on r.
+// drawTip() draws it, last thing in the frame.
+void tip(Rectangle r, const std::string& text);
+void drawTip();
 void panel(Rectangle r, Color bg, Color border, float round = .04f);
 void bar(Rectangle r, float v01, Color fill, Color back);
 

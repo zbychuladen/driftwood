@@ -52,7 +52,25 @@ void Sim::updatePerson(Person& p, double dmd) {
     if (!a) { plan_(p); return; }
     if (a->cancel && a->cancel()) { clearQ(p); plan_(p); return; }
     if (a->type == Action::WALK) {
-        if (!a->hasPath) { a->path = findPath(p.x, p.y, a->x, a->y); a->path.push_back({a->x, a->y}); a->hasPath = true; }
+        if (!a->hasPath) {
+            // a spot in open water (beside someone at the shore, say): the nearest dry ground instead
+            int gx = int(a->x), gy = int(a->y);
+            if (inb(gx, gy) && isWater(gx, gy) && walkGrid()[idx(gx, gy)] != 2) {
+                float best = 1e9f, bx = a->x, by = a->y;
+                for (int dy = -2; dy <= 2; dy++) for (int dx = -2; dx <= 2; dx++) {
+                    int nx = gx + dx, ny = gy + dy;
+                    if (!inb(nx, ny) || isWater(nx, ny) || walkGrid()[idx(nx, ny)] == 1) continue;
+                    float cx = nx + .5f, cy = ny + .5f, d = std::hypot(cx - a->x, cy - a->y);
+                    if (d < best) { best = d; bx = cx + std::clamp(a->x - cx, -.35f, .35f); by = cy + std::clamp(a->y - cy, -.35f, .35f); }
+                }
+                a->x = bx; a->y = by;
+            }
+            a->path = findPath(p.x, p.y, a->x, a->y);
+            // no way there over land: give the walk up rather than wade across the sea (a step or two to the water's edge is fine)
+            if (pathFailed && std::hypot(a->x - p.x, a->y - p.y) > 2.5f) { clearQ(p); plan_(p); return; }
+            a->path.push_back({a->x, a->y});
+            a->hasPath = true;
+        }
         float sp = .075f * dm * (p.child ? .85f : 1) * (p.sick > 0 ? .6f : 1) * (weather == "storm" ? .8f : 1) * (onPath(int(p.x), int(p.y)) ? 1.25f : 1);
         int tx0 = int(p.x), ty0 = int(p.y);
         size_t k = 0;

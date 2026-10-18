@@ -796,7 +796,27 @@ void person(const Ctx& c, const dw::Person& p, bool selected, int facing, int de
 
 void personAt(const Ctx& c, const dw::Person& p, bool selected, int facing, int detail) {
     V2 o = wp(p.x, p.y);
-    figure::Pose pose = p.moving ? figure::walk(p.phase) : figure::activity(p.sleeping ? "sleep" : p.anim, float(c.t), p.id);
+    // Walking is judged from how they actually move on screen, not the sim's step-by-step flag:
+    // the stride follows the distance covered (capped, so a fast game does not flicker the legs),
+    // and a figure keeps walking for a moment after it stops, so a pause between steps does not flash a standing pose.
+    bool moving = p.moving;
+    float phase = p.phase;
+    {
+        struct Gait { float x, y, phase; double last; };
+        static std::unordered_map<int, Gait> gaits;
+        double now = GetTime();
+        float dt = GetFrameTime();
+        if (dt > 0 && now > 0) {
+            auto [it, fresh] = gaits.try_emplace(p.id, Gait{p.x, p.y, 0, -1});
+            Gait& g = it->second;
+            float dist = std::hypot(p.x - g.x, p.y - g.y);
+            if (c.effects && !fresh && dist > 1e-4f && dist < 2) { g.phase += std::min(dist * 7.85f, .55f); g.last = now; }
+            if (c.effects) { g.x = p.x; g.y = p.y; }
+            moving = !p.sleeping && g.last >= 0 && now - g.last < .18;
+            phase = g.phase;
+        }
+    }
+    figure::Pose pose = moving ? figure::walk(phase) : figure::activity(p.sleeping ? "sleep" : p.anim, float(c.t), p.id);
     // ease from what they were doing into what they are doing now, instead of snapping
     {
         static std::unordered_map<int, figure::Pose> shown;
@@ -813,7 +833,7 @@ void personAt(const Ctx& c, const dw::Person& p, bool selected, int facing, int 
         }
     }
     if (p.carry && !pose.lying) figure::carrying(pose, p.carry->t);
-    if (p.sick > 0 && !pose.lying && !p.moving && pose.prop == figure::NONE) figure::unwell(pose);
+    if (p.sick > 0 && !pose.lying && !moving && pose.prop == figure::NONE) figure::unwell(pose);
     if (!pose.lying) ellipse(o.x, o.y, 9, 4, SHADOW);
     if (selected) ring(o.x, o.y, pose.lying ? 22 : 13, pose.lying ? 11 : 6.5f, 1.8f, hex(0xffd27a));
     figure::Look look = figure::lookOf(p);

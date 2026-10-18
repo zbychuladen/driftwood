@@ -54,7 +54,23 @@ void unload() {
         if (f->texture.id != GetFontDefault().texture.id) UnloadFont(*f);
 }
 
-void beginFrame() { blockersPrev = blockers; blockers.clear(); }
+namespace { std::string tipText, tipShown; double tipSince = 0; }
+void beginFrame() { blockersPrev = blockers; blockers.clear(); tipText.clear(); }
+void tip(Rectangle r, const std::string& text) { if (!text.empty() && hovered(r)) tipText = text; }
+void drawTip() {
+    // after a short rest on the same thing, so it does not flash while the pointer passes over
+    if (tipText != tipShown) { tipShown = tipText; tipSince = GetTime(); }
+    if (tipText.empty() || GetTime() - tipSince < .35) return;
+    float w = 300, pad = 10;
+    float h = wrapped(F.body, tipText, 0, 0, w - pad * 2, 13.5f, T.text, false) + pad * 2;
+    Vector2 m = GetMousePosition();
+    float x = std::min(m.x + 16, float(GetScreenWidth()) - w - 8), y = m.y + 20;
+    if (y + h > GetScreenHeight() - 8) y = m.y - h - 10;
+    DrawRectangleRounded({x + 2, y + 4, w, h}, .1f, 6, Color{40, 50, 40, 50});
+    DrawRectangleRounded({x, y, w, h}, .1f, 6, T.panel);
+    DrawRectangleRoundedLinesEx({x, y, w, h}, .1f, 6, 1, T.line);
+    wrapped(F.body, tipText, x + pad, y + pad, w - pad * 2, 13.5f, T.text);
+}
 void block(Rectangle r) { blockers.push_back(r); }
 bool mouseOverUi() {
     Vector2 m = GetMousePosition();

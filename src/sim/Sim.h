@@ -180,12 +180,12 @@ struct Fib { int pid = -1; double due = 0; std::string reveal; };
 // price (cheapest first), and a longer-term fix. job is what a candidate would
 // be asked to do; empty when no one can simply be asked (a missing herbalist).
 struct Candidate { int pid = -1; int cost = 0; std::string why; };
-struct Gap { std::string id, text, job, fix; std::vector<Candidate> candidates; };
+struct Gap { std::string id, text, job, fix; std::vector<Candidate> candidates; std::string key; };   // key: id plus what it is about, stable while it lasts
 // A household: a couple and their children, or one person on their own. Its
 // home is a project id; rising and falling count the days its needs have been
 // met for the next level, or lapsed for its own.
 struct Household { int id = 0; std::vector<int> members; int home = -1; int rising = 0, falling = 0; bool noRoom = false; float toil = 0; };   // toil: a notable household's recent common work
-struct HomeNeed { std::string id, text; bool met = false; };
+struct HomeNeed { std::string id, text; bool met = false; float have = -1, need = 0; };   // have/need: how close, for the countable ones (-1: a yes or no)
 struct HomeCost { int wood = 0, stone = 0; };
 // A household's petition to the narrator: a building, a better home, a feast or
 // a luxury, by a day. hh is the household, pid who asked.
@@ -300,6 +300,7 @@ public:
     // story circle); the building you start in and the one you are going to are
     // let through. Tile centres, the last step to the goal itself left off.
     std::vector<std::pair<float, float>> findPath(float sx, float sy, float tx, float ty);
+    bool reachable(int x, int y);             // can be walked to from camp
 
     // buildings
     Project* built(const std::string& key);
@@ -511,6 +512,9 @@ private:
     void practise(Person& p, const std::string& gift);
     void updateHouseholds();
     const std::vector<uint8_t>& walkGrid();
+    bool pathFailed = false;                  // the last findPath found no way
+    std::vector<uint8_t> reachMap;            // tiles that can be walked to from camp
+    long reachSig = -2;
     std::vector<uint8_t> walkCache;
     long walkSig = -1;
     void homesDaily();                        // homes rise and fall
