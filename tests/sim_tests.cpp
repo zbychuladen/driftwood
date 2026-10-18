@@ -199,12 +199,14 @@ static void testSites() {
     // the forge: a spot beside the huts against one with stone and no homes near
     Project* forge = projectNamed(s, "forge");
     auto forgeSites = sites(s, *forge, 22);
-    const SiteReport *byHomes = nullptr, *byStone = nullptr;
+    // on average, spots by stone and clear of homes against spots beside the homes
+    float homesQ = 0, stoneQ = 0;
+    int nHomes = 0, nStone = 0;
     for (auto& [at, r] : forgeSites) {
-        if (!byHomes && mentions(r, "homes")) byHomes = &r;
-        if (!byStone && mentions(r, "stone") && !mentions(r, "homes")) byStone = &r;
+        if (mentions(r, "homes") && !mentions(r, "stone")) { homesQ += r.quality; nHomes++; }
+        if (mentions(r, "stone") && !mentions(r, "homes")) { stoneQ += r.quality; nStone++; }
     }
-    CHECK(byHomes && byStone && byStone->quality > byHomes->quality, "a forge with stone at hand beats one beside the homes");
+    CHECK(nHomes && nStone && stoneQ / nStone > homesQ / nHomes, cat("a forge with stone at hand beats one beside the homes (", nStone, " and ", nHomes, " spots)").c_str());
     // the well: by fresh water against by the sea
     Project* well = projectNamed(s, "well");
     const SiteReport *sweet = nullptr, *salty = nullptr;
@@ -946,12 +948,93 @@ static void testGoods() {
     }
     CHECK(madeFurniture >= 1, "a carpenter at the workshop makes furniture");
     CHECK(gapsRight == gapsWanted, cat("the ledger names a good homes need that nobody makes, and only then (", gapsRight, " of ", gapsWanted, ")").c_str());
+    // any standing building will do as the home being asked about
     Household h{};
-    Project* home = nullptr;
-    for (auto& x : s.households) if (x.home >= 0) { h = x; home = s.projectById(x.home); }
+    for (auto& b : s.plan) if (b.done) h.home = b.id;
     bool asks = false;
-    if (home) for (auto& n : s.homeNeeds(h, 3)) asks |= n.id == "furniture";
+    for (auto& n : s.homeNeeds(h, 3)) asks |= n.id == "furniture";
     CHECK(asks, "a house needs furniture");
+}
+
+// Status and work: the higher they rise the less they haul; notables lift those
+// beside them and pay for it in standing; the gap breeds resentment; ships trade.
+static void makeAllHomes(Sim& s, const char* key) {
+    for (auto& h : s.households) if (auto* b = s.projectById(h.home)) b->key = key;
+}
+
+static void testStatusAndWork() {
+    std::printf("status and work\n");
+    CHECK(Sim::willing(4, "wood") < .3f && Sim::willing(3, "stone") < Sim::willing(2, "stone") && Sim::willing(1, "wood") == 1 && Sim::willing(4, "craft") == 1,
+          "the higher a household, the less it cares for hard labour, and crafts are still fine");
+
+    // the same village for three days, as it is and with every home a manor
+    float gathered[2];
+    for (int pass = 0; pass < 2; pass++) {
+        Sim s;
+        s.newWorld(20261017);
+        runDays(s, 60);
+        if (pass) makeAllHomes(s, "manor");
+        for (auto& h : s.households) if (h.home < 0) for (auto& b : s.plan) if (b.done && pass && b.key == "leanto") { h.home = b.id; b.key = "manor"; break; }
+        float before = s.stock.food;
+        int fishOrForage = 0;
+        for (int hr = 0; hr < 72; hr++) { s.step(60); s.pendingFate.clear(); for (auto* p : s.members()) fishOrForage += p->kind == "food"; }
+        gathered[pass] = s.stock.food - before + fishOrForage;
+    }
+    CHECK(gathered[1] < gathered[0], cat("a village of notables gathers less food (", int(gathered[1]), " against ", int(gathered[0]), ")").c_str());
+
+    // a notable at common work: those beside them work faster, and too much of it costs the manor
+    Sim n;
+    n.newWorld(20261017);
+    runDays(n, 60);
+    Household* top = nullptr;
+    for (auto& h : n.households) if (h.home >= 0 && n.projectById(h.home) && (!top || h.members.size() > top->members.size())) top = &h;
+    if (!top) { CHECK(false, "a household with a home"); return; }
+    n.projectById(top->home)->key = "manor";
+    Person* lord = n.person(top->members[0]);
+    Person* other = nullptr;
+    for (auto* p : n.members()) if (!p->child && !n.householdOf(p->id)->members.empty() && n.householdOf(p->id) != top) other = p;
+    lord->kind = "wood";
+    CHECK(other && n.alongside(*other, "chop") > 1.15f && n.alongside(*other, "farm") == 1, "working beside a notable who chops wood, others chop faster");
+    int topId = top->id;
+    bool fell = false;
+    for (int d = 0; d < Sim::FALL_DAYS + 2 && !fell; d++) {
+        untilMidnight(n);
+        if (auto* h = n.household(topId)) h->toil = 12;
+        pastMidnight(n);
+        for (int i = 0; i < 6; i++) fell |= n.journal[i].text.find("anything but common work") != std::string::npos;
+    }
+    CHECK(fell, "a notable household always at common work loses its manor");
+
+    // resentment grows below a manor and fades when the gap closes
+    Sim r;
+    r.newWorld(777);
+    runDays(r, 60);
+    Household* rich = nullptr;
+    for (auto& h : r.households) if (h.home >= 0 && r.projectById(h.home)) rich = &h;
+    if (!rich) { CHECK(false, "a household with a home"); return; }
+    int richId = rich->id;
+    Person* poor = nullptr;
+    for (auto* p : r.members()) if (!p->child && r.householdOf(p->id) && r.householdOf(p->id)->id != richId && r.statusOf(*p) <= 1) poor = p;
+    if (!poor) { CHECK(false, "someone of low status"); return; }
+    for (int d = 0; d < 6; d++) { untilMidnight(r); r.projectById(r.household(richId)->home)->key = "manor"; r.household(richId)->falling = 0; pastMidnight(r); }
+    float high = poor->resentment;
+    for (int d = 0; d < 6; d++) { untilMidnight(r); r.projectById(r.household(richId)->home)->key = "hut"; pastMidnight(r); }
+    CHECK(high > 20 && poor->resentment < high, cat("resentment grows below a manor (", int(high), ") and fades once the gap closes (", int(poor->resentment), ")").c_str());
+
+    // a ship calls while a beacon stands, and a notable trades for spices and fine cloth
+    Sim t;
+    t.newWorld(20261017);
+    runDays(t, 30);
+    Project sig;
+    static_cast<ProjectDef&>(sig) = *projectDef("signal");
+    sig.id = t.nextProjId++; sig.done = sig.placed = true; sig.x = t.campX + 6; sig.y = t.campY + 6;
+    t.plan.push_back(sig);
+    makeAllHomes(t, "manor");
+    t.stock.food = 400;
+    t.nextShip = t.day() + 1;
+    float sp = t.good("spices"), fc = t.good("finecloth");
+    untilMidnight(t); pastMidnight(t);
+    CHECK(t.good("spices") > sp && t.good("finecloth") > fc && t.nextShip > t.day(), "a passing ship trades spices and fine cloth with a notable");
 }
 
 int main() {
@@ -969,6 +1052,7 @@ int main() {
     testWorkers();
     testPathsAroundBuildings();
     testGoods();
+    testStatusAndWork();
     testDeterminism();
     testFocus(20261017);
     testFocus(777);

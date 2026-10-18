@@ -213,7 +213,7 @@ V3 cross2(V3 v) { return {-v.y, v.x, 0}; }
 
 bool assembled(const std::string& k) {
     static const char* keys[] = {"hut", "leanto", "longhouse", "store", "school", "forge", "smoke", "loomhouse", "infirmary", "cookhouse",
-                                 "well", "rack", "tower", "lighthouse", "signal", "mine", "dock", "circle", "pottery", "boatyard", "cottage", "house", "manor", "workshop"};
+                                 "well", "rack", "tower", "lighthouse", "signal", "mine", "dock", "circle", "pottery", "boatyard", "cottage", "house", "manor", "workshop", "monument"};
     for (auto s : keys) if (k == s) return true;
     return false;
 }
@@ -529,6 +529,28 @@ Design make(const std::string& key, int id, int x, int y, int w, int h, int fron
         d.walls = cat(seats, " seats");
         d.roof = tripod ? "tripod" : "open";
         d.features = {"seats", "firepit"};
+    } else if (key == "monument") {
+        // a carved stone on stepped footings, raised by a notable household
+        V3 c = b.centre;
+        static const uint32_t STONES[3] = {0xb8b2a4, 0xa6aa9e, 0xc4b49a};
+        static const char* STONE_NAMES[3] = {"grey", "green-grey", "sandstone"};
+        int sk = r.pick(3);
+        Color stone = hex(STONES[sk]);
+        b.add(upright(solid::BOX, c, 1.6f, 1.6f, .25f, 0, draw::shade(stone, .9f), solid::STONE), BASE, FOUNDATION);
+        b.add(upright(solid::BOX, c + V3{0, 0, .25f}, 1.1f, 1.1f, .3f, 0, stone, solid::STONE), BASE, FOUNDATION);
+        bool obelisk = r.chance(.5f), urn = !obelisk && r.chance(.5f);
+        float shaft = scale::MONUMENT - .55f - (obelisk ? .45f : .5f);
+        b.add(upright(solid::BOX, c + V3{0, 0, .55f}, .5f, .5f, shaft, r() * .4f, draw::shade(stone, 1.05f), solid::STONE), WALL, WALLS, true);
+        if (obelisk) b.add(upright(solid::CONE, c + V3{0, 0, .55f + shaft}, .55f, .55f, .45f, 0, draw::shade(stone, 1.1f)), ROOF, ROOFING);
+        else {
+            b.add(upright(solid::BOX, c + V3{0, 0, .55f + shaft}, .7f, .7f, .12f, 0, stone, solid::STONE), ROOF, ROOFING);
+            if (urn) b.add(upright(solid::CONE, c + V3{0, 0, .67f + shaft}, .4f, .4f, .38f, 3.1416f, stone), EXTRA, DETAILS);      // a carved urn
+            else b.add(upright(solid::CYLINDER, c + V3{0, 0, .67f + shaft}, .36f, .36f, .38f, 0, hex(0xc9a94a)), EXTRA, DETAILS);   // a gilded orb
+        }
+        d.made = cat("a ", STONE_NAMES[sk], obelisk ? " obelisk" : urn ? " column with a carved urn" : " column with a gilded orb", " on stepped footings");
+        d.walls = cat(STONE_NAMES[sk], obelisk ? " obelisk" : " column");
+        d.roof = obelisk ? "point" : urn ? "urn" : "orb";
+        d.features = {"plinth", "column"};
     } else if (key == "pottery") {
         // a beehive kiln of clay with a glowing mouth, pots drying, a stack of wood
         V3 c = b.centre + V3{-.2f, -.2f, 0};

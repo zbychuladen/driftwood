@@ -36,6 +36,7 @@ int Sim::price(const Person& p, const std::string& job, float fit) {
     bool work = job == "food" || job == "wood" || job == "build" || job == "explore" || job == "hermit";
     if (work && p.needs.fatigue > 75) c *= 1.5f;
     c *= 1.4f - p.buyIn / 100 * .8f;   // those who hardly buy in cost more to ask
+    if (work && job != "explore" && job != "hermit") c *= 1 + .25f * p.lastStatus;   // and hard labour from the well-placed
     return std::max(2, int(std::lround(c)));
 }
 

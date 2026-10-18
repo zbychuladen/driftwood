@@ -133,6 +133,7 @@ float Sim::beauty(int x, int y) {
     if (near("circle", 6)) b += 2;
     if (near("bath", 6)) b += 1;
     if (near("garden", 4)) b += .5f;
+    if (near("monument", 6)) b += 2;
     if (near("forge", 5)) b -= 3;
     if (near("mine", 5)) b -= 2;
     return b;
@@ -216,6 +217,7 @@ bool Sim::setHomeLevel(Project& b, int level) {
 
 void Sim::homesDaily() {
     updateHouseholds();
+    for (auto& h : households) for (int m : h.members) if (auto* p = person(m)) p->lastStatus = status(h);
     for (auto& h : households) {
         auto* b = h.home >= 0 ? projectById(h.home) : nullptr;
         if (!b || !b->done) continue;
@@ -228,6 +230,8 @@ void Sim::homesDaily() {
         // keeping what they have
         auto keep = homeNeeds(h, lv);
         bool kept = std::all_of(keep.begin(), keep.end(), [](const HomeNeed& n) { return n.met; });
+        // a notable household seen too long at common work stops being looked up to
+        if (lv >= 4 && h.toil > 6) { kept = false; keep.insert(keep.begin(), {"toil", "time for anything but common work", false}); }
         h.falling = kept ? 0 : h.falling + 1;
         if (h.falling >= FALL_DAYS && lv >= 2) {
             std::string lack;

@@ -96,7 +96,9 @@ struct Person {
     std::optional<Duty> duty;
     bool dead = false, gone = false;
     std::vector<int> parents;
-    int lastTold = -9, lastAsked = -9;        // days they were last narrated, and last asked the narrator something
+    int lastTold = -9, lastAsked = -9;
+    float resentment = 0;                     // at how much better others live, 0..100
+    int lastStatus = 0;                       // their household's status, as of this morning (for prices)        // days they were last narrated, and last asked the narrator something
     std::array<float, 5> tiers{70, 40, 35, 30, 10};
     std::array<float, 5> gates{1, 1, .4f, .1f, 0};
     int seeking = SAFETY;                     // lowest unmet tier, -1 when fulfilled
@@ -130,6 +132,7 @@ struct ProjectDef {
     float r0 = 3, r1 = 8;
     bool autoPlan = false, food = false;
     bool upgrade = false;                     // a home level reached only by improving a home (cottage, house, manor)
+    bool commissioned = false;                // raised only when a notable commissions it (a monument)
     std::string gift, req, desc;
     int min = 0;
     std::vector<std::string> like, dislike;
@@ -176,7 +179,7 @@ struct Gap { std::string id, text, job, fix; std::vector<Candidate> candidates; 
 // A household: a couple and their children, or one person on their own. Its
 // home is a project id; rising and falling count the days its needs have been
 // met for the next level, or lapsed for its own.
-struct Household { int id = 0; std::vector<int> members; int home = -1; int rising = 0, falling = 0; bool noRoom = false; };
+struct Household { int id = 0; std::vector<int> members; int home = -1; int rising = 0, falling = 0; bool noRoom = false; float toil = 0; };   // toil: a notable household's recent common work
 struct HomeNeed { std::string id, text; bool met = false; };
 struct HomeCost { int wood = 0, stone = 0; };
 struct VoteRow { int pid; bool yes; std::string why; };
@@ -250,7 +253,7 @@ public:
     // The whole game as bytes, and back. Settlers' half-done actions are not
     // kept: after a load everyone picks their next task. load() leaves the sim
     // as it was and returns false, with a reason, for anything it cannot read.
-    static constexpr int SAVE_VERSION = 10;   // 2: site quality and pending placement; 3: rapport, contrariness, the story circle; 4: lines, questions; 5: deaths this season; 6: the narrator's rapport and buy-in; 7: duties and roles; 8: households; 9: gift practice; 10: goods and food kinds
+    static constexpr int SAVE_VERSION = 11;   // 2: site quality and pending placement; 3: rapport, contrariness, the story circle; 4: lines, questions; 5: deaths this season; 6: the narrator's rapport and buy-in; 7: duties and roles; 8: households; 9: gift practice; 10: goods and food kinds; 11: status and work
     struct SaveInfo { std::string village; int day = 0, year = 0, season = 0, people = 0; uint32_t seed = 0; };
     std::string save() const;
     bool load(const std::string& data, std::string* error = nullptr);
@@ -347,6 +350,15 @@ public:
     static HomeCost upgradeCost(int level);
     int reach(const std::string& key, int x, int y);   // walking tiles to the nearest built key (over 14: out of reach)
     float beauty(int x, int y);
+
+    // Status and work (SimStatus.cpp).
+    int statusOf(const Person& p);
+    // How willing someone of a status is to take a job, 0..1: hard labour less so the higher they are.
+    static float willing(int status, const std::string& job);
+    bool notableAt(const std::string& job, const Person* besides = nullptr);
+    float alongside(const Person& p, const std::string& skill);   // 1.2 working beside a notable
+    int topStatus();
+    int nextShip = 0;                            // the day a ship next calls, while a beacon stands
     std::string writeSand(const std::string& text);
     std::vector<const ProjectDef*> proposalList();
     void propose(const std::string& key);
@@ -418,6 +430,9 @@ private:
     std::vector<uint8_t> walkCache;
     long walkSig = -1;
     void homesDaily();                        // homes rise and fall
+    void statusDaily();                       // patronage, ships, monuments, resentment
+    void statusHourly();                      // notables' common work
+    std::string leadJob(Person& p, Project& b);
     bool setHomeLevel(Project& b, int level);
     struct ReachMap { int built = -1; std::vector<uint8_t> dist; };
     std::map<std::string, ReachMap> reachCache;                        // new questions, lapsed ones, fibs coming out

@@ -9,7 +9,7 @@ It replaces phases 4 to 7 of `narrator-and-placement.md`. Phases 1 to 3 of that
 plan (placement, rapport and contrariness, lines and questions) stay and are
 built on.
 
-**Status:** agreed 2026-10-18. Phase 1 done (rapport as currency); phase 2 done (the Ledger); phase 3a done (households, homes rising and falling, status); phase 3b done (goods, food variety, the workshop). Next: phase 4, status and work.
+**Status:** agreed 2026-10-18. Phase 1 done (rapport as currency); phase 2 done (the Ledger); phase 3a done (households, homes rising and falling, status); phase 3b done (goods, food variety, the workshop); phase 4 done (status and work, notables, ships, resentment). Next: phase 5, blueprints and the village by hand.
 
 ---
 

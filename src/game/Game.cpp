@@ -256,7 +256,7 @@ void Game::drawPeopleGallery() {
 void Game::drawBuildingGallery(bool structures) {
     ClearBackground(Color{233, 230, 218, 255});
     rlDisableBackfaceCulling();
-    const float fit = GetScreenHeight() / (structures ? 1360.f : 1600.f);
+    const float fit = GetScreenHeight() / (structures ? 1560.f : 1600.f);
     Camera2D cam{};
     cam.zoom = 1.15f * fit;
     draw::tone = {.32f, .2f, {236, 233, 220, 255}};
@@ -268,9 +268,9 @@ void Game::drawBuildingGallery(bool structures) {
     };
     struct T { const char* key; int w, h; };
     const T houses[13] = {{"hut", 2, 2}, {"cottage", 2, 2}, {"house", 2, 2}, {"manor", 3, 3}, {"leanto", 3, 1}, {"longhouse", 4, 2}, {"store", 2, 2}, {"school", 2, 2}, {"forge", 2, 2}, {"smoke", 2, 1}, {"loomhouse", 2, 2}, {"infirmary", 2, 2}, {"workshop", 2, 2}};
-    const T others[10] = {{"well", 1, 1}, {"rack", 1, 1}, {"tower", 1, 1}, {"lighthouse", 1, 1}, {"signal", 1, 1}, {"mine", 1, 1}, {"dock", 1, 3}, {"circle", 2, 2}, {"pottery", 2, 2}, {"boatyard", 2, 2}};
+    const T others[11] = {{"well", 1, 1}, {"rack", 1, 1}, {"tower", 1, 1}, {"lighthouse", 1, 1}, {"signal", 1, 1}, {"mine", 1, 1}, {"dock", 1, 3}, {"circle", 2, 2}, {"pottery", 2, 2}, {"boatyard", 2, 2}, {"monument", 1, 1}};
     const T* types = structures ? others : houses;
-    const int count = structures ? 10 : 13;
+    const int count = structures ? 11 : 13;
     for (int i = 0; i < count * 3; i++) {
         const T& ty = types[i / 3];
         int col = i % 6, row = i / 6;
@@ -285,9 +285,9 @@ void Game::drawBuildingGallery(bool structures) {
         const float stages[6] = {.08f, .25f, .5f, .75f, .95f, 1};
         for (int i = 0; i < 6; i++) {
             int tx, tyy;
-            place(110 + i * 170, 1300, 1, 1, tx, tyy);
+            place(110 + i * 170, 1500, 1, 1, tx, tyy);
             bld::draw(bld::make("tower", 77, tx, tyy, 1, 1, 0, false), stages[i], 0, false);
-            place(1130 + (i % 3) * 170, 1300, 2, 2, tx, tyy);
+            place(1130 + (i % 3) * 170, 1500, 2, 2, tx, tyy);
             if (i >= 3) continue;
             bld::draw(bld::make("boatyard", 78, tx, tyy, 2, 2, 0, false), stages[i * 2 + 1], 0, false);
         }
@@ -307,7 +307,7 @@ void Game::drawBuildingGallery(bool structures) {
         int i = t * 3, col = i % 6, row = i / 6;
         ui::text(ui::F.bold, types[t].key, (40 + col * 265) * fit, (structures ? 40 + row * 205 : 50 + row * 185) * fit, 13, ui::T.muted);
     }
-    ui::text(ui::F.bold, structures ? "a watchtower going up, and a boat taking shape" : "a longhouse going up: foundation, frame, walls rising, roof, details; then the door open, and lit at night", 30 * fit, (structures ? 1110 : 1375) * fit, 13, ui::T.muted);
+    ui::text(ui::F.bold, structures ? "a watchtower going up, and a boat taking shape" : "a longhouse going up: foundation, frame, walls rising, roof, details; then the door open, and lit at night", 30 * fit, (structures ? 1310 : 1375) * fit, 13, ui::T.muted);
 }
 
 int Game::run() {
