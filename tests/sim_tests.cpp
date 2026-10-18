@@ -433,25 +433,28 @@ static void testLines() {
     CHECK(few == 0, cat("every adult is offered two or three lines (", offered, " offered)").c_str());
     CHECK(bad.empty(), ("every line fits: a project to help with, a calling to follow, someone to talk to" + bad).c_str());
     CHECK(still, "reading the lines never changes the game");
-    // replies: going along, haggling and refusing all happen, and a haggle starts later
-    std::set<std::string> seen;
-    bool later = true;
-    for (uint32_t seed = 1; seed <= 12; seed++) {
-        Sim s;
-        s.newWorld(seed);
-        runDays(s, 2);
-        for (auto* p : s.members()) {
-            if (p->child) continue;
-            p->traits = {"cheerful", "curious"};
-            auto ls = s.linesFor(*p);
-            Line l = ls[0];
-            for (auto& o : ls) if (o.job != "peace" && o.job != "talk") l = o;
-            auto r = s.narrate(*p, l);
-            seen.insert(r);
-            if (r == "haggled" && !(p->told && p->told->from > s.tMin)) later = false;
-        }
+    // replies follow the price: plenty of rapport, they go along and pay it; just enough, they
+    // haggle; too little, they refuse and it costs nothing
+    Sim s;
+    s.newWorld(20261017);
+    runDays(s, 2);
+    std::string got;
+    bool paid = true, later = true;
+    auto adults = s.members();
+    for (int k = 0; k < 3; k++) {
+        Person& p = *adults[k];
+        p.traits = {"cheerful", "curious"};
+        Line l;
+        for (auto& o : s.linesFor(p)) if (o.job != "peace" && o.job != "talk") l = o;
+        float r0 = (k == 0 ? 2.f : k == 1 ? 1.2f : .5f) * l.cost;
+        p.rapport = r0;
+        got += s.narrate(p, l) + " ";
+        if (k < 2 && std::abs(p.rapport - (r0 - l.cost)) > .01f) paid = false;
+        if (k == 2 && p.rapport != r0) paid = false;
+        if (k == 1 && !(p.told && p.told->from > s.tMin)) later = false;
     }
-    CHECK(seen.count("agreed") && seen.count("haggled") && seen.count("refused"), "settlers go along, haggle or refuse");
+    CHECK(got == "agreed haggled refused ", ("with plenty of rapport they go along, with just enough they haggle, with too little they refuse (" + got + ")").c_str());
+    CHECK(paid, "going along costs exactly the price shown; a refusal costs nothing");
     CHECK(later, "a haggled line starts a few hours later");
 }
 
@@ -517,6 +520,67 @@ static void testQuestions() {
     CHECK(asked >= 3 && asked <= 20, cat("settlers ask the narrator things now and then (", asked, " in 20 days)").c_str());
 }
 
+// Rapport is what the narrator spends: lines that fit are cheap, plans that work
+// out earn it back.
+static void testRapportCurrency() {
+    std::printf("rapport as currency\n");
+    Sim s;
+    s.newWorld(20261017);
+    runDays(s, 2);
+    Person& p = *s.members()[0];
+    p.traits = {"cheerful", "curious"};
+    p.needs.fatigue = 90;
+    p.kind = "wood";
+    int rest = -1, work = -1;
+    for (auto& l : s.linesFor(p)) { if (l.job == "rest") rest = l.cost; else if (l.job == "food" || l.job == "explore" || l.job == "build") work = std::max(work, l.cost); }
+    CHECK(rest > 0 && work > 0 && rest < work, cat("asking a tired settler to rest is cheaper than asking them to work (", rest, " vs ", work, ")").c_str());
+    Person q = p;
+    q.traits = {"obstinate", "curious"};
+    Person e = p;
+    e.traits = {"easygoing", "curious"};
+    CHECK(Sim::price(e, "wood", 1) < Sim::price(p, "wood", 1) && Sim::price(p, "wood", 1) < Sim::price(q, "wood", 1), "the same request costs more with stubborn settlers than easygoing ones");
+
+    // a season with nobody lost earns rapport; the same season with a death does not
+    float credit[2];
+    for (int pass = 0; pass < 2; pass++) {
+        Sim a;
+        a.newWorld(777);
+        while (!(a.day() == 10 && a.hour() >= 23)) { a.step(60); if (!a.pendingFate.empty()) { auto f = a.pendingFate[0]; a.pendingFate.clear(); a.applyFate(f); } }
+        a.lostThisSeason = pass;
+        float before = a.avgRapport();
+        a.step(120);
+        credit[pass] = a.avgRapport() - before;
+    }
+    CHECK(credit[0] > credit[1] + 4, cat("a season with nobody lost earns the narrator rapport (", int(credit[0] - credit[1]), " more than one with a death)").c_str());
+
+    // the narrator's own choice of spot: a good one earns rapport when it is finished, a bad one costs it
+    Sim base;
+    base.newWorld(20261017);
+    base.askPlacement = true;
+    int guard = 0;
+    while (!base.pendingPlacement && guard++ < 24 * 120) { base.step(60); if (!base.pendingFate.empty()) { auto f = base.pendingFate[0]; base.pendingFate.clear(); base.applyFate(f); } }
+    if (!base.pendingPlacement) { CHECK(false, "a building comes up for the narrator to place"); return; }
+    std::string start = base.save();
+    float change[2] = {0, 0};
+    for (int pass = 0; pass < 2; pass++) {
+        Sim b;
+        b.load(start);
+        int id = b.pendingPlacement->project;
+        auto all = sites(b, *b.projectById(id), 20);
+        auto pickIt = pass == 0 ? std::max_element(all.begin(), all.end(), [](auto& x, auto& y) { return x.second.quality < y.second.quality; })
+                                : std::min_element(all.begin(), all.end(), [](auto& x, auto& y) { return x.second.quality < y.second.quality; });
+        b.placeAt(id, pickIt->first.first, pickIt->first.second);
+        b.askPlacement = false;
+        for (int h = 0; h < 24 * 40 && !b.projectById(id)->done; h++) {
+            float before = b.avgRapport();
+            b.step(60);
+            if (!b.pendingFate.empty()) { auto f = b.pendingFate[0]; b.pendingFate.clear(); b.applyFate(f); }
+            if (b.projectById(id)->done) change[pass] = b.avgRapport() - before;
+        }
+    }
+    CHECK(change[0] > 0 && change[0] > change[1], cat("a well-chosen spot earns rapport when it is finished, a bad one less (", change[0], " vs ", change[1], ")").c_str());
+}
+
 int main() {
     for (uint32_t seed : {20261017u, 777u, 4242u}) testSurvival(seed);
     testNoSmithNoForge();
@@ -526,6 +590,7 @@ int main() {
     testNoGodWords();
     testLines();
     testQuestions();
+    testRapportCurrency();
     testDeterminism();
     testFocus(20261017);
     testFocus(777);

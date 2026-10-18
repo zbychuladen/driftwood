@@ -14,6 +14,18 @@ const std::string& pickBy(uint32_t h, const std::vector<std::string>& v) { retur
 
 float Sim::tolerance(const Person& p) { return p.has("easygoing") ? 5 : p.has("obstinate") ? 2 : 3; }
 
+int Sim::price(const Person& p, const std::string& job, float fit) {
+    // a day's request, cheaper the more it is what they want anyway
+    bool social = job == "peace" || job == "talk";
+    float c = social ? 5.f : 8.f;
+    c *= fit >= 2.4f ? .5f : fit >= 1.8f ? .75f : fit >= 1.2f ? 1.f : 1.4f;
+    if (p.has("obstinate")) c *= 1.3f;
+    if (p.has("easygoing")) c *= .8f;
+    bool work = job == "food" || job == "wood" || job == "build" || job == "explore" || job == "hermit";
+    if (work && p.needs.fatigue > 75) c *= 1.5f;
+    return std::max(2, int(std::lround(c)));
+}
+
 std::vector<Line> Sim::linesFor(const Person& p) {
     struct Cand { float fit; Line l; };
     std::vector<Cand> c;
@@ -45,8 +57,10 @@ std::vector<Line> Sim::linesFor(const Person& p) {
     }
     if (low && affOf(p, low->id) < 25) c.push_back({2.f, {"peace", cat(n, " went to make up with ", low->name, "."), low->id}});
     if (chat && chat != low) c.push_back({p.needs.social > 50 ? 2.5f : 1.3f, {"talk", cat(n, " and ", chat->name, " got talking."), chat->id}});
-    // nothing to narrate about what they are already doing; the best three, ties broken the same way all day
+    // the price follows how well it fits; nothing to narrate about what they are already doing;
+    // the best three, ties broken the same way all day
     for (size_t i = 0; i < c.size(); i++) {
+        c[i].l.cost = price(p, c[i].l.job, c[i].fit);
         if (c[i].l.job == p.kind || (c[i].l.job == "rest" && p.kind == "idle")) c[i].fit -= 3;
         c[i].fit += float(mix(h, uint32_t(i)) % 100) / 400.f;
     }
@@ -57,7 +71,7 @@ std::vector<Line> Sim::linesFor(const Person& p) {
 }
 
 std::string Sim::narrate(Person& p, const std::string& job, Person* target) {
-    Line l{job, cat(p.name, " decided to ", job, "."), target ? target->id : -1};
+    Line l{job, cat(p.name, " decided to ", job, "."), target ? target->id : -1, price(p, job, 1)};
     for (auto& o : linesFor(p)) if (o.job == job && (!target || o.target == target->id)) l = o;
     return narrate(p, l);
 }
@@ -97,24 +111,21 @@ std::string Sim::narrate(Person& p, const Line& line) {
         return lastReply = "pushed";
     }
     p.lastTold = today;
-    float ch = .18f + p.rapport * .007f + (p.has("easygoing") ? .15f : 0) - (p.has("obstinate") ? .2f : 0) - (p.needs.fatigue > 75 ? .15f : 0) + (job == "peace" || job == "talk" ? .1f : 0);
-    float r = rnd();
     bool social = (job == "peace" || job == "talk") && target;
-    if (r >= ch + (social ? 0 : .2f)) {
-        p.rapport = std::max(0.f, p.rapport - 1.5f);
-        said(pickBy(mix(p.id, today), {"I did not decide that.", "Not today.", "Says who?"}), 60);
+    // a request costs rapport: more than they have and they say no, which costs nothing but the day
+    if (float(line.cost) > p.rapport) {
+        said(pickBy(mix(p.id, today), {"I did not decide that.", "Not today.", "Says who?", "I'd want a better reason than that."}), 60);
         note(cat("\"", line.text, "\" \"", lastSaid, "\" said ", p.name, ", and carried on as before."), "narrator");
         return lastReply = "refused";
     }
-    if (r >= ch) {
-        // close enough: they will, but in their own time
-        p.rapport = std::min(100.f, p.rapport + 1);
+    p.rapport = std::max(0.f, p.rapport - float(line.cost));
+    if (!social && p.rapport + float(line.cost) < float(line.cost) * 1.4f) {
+        // only just enough trust: they will, in their own time
         p.told = Narration{job, tMin + 12 * 60, false, tMin + 3 * 60};
         said(pickBy(mix(p.id, today + 1), {"After lunch.", "Once I've finished this.", "In a bit."}), 70);
         note(cat(line.text, " \"", lastSaid, "\" ", p.name, " said, and meant it."), "narrator");
         return lastReply = "haggled";
     }
-    p.rapport = std::min(100.f, p.rapport + 4);
     if (social) {
         if (job == "peace") { affAdd(p, target->id, 22); affAdd(*target, p.id, 15); said(target->name + ", I'm sorry", 80); }
         else { affAdd(p, target->id, 12); affAdd(*target, p.id, 10); p.needs.social = std::max(0.f, p.needs.social - 25); target->needs.social = std::max(0.f, target->needs.social - 25); said("Have you got a minute?", 70); }

@@ -56,7 +56,7 @@ static Info building(Sim& s, Project& b) {
     in.rows.push_back({"Size", cat(int(b.w * scale::TILE_M), " by ", int(b.h * scale::TILE_M), " m")});
     if (Sim::specialist(b) && b.placed) {
         // how good its spot is, and the main reason, as the specialist would put it
-        SiteReport r = s.evaluateSite(b, b.x, b.y);
+        SiteReport r = s.evaluateSite(b, b.x, b.y, b.id);
         float q = b.siteQuality;
         std::string word = q >= 1.15f ? "Excellent" : q >= 1.03f ? "Good" : q >= .92f ? "Fair" : q >= .8f ? "Poor" : "Bad";
         std::string why = r.factors.empty() ? "" : ", " + (q < 1 ? r.factors.front().text : r.factors.back().text);

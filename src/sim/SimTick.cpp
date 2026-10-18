@@ -193,6 +193,12 @@ void Sim::daily() {
         if (yearN() > 1) spring += cat(" We have survived ", yearN() - 1, yearN() > 2 ? " years" : " year", " on this island.");
         const std::string lines[4] = {spring, "Summer. Long warm days and calm seas.", "Autumn. The leaves are turning gold and red. We must fill the stores before winter.", "Winter came. Snow on the hills and frost on the pond. No more berries until spring."};
         note(lines[s], "big");
+        // a season with nobody lost: they give the narrator some of the credit
+        if (lostThisSeason == 0) {
+            for (auto* p : m) if (!p->child) p->rapport = std::min(100.f, p->rapport + 5);
+            note("Nobody was lost last season. Over supper someone said the narrator had a hand in that, and nobody argued.", "narrator");
+        }
+        lostThisSeason = 0;
     }
     if ((s != prevS && d > 1) || d == 3) pendingFate = drawFates();
     float days = foodDays();
@@ -259,7 +265,7 @@ void Sim::daily() {
     for (auto* p : m) if (p->rapport < 12 && !p->weary) { p->weary = true; note(cat(p->name, " is tired of being narrated. \"Tell someone else's story for a while.\"")); }
     bool allDone = true;
     for (auto& b : plan) if (!b.done && !b.skip && giftOk(b) && prereqOk(b)) allDone = false;
-    if (allDone && !firsts.count("complete")) { firsts.insert("complete"); note(cat("Everything we can build right now is built. ", villageName.empty() ? "The camp" : villageName, " is a real village. Perhaps the Voice has new ideas."), "big"); }
+    if (allDone && !firsts.count("complete")) { firsts.insert("complete"); note(cat("Everything we can build right now is built. ", villageName.empty() ? "The camp" : villageName, " is a real village. Perhaps the narrator has new ideas."), "big"); }
 }
 
 void Sim::updateWolf(double dmd) {

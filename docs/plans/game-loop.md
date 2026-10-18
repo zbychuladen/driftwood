@@ -9,7 +9,7 @@ It replaces phases 4 to 7 of `narrator-and-placement.md`. Phases 1 to 3 of that
 plan (placement, rapport and contrariness, lines and questions) stay and are
 built on.
 
-**Status:** agreed 2026-10-18. Phase 1 in progress.
+**Status:** agreed 2026-10-18. Phase 1 done (rapport as currency). Next: phase 2, the Ledger.
 
 ---
 
@@ -77,7 +77,7 @@ Each phase lands as its own PR with tests and screenshots, stacked like before. 
 ### Phase 1: Rapport as currency
 
 - **What a request costs.** `Sim::cost(person, request)` prices it as a base by size, times how far it is from what they would choose anyway, measured from their needs, calling, status (later), mood and skill. A request that matches their needs is cheap; one against them is expensive.
-- **Paying.** Accepted requests deduct rapport from that person, plus a little from the village. A request costing more than their rapport is refused.
+- **Paying.** Accepted requests deduct the price from that person. A request costing more than their rapport is refused, and a refusal costs nothing. With barely enough (under 1.4 times the price) they haggle and do it later.
 - **Earning.** Rapport comes back when outcomes land: a project the narrator placed pays off, a trial goes well, a petition is met, nobody dies in a season.
 - **Losing.** Rapport drops when a plan backfires (a building on a bad site, a trial not prepared for), a petition lapses, or someone dies.
 - **On screen.** Every line in the Narrate panel shows its price.

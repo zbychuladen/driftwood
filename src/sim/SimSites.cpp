@@ -44,7 +44,16 @@ bool Sim::siteLegal(const ProjectDef& d, int x, int y) const {
     return true;
 }
 
-SiteReport Sim::evaluateSite(const ProjectDef& d, int x, int y) const {
+SiteReport Sim::evaluateSite(const ProjectDef& d, int x, int y, int self) const {
+    // a building judged where it already stands: its own footprint does not count against it
+    if (self >= 0) {
+        auto& occ = const_cast<std::vector<int>&>(bOcc);
+        std::vector<int> mine;
+        for (int i = 0; i < int(occ.size()); i++) if (occ[i] == self) { mine.push_back(i); occ[i] = -1; }
+        SiteReport r = evaluateSite(d, x, y);
+        for (int i : mine) occ[i] = self;
+        return r;
+    }
     SiteReport r;
     r.legal = siteLegal(d, x, y);
     if (!r.legal) return r;
@@ -189,9 +198,9 @@ SiteReport Sim::evaluateSite(const ProjectDef& d, int x, int y) const {
     return r;
 }
 
-std::vector<Opinion> Sim::opinions(const ProjectDef& d, int x, int y) const {
+std::vector<Opinion> Sim::opinions(const ProjectDef& d, int x, int y, int self) const {
     std::vector<Opinion> out;
-    SiteReport r = evaluateSite(d, x, y);
+    SiteReport r = evaluateSite(d, x, y, self);
     if (!r.legal) return out;
     uint32_t keyHash = uint32_t(std::hash<std::string>{}(d.key));
     for (auto& p : people) {
@@ -286,7 +295,7 @@ bool Sim::placeSuggested(int id) {
 // What the camp says about the spot: when it is chosen, and again when the
 // building is finished and people live with it.
 void Sim::siteJudged(Project& b, bool finished) {
-    auto ops = opinions(b, b.x, b.y);
+    auto ops = opinions(b, b.x, b.y, b.id);
     if (ops.empty()) return;
     const Opinion& lead = ops.front();
     Person* who = const_cast<Sim*>(this)->person(lead.pid);
@@ -304,11 +313,14 @@ void Sim::siteJudged(Project& b, bool finished) {
     for (auto& o : ops) {
         Person* p = person(o.pid);
         if (!p) continue;
+        // the narrator chose the spot (b.sited): a good one earns trust, a bad one costs it, most of all with the specialist
         if (o.perceived < .85f) {
             p->mood = std::max(0.f, p->mood - 3 - 6 * o.expertise);
-            // overruled by the narrator, the specialist takes it a little personally
-            if (b.sited && o.expertise >= .45f) p->rapport = std::max(0.f, p->rapport - 4);
-        } else if (o.perceived > 1.1f) p->mood = std::min(100.f, p->mood + 2 + 3 * o.expertise);
+            if (b.sited) p->rapport = std::max(0.f, p->rapport - 1 - 3 * o.expertise);
+        } else if (o.perceived > 1.1f) {
+            p->mood = std::min(100.f, p->mood + 2 + 3 * o.expertise);
+            if (b.sited) p->rapport = std::min(100.f, p->rapport + 2 + 3 * o.expertise);
+        }
     }
     if (lead.expertise >= .45f && lead.perceived < .85f)
         note(cat(who->name, " still grumbles about where the ", what, " went. \"", lead.say, "\""), "sad");

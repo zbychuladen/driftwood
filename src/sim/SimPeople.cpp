@@ -105,6 +105,7 @@ void Sim::bubble(Person& p, const std::string& text, double mins) { p.bubble = B
 
 void Sim::die(Person& p) {
     p.dead = true;
+    lostThisSeason++;
     clearQ(p);
     note(cat(p.name, " did not wake this morning. There was not enough food. We buried them on the hill above the sea."), "sad");
     for (auto* q : members()) {

@@ -229,14 +229,18 @@ void Game::drawNarrator(Rectangle a) {
         y += wrapped(F.body, "Select an adult settler on the map or in the Settlers tab, then narrate what they do next. Lines land more often with those you get on with.", x, y, w, 14, T.muted) + 16;
     } else {
         y += wrapped(F.body, cat(p->name, ", rapport ", int(p->rapport), ". ", sim.contrary(*p) ? "Contrary right now: they will do the opposite." : p->lastTold == sim.day() ? "Already narrated today. Push too often and they turn contrary." : "Once a day is welcome."), x, y, w, 14, T.text) + 8;
-        y += wrapped(F.body, "Choose what happens next:", x, y, w, 14, T.muted) + 6;
+        y += wrapped(F.body, "Choose what happens next. Each line costs rapport if they go along; more than they have, and they won't.", x, y, w, 14, T.muted) + 6;
         for (auto& l : sim.linesFor(*p)) {
-            float th = wrapped(F.hand, l.text, 0, 0, w - 28, 19, T.text, false);
+            float tw = w - 28 - 52;
+            float th = wrapped(F.hand, l.text, 0, 0, tw, 19, T.text, false);
             Rectangle r{x, y, w, th + 16};
-            bool hot = hovered(r);
+            bool hot = hovered(r), afford = float(l.cost) <= p->rapport;
             DrawRectangleRounded(r, .14f, 6, hot ? T.hover : T.panel2);
             DrawRectangle(int(x), int(y + 6), 3, int(th + 4), T.narrator);
-            wrapped(F.hand, l.text, x + 14, y + 6, w - 28, 19, T.text);
+            wrapped(F.hand, l.text, x + 14, y + 6, tw, 19, afford ? T.text : T.muted);
+            std::string price = cat("-", l.cost);
+            text(F.bold, price, x + w - 14 - measure(F.bold, price, 15).x, y + 8, 15, afford ? T.narrator : T.berry);
+            text(F.body, afford ? "rapport" : "too dear", x + w - 14 - measure(F.body, afford ? "rapport" : "too dear", 11).x, y + 26, 11, T.muted);
             if (clicked(r)) sim.narrate(*p, l);
             y += r.height + 6;
         }
