@@ -88,7 +88,7 @@ std::optional<Sim::Champion> Sim::champion(Project& b) {
 
 float Sim::projScore(Project& b, int i) {
     if (b.done || b.skip || (b.wait && b.wait > day()) || !prereqOk(b) || !giftOk(b)) return -1e9f;
-    if (askPlacement && !b.placed && !settlersBuild(b)) return -1e9f;   // waits for the narrator's blueprint
+    if (askPlacement && !overruled() && !b.placed && !settlersBuild(b)) return -1e9f;   // waits for the narrator's blueprint (unless the rival plans)
     float s = 3 - i * .03f + needOf(b.key) * 2 + (b.voiced ? .6f : 0);
     if (b.sited && askPlacement) s += 1.4f;   // the narrator marked it out: they take that as wanted
     if (auto ch = champion(b)) s += ch->push;
@@ -116,7 +116,7 @@ Project* Sim::currentProject() {
                 best->wait = day() + 3;
                 continue;
             }
-            if (askPlacement) {
+            if (askPlacement && !overruled()) {
                 if (!pendingPlacement) pendingPlacement = PendingPlacement{best->id, s->first, s->second};
                 return nullptr;   // nothing to build until the spot is chosen
             }

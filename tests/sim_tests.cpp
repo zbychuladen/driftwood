@@ -1270,6 +1270,51 @@ static void testPetitionsAndTrials() {
     CHECK(kept[0] > kept[1], cat("a ready village loses less to a hard winter (kept ", int(kept[0] * 100), "% of its food against ", int(kept[1] * 100), "%)").c_str());
 }
 
+// The rival: steps forward, wins over the resentful, takes over the planning
+// when ahead for a season, and can be won back from.
+static void testRival() {
+    std::printf("the rival\n");
+    Sim s;
+    s.newWorld(20261017);
+    s.askPlacement = true;
+    runDays(s, 21);
+    auto adults = s.members();
+    Person* leader = adults[0];
+    leader->charisma = 10;
+    for (auto* p : adults) p->buyIn = 40;
+    untilMidnight(s); pastMidnight(s);
+    CHECK(s.rival == leader->id, "a charismatic settler who is not convinced steps forward as the rival");
+    // resentment brings people to the rival's side faster
+    float pull[2];
+    std::string at = s.save();
+    for (int pass = 0; pass < 2; pass++) {
+        Sim t;
+        t.load(at);
+        for (int d = 0; d < 5; d++) {
+            untilMidnight(t);
+            for (auto* p : t.members()) { p->follow = std::min(p->follow, 20.f); if (pass) p->resentment = 70; else p->resentment = 0; p->buyIn = 40; }
+            pastMidnight(t);
+        }
+        pull[pass] = t.rivalStanding();
+    }
+    CHECK(pull[1] > pull[0] + 5, cat("the resentful follow the rival sooner (", int(pull[1]), " against ", int(pull[0]), ")").c_str());
+    // ahead for a season, the rival takes over the planning
+    for (int d = 0; d < 11; d++) { untilMidnight(s); for (auto* p : s.members()) { p->buyIn = 20; if (p->id != s.rival) p->follow = 90; } pastMidnight(s); }
+    CHECK(s.overruled(), "a rival ahead for a season takes over the planning");
+    Person* worker = nullptr;
+    for (auto* p : s.members()) if (!p->child && p->id != s.rival) worker = p;
+    s.rapport = 100;
+    CHECK(s.blueprint("tower") < 0 && worker && s.appoint(*worker, "wood") == "overruled", "then the narrator's blueprints and appointments count for nothing");
+    // and the village can turn back
+    untilMidnight(s);
+    for (auto* p : s.members()) { p->buyIn = 90; p->follow = 10; }
+    pastMidnight(s);
+    CHECK(!s.overruled() && s.overruledDays > 0, "won back, the blueprints are the narrator's again");
+    Sim c;
+    c.load(s.save());
+    CHECK(c.rival == s.rival && c.overruledDays == s.overruledDays, "the rival survives a save");
+}
+
 int main() {
     for (uint32_t seed : {20261017u, 777u, 4242u}) testSurvival(seed);
     testNoSmithNoForge();
@@ -1289,6 +1334,7 @@ int main() {
     testWorkmanship();
     testVillageByHand();
     testPetitionsAndTrials();
+    testRival();
     testDeterminism();
     testFocus(20261017);
     testFocus(777);

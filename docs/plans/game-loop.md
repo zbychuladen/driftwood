@@ -9,7 +9,7 @@ It replaces phases 4 to 7 of `narrator-and-placement.md`. Phases 1 to 3 of that
 plan (placement, rapport and contrariness, lines and questions) stay and are
 built on.
 
-**Status:** agreed 2026-10-18. Phase 1 done (rapport as currency); phase 2 done (the Ledger); phase 3a done (households, homes rising and falling, status); phase 3b done (goods, food variety, the workshop); phase 4 done (status and work, notables, ships, resentment); phase 5 done (blueprints, unlocks, workmanship; paths, clearings, orchards, footbridges, decorations, names). phase 6 done (petitions, the year's trial foreseen, readiness). Next: phase 7, the rival.
+**Status:** agreed 2026-10-18. Phase 1 done (rapport as currency); phase 2 done (the Ledger); phase 3a done (households, homes rising and falling, status); phase 3b done (goods, food variety, the workshop); phase 4 done (status and work, notables, ships, resentment); phase 5 done (blueprints, unlocks, workmanship; paths, clearings, orchards, footbridges, decorations, names). phase 6 done (petitions, the year's trial foreseen, readiness); phase 7 done (the rival). Next: phase 8, endings and the run.
 
 ---
 

@@ -47,6 +47,8 @@ void WorldView::unload() {
     if (ground.id) UnloadRenderTexture(ground);
     if (fadeRT.id) UnloadRenderTexture(fadeRT);
     fadeRT = {};
+    if (pathRT.id) UnloadRenderTexture(pathRT);
+    pathRT = {};
     ground = {};
     lighting.unload();
 }
@@ -346,26 +348,40 @@ void WorldView::draw(Sim& s, Rectangle map, int selectedId, float realDt, float 
         float o = std::sin(float(t * .02) + ph) * 5;
         draw::curve({w.x - 6 + o, w.y}, {w.x + o, w.y - 2}, {w.x + 6 + o, w.y}, 1, draw::rgba(255, 255, 255, (a - .55f) * 2 * (s.season() == 3 ? .35f : .45f)), 4);
     }
-    // paths worn in where people walk
+    // paths worn in where people walk: drawn solid off screen, then laid over the ground
+    // see-through, so overlapping pieces merge into one even surface
     if (s.wear.size() == size_t(GW * GH)) {
-        TileRange tr = visibleTiles({0, 0, float(GetScreenWidth()), float(GetScreenHeight())});
+        int sw = GetScreenWidth(), shh = GetScreenHeight();
+        if (pathRT.texture.width != sw || pathRT.texture.height != shh) {
+            if (pathRT.id) UnloadRenderTexture(pathRT);
+            pathRT = LoadRenderTexture(sw, shh);
+        }
+        TileRange tr = visibleTiles({0, 0, float(sw), float(shh)});
         Color soil = s.season() == 3 ? draw::rgba(160, 170, 176, 1) : draw::rgba(150, 118, 76, 1);
+        EndMode2D();
+        BeginTextureMode(pathRT);
+        ClearBackground(BLANK);
+        BeginMode2D(cam);
+        float savedInk = draw::ink.width;
+        draw::ink.width = 0;
         for (int y = std::max(0, tr.y0); y <= std::min(GH - 1, tr.y1); y++)
             for (int x = std::max(0, tr.x0); x <= std::min(GW - 1, tr.x1); x++) {
-                int w = s.wear[Sim::idx(x, y)];
-                if (w < 40 || s.isWater(x, y)) continue;
-                // a trail: a soft spot on each worn tile, joined to its worn neighbours
+                if (s.wear[Sim::idx(x, y)] < 40 || s.isWater(x, y)) continue;
                 V2 c = wp(x + .5f, y + .5f);
-                Color col = draw::withA(soil, std::min(.3f, (w - 30) / 500.f));
-                draw::ellipse(c.x, c.y, iso::HW * .42f, iso::HH * .42f, col);
+                draw::ellipse(c.x, c.y, iso::HW * .5f, iso::HH * .5f, soil);
                 const int N[4][2] = {{1, 0}, {0, 1}, {1, 1}, {1, -1}};
                 for (auto& n : N) {
                     int nx = x + n[0], ny = y + n[1];
                     if (!Sim::inb(nx, ny) || s.wear[Sim::idx(nx, ny)] < 40) continue;
                     V2 e = wp(nx + .5f, ny + .5f);
-                    draw::line(c.x, c.y, e.x, e.y, iso::HH * .7f, col);
+                    draw::line(c.x, c.y, e.x, e.y, iso::HH * .8f, soil);
                 }
             }
+        draw::ink.width = savedInk;
+        EndMode2D();
+        EndTextureMode();
+        DrawTextureRec(pathRT.texture, {0, 0, float(sw), -float(shh)}, {0, 0}, Fade(WHITE, .2f));
+        BeginMode2D(cam);
     }
     // worn ground around camp
     {
