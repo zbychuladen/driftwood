@@ -151,7 +151,7 @@ template <class A> void io(A& a, Focus& v) {
 template <class A> void io(A& a, Person& p) {
     io(a, p.id); io(a, p.name); io(a, p.tunic); io(a, p.skin); io(a, p.hair); io(a, p.hairStyle); io(a, p.x); io(a, p.y);
     io(a, p.kind); io(a, p.doing); io(a, p.status); io(a, p.focus); io(a, p.needs); io(a, p.mood); io(a, p.traits);
-    io(a, p.sk); io(a, p.gifts); io(a, p.charisma); io(a, p.buyIn); io(a, p.aff); io(a, p.partner); io(a, p.child);
+    io(a, p.sk); io(a, p.gifts); io(a, p.giftXp); io(a, p.charisma); io(a, p.buyIn); io(a, p.aff); io(a, p.partner); io(a, p.child);
     io(a, p.age); io(a, p.bornDay); io(a, p.bed); io(a, p.hidden); io(a, p.sleeping); io(a, p.sleepIn); io(a, p.sick);
     io(a, p.starve); io(a, p.phase); io(a, p.moving); io(a, p.face); io(a, p.anim); io(a, p.carry); io(a, p.bubble);
     io(a, p.told); io(a, p.dead); io(a, p.gone); io(a, p.parents); io(a, p.lastTold); io(a, p.lastAsked); io(a, p.duty); io(a, p.tiers); io(a, p.gates);

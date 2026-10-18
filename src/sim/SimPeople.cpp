@@ -226,3 +226,18 @@ std::vector<std::string> Sim::lacking(Person& p) {
 }
 
 } // namespace dw
+
+namespace dw {
+void Sim::practise(Person& p, const std::string& gift) {
+    auto it = p.gifts.find(gift);
+    if (it == p.gifts.end() || it->second >= 10) return;
+    float& xp = p.giftXp[gift];
+    xp += 1;
+    if (xp < practiceFor(it->second)) return;
+    xp = 0;
+    it->second++;
+    const auto& gi = giftInfo().at(gift);
+    bubble(p, "I'm getting the hang of this", 60);
+    note(cat(p.name, " has become a better ", lower(gi.n), ". Their ", gi.v, " is at ", it->second, " of 10 now, quicker and surer than before."));
+}
+} // namespace dw

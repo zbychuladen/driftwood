@@ -270,11 +270,15 @@ Design make(const std::string& key, int id, int x, int y, int w, int h, int fron
         V3 bw = b.centre + b.n(back) * (b.out(back) - .1f) + V3{0, 0, b.base};
         const Mat& m = pickMat({&LOGS, &BOARDS});
         b.add(upright(solid::BOX, bw, b.across(back) * 2, .18f, lo, b.yawOf(back), m.col, m.tex), WALL, WALLS, true);
-        for (float s : {-1.f, 1.f}) {
-            V3 p = b.centre + b.n(front) * (b.out(front) - .1f) + b.t(front) * (s * (b.across(front) - .1f)) + V3{0, 0, b.base};
-            b.add(upright(solid::BOX, p, .16f, .16f, hi, 0, FRAMEWOOD), POST, FRAME);
-        }
         V3 a = bw + V3{0, 0, lo + .1f} - b.n(back) * .2f, top = b.centre + b.n(front) * (b.out(front) + .35f) + V3{0, 0, b.base + hi + .05f};
+        for (float s : {-1.f, 1.f}) {
+            // each post stops under the roof, where the slope passes over it, instead of poking through
+            V3 p = b.centre + b.n(front) * (b.out(front) - .1f) + b.t(front) * (s * (b.across(front) - .1f)) + V3{0, 0, b.base};
+            V3 nf = b.n(front);
+            float k = ((p.x - a.x) * nf.x + (p.y - a.y) * nf.y) / ((top.x - a.x) * nf.x + (top.y - a.y) * nf.y);
+            float under = a.z + k * (top.z - a.z) - .14f;
+            b.add(upright(solid::BOX, p, .16f, .16f, under - b.base, 0, FRAMEWOOD), POST, FRAME);
+        }
         const Mat& rm = pickMat({&THATCH, &PLANKROOF, &SHINGLE});
         b.add(solid::along(a, top, b.across(front) * 2 + .5f, .26f, b.t(front), snow ? hex(0xeef1f2) : rm.col), ROOF, ROOFING);
         d.pieces.back().s.tex = rm.tex;
@@ -670,12 +674,14 @@ int visible(const Design& d, float progress) {
     return n;
 }
 
-void draw(const Design& d, float progress, float doorOpen, bool lit) {
+void draw(const Design& d, float progress, float doorOpen, bool lit, Layer layer) {
     progress = std::clamp(progress, 0.f, 1.f);
     std::vector<Solid> show;
     show.reserve(d.pieces.size());
     for (size_t i = 0; i < d.pieces.size(); i++) {
         const Piece& p = d.pieces[i];
+        bool over = p.part == ROOF || p.part == POST;
+        if ((layer == BELOW && over) || (layer == ABOVE && !over)) continue;
         float from = STAGE_AT[p.stage], to = p.stage + 1 < STAGES ? STAGE_AT[p.stage + 1] : 1.f;
         if (progress < from) continue;
         Solid s = p.s;

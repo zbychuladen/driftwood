@@ -72,7 +72,8 @@ const std::map<std::string, std::string>& traitNames() {
     static std::map<std::string, std::string> m = {
         {"hardworking", "hardworking"}, {"cheerful", "cheerful"}, {"social", "sociable"}, {"loner", "a loner"},
         {"tough", "tough in the cold"}, {"greenthumb", "good with plants"}, {"angler", "a born angler"}, {"strong", "strong"},
-        {"gloomy", "prone to gloom"}, {"easygoing", "easygoing"}, {"obstinate", "stubborn"}, {"curious", "curious"}};
+        {"gloomy", "prone to gloom"}, {"easygoing", "easygoing"}, {"obstinate", "stubborn"}, {"curious", "curious"},
+        {"tireless", "tireless"}, {"nightowl", "a night owl"}};
     return m;
 }
 
