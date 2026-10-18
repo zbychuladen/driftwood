@@ -288,7 +288,7 @@ void carrying(Pose& p, const std::string& what) {
         p.elbow[0] = p.elbow[1] = 1.3f;
         p.spread[0] = p.spread[1] = -.05f;
         p.prop = what == "wood" ? LOGS : what == "stone" ? STONE : BOWL;
-    } else if (what == "fish" || what == "food" || what == "berries" || what == "greens" || what == "grain") {
+    } else if (what == "fish" || what == "food" || what == "berries" || what == "greens" || what == "grain" || what == "fruit") {
         p.shoulder[1] = .05f; p.elbow[1] = .05f;
         p.prop = what == "fish" ? FISH : BASKET;
     }

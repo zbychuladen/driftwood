@@ -133,6 +133,7 @@ struct ProjectDef {
     bool autoPlan = false, food = false;
     bool upgrade = false;                     // a home level reached only by improving a home (cottage, house, manor)
     bool commissioned = false;                // raised only when a notable commissions it (a monument)
+    bool byHand = false;                      // only ever drawn up by the narrator: decorations, terraforming
     std::string gift, req, desc;
     int min = 0;
     std::vector<std::string> like, dislike;
@@ -142,6 +143,8 @@ struct Project : ProjectDef {
     int id = 0;
     float siteQuality = 1;                    // how good its spot is, 0.6..1.25; scales what it does
     float craft = 1, craftW = 0;              // workmanship, 0.75..1.25 (how well it was built), and the work it is averaged over
+    std::string customName;                   // a name the narrator gave it
+    int style = 0;                            // which of its looks (roof and colours), changed by the narrator
     bool sited = false;                       // placed by the player rather than the settlers
     float dw = 0, ds = 0, progress = 0, fuel = 0, growth = 0;
     bool done = false, placed = false, skip = false, voiced = false, waitNoted = false;
@@ -254,7 +257,7 @@ public:
     // The whole game as bytes, and back. Settlers' half-done actions are not
     // kept: after a load everyone picks their next task. load() leaves the sim
     // as it was and returns false, with a reason, for anything it cannot read.
-    static constexpr int SAVE_VERSION = 12;   // 2: site quality and pending placement; 3: rapport, contrariness, the story circle; 4: lines, questions; 5: deaths this season; 6: the narrator's rapport and buy-in; 7: duties and roles; 8: households; 9: gift practice; 10: goods and food kinds; 11: status and work; 12: blueprints and workmanship
+    static constexpr int SAVE_VERSION = 13;   // 2: site quality and pending placement; 3: rapport, contrariness, the story circle; 4: lines, questions; 5: deaths this season; 6: the narrator's rapport and buy-in; 7: duties and roles; 8: households; 9: gift practice; 10: goods and food kinds; 11: status and work; 12: blueprints and workmanship; 13: paths, names, looks
     struct SaveInfo { std::string village; int day = 0, year = 0, season = 0, people = 0; uint32_t seed = 0; };
     std::string save() const;
     bool load(const std::string& data, std::string* error = nullptr);
@@ -415,6 +418,16 @@ public:
     std::vector<Project*> wishes();                      // blueprints the settlers would build next, if placed
     static const char* craftWord(float c);
 
+    // The village by hand (SimVillage.cpp): paths wear in where people walk and
+    // make walking quicker; clearings, orchards and bridges; names and looks.
+    std::vector<uint8_t> wear;                       // per tile, 0..250
+    static constexpr int PATH = 60;                  // worn enough to be a path
+    bool onPath(int x, int y) const { return inb(x, y) && wear.size() == size_t(GW * GH) && wear[idx(x, y)] >= PATH; }
+    void rotatePlacement();                          // a bridge being placed turns 90 degrees
+    bool rename(int projectId, const std::string& name);
+    bool restyle(int projectId);
+    std::string nameOf(const Project& b) const { return b.customName.empty() ? b.name : b.customName; }
+
     // descriptions for UI
     std::vector<std::string> lacking(Person& p);
     std::string giftText(const Person& p) const;
@@ -438,6 +451,8 @@ private:
     void siteJudged(Project& b, bool finished);
     void talkHourly();
     void dutiesDaily();                       // seasons ending, roles' upkeep
+    void villageDaily();                      // paths fade where nobody walks
+    void finishByHand(Project& b);            // a clearing felled, an orchard planted
     // Specialists get better with practice: each piece of gifted work adds to it,
     // and enough of it raises the gift a level (to 10).
     void practise(Person& p, const std::string& gift);

@@ -36,6 +36,18 @@ bool Sim::siteLegal(const ProjectDef& d, int x, int y) const {
         int i = idx(x, y);
         return explored[i] && tt[i] >= 2 && bOcc[i] == -1 && (self->footprintOk(x, y, 1, 1) || tt[i] == HILL);
     }
+    if (d.key == "bridge") {
+        // planks over water, with dry land under both ends
+        int len = std::max(d.w, d.h), water = 0;
+        for (int k = 0; k < len; k++) {
+            int xx = d.w > d.h ? x + k : x, yy = d.w > d.h ? y : y + k;
+            if (!inb(xx, yy) || !explored[idx(xx, yy)] || bOcc[idx(xx, yy)] != -1) return false;
+            bool end = k == 0 || k == len - 1;
+            if (end && (isWater(xx, yy) || tt[idx(xx, yy)] == HILL)) return false;
+            if (!end && isWater(xx, yy)) water++;
+        }
+        return water > 0;
+    }
     if (!self->footprintOk(x, y, d.w, d.h)) return false;
     if (d.key == "boatyard") {
         for (int yy = y; yy < y + d.h; yy++) for (int xx = x; xx < x + d.w; xx++) if (distSea[idx(xx, yy)] <= 1) return true;

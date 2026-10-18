@@ -163,7 +163,7 @@ template <class A> void io(A& a, Obj& o) {
     io(a, o.size); io(a, o.berries); io(a, o.grow); io(a, o.stone); io(a, o.res); io(a, o.regrow); io(a, o.v);
 }
 template <class A> void io(A& a, Project& b) {
-    io(a, b.craft); io(a, b.craftW);
+    io(a, b.craft); io(a, b.craftW); io(a, b.customName); io(a, b.style);
     io(a, b.key); io(a, b.name); io(a, b.w); io(a, b.h); io(a, b.wood); io(a, b.stone); io(a, b.work); io(a, b.beds);
     io(a, b.r0); io(a, b.r1); io(a, b.autoPlan); io(a, b.food); io(a, b.gift); io(a, b.req); io(a, b.desc); io(a, b.min);
     io(a, b.like); io(a, b.dislike);
@@ -196,7 +196,7 @@ template <class A> void body(A& a, Sim& s) {
     io(a, s.totems); io(a, s.vote); io(a, s.pendingFate); io(a, s.nextProjId); io(a, s.nextPid); io(a, s.active);
     io(a, s.fuelRes); io(a, s.dockRes); io(a, s.toolWear); io(a, s.goods); io(a, s.foodSeen); io(a, s.ironTools);
     io(a, s.hasHerb); io(a, s.agenda); io(a, s.lastToldName); io(a, s.lastReply); io(a, s.pendingPlacement);
-    io(a, s.questions); io(a, s.fibs); io(a, s.nextQuestion); io(a, s.lastSaid); io(a, s.lostThisSeason); io(a, s.rapport); io(a, s.households); io(a, s.nextHousehold); io(a, s.nextShip);
+    io(a, s.questions); io(a, s.fibs); io(a, s.nextQuestion); io(a, s.lastSaid); io(a, s.lostThisSeason); io(a, s.rapport); io(a, s.households); io(a, s.nextHousehold); io(a, s.nextShip); io(a, s.wear);
     // the behaviour random generator, so a loaded game goes on the same way every time
     std::string rng;
     if constexpr (!A::reading) { std::ostringstream o; o << s.gen; rng = o.str(); }

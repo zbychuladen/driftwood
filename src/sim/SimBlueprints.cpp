@@ -30,7 +30,8 @@ int Sim::blueprintLevel(const std::string& k) {
         {"fields", 1}, {"cookhouse", 1}, {"tower", 1}, {"forge", 1}, {"mine", 1}, {"herbs", 1}, {"pottery", 1},
         {"loomhouse", 2}, {"workshop", 2}, {"longhouse", 2}, {"signal", 2},
         {"circle", 3}, {"bath", 3}, {"infirmary", 3}, {"school", 3},
-        {"lighthouse", 4}, {"boatyard", 4}};
+        {"lighthouse", 4}, {"boatyard", 4},
+        {"clearing", 0}, {"flowers", 0}, {"bench", 1}, {"orchard", 1}, {"bridge", 1}, {"lantern", 2}, {"banner", 2}};
     auto it = L.find(k);
     return it == L.end() ? 0 : it->second;
 }

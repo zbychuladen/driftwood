@@ -154,7 +154,7 @@ void Game::drawPlacement() {
     float yy = y + pad;
     text(F.head, "Where should the " + lower(b->name) + " go?", x + pad, yy, 22, T.text);
     yy += 32;
-    text(F.body, (champ.empty() ? std::string() : champ + " ") + (sim.pendingPlacement->chosen ? "Click a spot on the map, or let them choose. Esc cancels." : "Click a spot on the map, or let them choose."), x + pad, yy, 14, T.muted);
+    text(F.body, (champ.empty() ? std::string() : champ + " ") + (sim.pendingPlacement->chosen ? (b->key == "bridge" ? "Click a spot over water. R turns it, Esc cancels." : "Click a spot on the map, or let them choose. Esc cancels.") : "Click a spot on the map, or let them choose."), x + pad, yy, 14, T.muted);
     yy += 26;
     if (!g.legal) {
         text(F.bold, "It cannot go here.", x + pad, yy, 15, T.berry);

@@ -59,24 +59,25 @@ void Game::frame(float dt) {
     }
     if (!overlay) view.handleInput(dt, rMap, !ui::mouseOverUi() && !fate);
     else view.handleInput(0, rMap, false);   // keeps the camera framed to the map, ignores the pointer
-    if (IsKeyPressed(KEY_ESCAPE) && !sandFocus) {
+    if (IsKeyPressed(KEY_ESCAPE) && !(sandFocus || renameFocus)) {
         // Esc backs out one step: the picker, a building waiting for its spot (the settlers choose), the info card, then the menu
         if (picker != Picker::NONE) { picker = Picker::NONE; confirmSlot = -1; }
         else if (placing && !menuOpen) { if (sim.pendingPlacement->chosen) sim.cancelBlueprint(); else sim.placeSuggested(sim.pendingPlacement->project); }
         else if (!title && inspected.ok) inspected = {};
         else if (!title) menuOpen = !menuOpen;
     }
-    if (!title && !sandFocus && picker == Picker::NONE) {
+    if (!title && !(sandFocus || renameFocus) && picker == Picker::NONE) {
         if (IsKeyPressed(KEY_F5)) saveTo(saves::QUICK);
         if (IsKeyPressed(KEY_F9)) loadFrom(saves::QUICK);
     }
-    if (!overlay && !sandFocus) {
+    if (!overlay && !(sandFocus || renameFocus)) {
         if (IsKeyPressed(KEY_SPACE)) speed = speed > 0 ? (prevSpeed = speed, 0.f) : (prevSpeed > 0 ? prevSpeed : 1.f);
         if (IsKeyPressed(KEY_ONE)) speed = 1;
         if (IsKeyPressed(KEY_TWO)) speed = 2;
         if (IsKeyPressed(KEY_THREE)) speed = 5;
         if (IsKeyPressed(KEY_J)) journalOpen = !journalOpen;
         if (IsKeyPressed(KEY_C)) view.showAllLinks = !view.showAllLinks;
+        if (IsKeyPressed(KEY_R) && sim.pendingPlacement) sim.rotatePlacement();   // turn a footbridge
     }
     if (title) {
         // the island goes on living behind the title, the camera drifting round camp
@@ -347,6 +348,17 @@ int Game::run() {
                 if (sim.blueprint(d->key) >= 0) break;
             }
             if (sim.pendingPlacement) view.centerOnTile(sim.pendingPlacement->sx + 1.f, sim.pendingPlacement->sy + 1.f);
+        }
+        if (opt.kit) {
+            // everything the narrator can build by hand, placed where the settlers would and finished
+            sim.askPlacement = true;
+            for (auto* p : sim.members()) p->tiers = {90, 90, 90, 90, 10};
+            for (auto k : {"orchard", "flowers", "lantern", "bench", "banner", "flowers", "lantern"}) {
+                int id = sim.blueprint(k);
+                if (id < 0 || !sim.placeSuggested(id)) { sim.cancelBlueprint(); continue; }
+                if (auto* b = sim.projectById(id)) { b->done = true; b->progress = float(b->work); if (b->key == "orchard") b->state = "ripe"; if (sim.active == id) sim.active = -1; }
+            }
+            if (auto* o = sim.built("orchard")) { opt.hasCenter = true; opt.centerX = o->x + 1.5f; opt.centerY = o->y + 1.5f; }
         }
         if (opt.hour >= 0 && !sim.pendingPlacement) {
             double now = sim.hour(), add = opt.hour - now;

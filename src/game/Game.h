@@ -17,7 +17,8 @@ struct Options {
     float zoom = 0;
     int selectFirst = 0;
     int narrate = 0;
-    bool question = false;           // a settler asks the narrator something, shown open                 // narrate the selected settler this many times before the capture
+    bool question = false;           // a settler asks the narrator something, shown open
+    bool kit = false;                // one of each thing the narrator can build by hand, finished, near camp                 // narrate the selected settler this many times before the capture
     int tab = 0;
     bool fullscreen = false;
     bool showJournal = false;
@@ -99,6 +100,9 @@ private:
     bool pauseQuestions = false;          // pause the game when a settler asks the narrator something
     int openQuestion = -1, seenQuestion = 0;
     std::string ledgerNote;               // what came of the last nudge from the Ledger
+    int renaming = -1;                    // the building whose name is being typed
+    std::string renameText;
+    bool renameFocus = false;
     Rectangle decisionsR{};               // the pending-decisions list, as last drawn
     float placeH = 0;                     // the placement panel's height last frame, to keep clicks off the map
     bool placingOverride = false;         // captures: aim the footprint at a fixed screen point

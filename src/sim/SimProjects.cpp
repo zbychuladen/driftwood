@@ -48,6 +48,7 @@ float Sim::needOf(const std::string& k) {
     if (k == "smoke") return .35f;
     if (k == "cookhouse") return pop >= 6 ? .55f : .2f;
     if (k == "monument") return .6f;
+    if (k == "clearing" || k == "orchard" || k == "bridge" || k == "flowers" || k == "lantern" || k == "bench" || k == "banner") return .3f;
     if (k == "workshop") { int better = 0; for (auto& h : households) better += h.home >= 0 && projectById(h.home) && homeLevel(projectById(h.home)->key) >= 2; return better ? .55f : .2f; }
     return .25f;
 }
@@ -149,6 +150,7 @@ bool Sim::claim(Project& b, int x, int y) {
     for (int yy = y; yy < y + b.h; yy++) for (int xx = x; xx < x + b.w; xx++) {
         int i = idx(xx, yy);
         bOcc[i] = b.id;
+        if (b.key == "clearing") continue;   // its trees come down as the work is done
         if (objAt[i] >= 0) {
             auto& o = objs[objAt[i]];
             if (o.type == "tree") stock.wood += 2;
@@ -270,6 +272,7 @@ void Sim::startProject(Project& b) {
 
 void Sim::finish(Project& b) {
     b.done = true;
+    if (b.byHand) finishByHand(b);
     if (b.craftW > 0 && !settlersBuild(b) && (b.craft >= 1.12f || b.craft < .85f))
         note(b.craft >= 1.12f ? cat("The ", lower(b.name), " is finely made. Whoever built it took real care.") : cat("The ", lower(b.name), " went up roughly. It will do, but it will not do as well."));
     if (specialist(b)) siteJudged(b, true);
