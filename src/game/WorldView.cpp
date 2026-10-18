@@ -45,6 +45,8 @@ void WorldView::reset(Sim& sim) {
 
 void WorldView::unload() {
     if (ground.id) UnloadRenderTexture(ground);
+    if (fadeRT.id) UnloadRenderTexture(fadeRT);
+    fadeRT = {};
     ground = {};
     lighting.unload();
 }
@@ -351,12 +353,50 @@ void WorldView::draw(Sim& s, Rectangle map, int selectedId, float realDt, float 
         draw::radial(c.x, c.y, 5 * iso::HW, 5 * iso::HH, draw::rgba(140, 110, 70, wear), draw::rgba(140, 110, 70, 0), 40);
     }
     for (auto& b : s.plan) if (b.placed && !b.skip && art::isFlat(b.key) && visible(wp(b.x + b.w / 2.f, b.y + b.h / 2.f), 160)) art::building(ctx, b);
+    // standing buildings sit in the ground: trodden earth round them, and a shadow at their foot on the side away from the sun
+    for (auto& b : s.plan) {
+        if (!b.placed || b.skip || art::isFlat(b.key) || b.key == "fire" || (!b.done && b.progress <= 0)) continue;
+        if (!visible(wp(b.x + b.w / 2.f, b.y + b.h / 2.f), 160)) continue;
+        auto quad = [&](float x0, float y0, float x1, float y1, Color c) { draw::poly({wp(x0, y0), wp(x1, y0), wp(x1, y1), wp(x0, y1)}, c); };
+        float x0 = float(b.x), y0 = float(b.y), x1 = float(b.x + b.w), y1 = float(b.y + b.h);
+        bool snow = s.season() == 3;
+        Color earth = snow ? draw::rgba(150, 160, 170, 1) : draw::rgba(132, 104, 66, 1);
+        // nested, fainter as they spread, so the edges are soft
+        for (int i = 0; i < 5; i++) { float e = .55f - i * .11f; quad(x0 - e, y0 - e, x1 + e, y1 + e, draw::withA(earth, .03f)); }
+        float k = b.done ? 1.f : std::min(1.f, b.progress / std::max(1.f, float(b.work)) * 1.5f);
+        for (int i = 0; i < 4; i++) {
+            float e = .3f - i * .08f;
+            quad(x0 + .02f - e * .4f, y0 - .1f - e * .5f, x1 + .3f + e, y1 + e * .3f, draw::rgba(52, 60, 44, .07f * k));
+        }
+    }
 
     drawFog(s);   // under everything standing, so tall art at the edge of the known island is not cut off
     drawHighlight(s, inspected);
     Rectangle viewR{tl.x - 90, tl.y - 90, br.x - tl.x + 180, br.y - tl.y + 250};
     draw::ink = {std::max(.55f, 1.05f / cam.zoom), {52, 62, 52, 255}};
-    for (auto& d : sorted(collect(s, ctx, viewR, selectedId))) d.draw(ctx);
+    {
+        // a tree standing in front of a settler fades, so nobody is lost behind the foliage
+        auto items = sorted(collect(s, ctx, viewR, selectedId));
+        auto fade = seeThrough(s, items);
+        for (size_t i = 0; i < items.size(); i++) {
+            if (!fade[i]) { items[i].draw(ctx); continue; }
+            // drawn whole off screen, then laid over the scene faded, so its own layers do not show through each other
+            int w = GetScreenWidth(), h = GetScreenHeight();
+            if (fadeRT.texture.width != w || fadeRT.texture.height != h) {
+                if (fadeRT.id) UnloadRenderTexture(fadeRT);
+                fadeRT = LoadRenderTexture(w, h);
+            }
+            EndMode2D();
+            BeginTextureMode(fadeRT);
+            ClearBackground(BLANK);
+            BeginMode2D(cam);
+            items[i].draw(ctx);
+            EndMode2D();
+            EndTextureMode();
+            DrawTextureRec(fadeRT.texture, {0, 0, float(w), -float(h)}, {0, 0}, Fade(WHITE, SEE_THROUGH));
+            BeginMode2D(cam);
+        }
+    }
     draw::ink.width = 0;
     drawLinks(s, selectedId, inspected);
     drawGhost();   // over the trees, so a spot in the woods can still be seen
@@ -455,6 +495,26 @@ std::vector<Drawable> WorldView::collect(Sim& s, const art::Ctx& ctx, Rectangle 
         draw::record(nullptr);
         if (box.empty()) { V2 w = wp((d.at.x0 + d.at.x1) / 2, (d.at.y0 + d.at.y1) / 2); box = {w.x, w.y, w.x, w.y}; }
         d.at.sx0 = box.x0; d.at.sy0 = box.y0; d.at.sx1 = box.x1; d.at.sy1 = box.y1;
+    }
+    return out;
+}
+
+std::vector<bool> WorldView::seeThrough(const Sim& s, const std::vector<Drawable>& order) {
+    std::vector<bool> out(order.size(), false);
+    std::vector<const Drawable*> behind;   // settlers drawn so far
+    for (size_t i = 0; i < order.size(); i++) {
+        const Drawable& d = order[i];
+        if (d.kind == Drawable::PERSON) { behind.push_back(&d); continue; }
+        if (d.kind != Drawable::OBJECT || d.id < 0 || d.id >= int(s.objs.size()) || s.objs[size_t(d.id)].type != "tree") continue;
+        const auto& t = d.at;
+        // the crown and trunk: everything but the shadow at the foot
+        float top = t.sy0, bottom = t.sy1 - (t.sy1 - t.sy0) * .08f;
+        for (const Drawable* p : behind) {
+            const auto& a = p->at;
+            float ox = std::min(a.sx1, t.sx1) - std::max(a.sx0, t.sx0), oy = std::min(a.sy1, bottom) - std::max(a.sy0, top);
+            float area = std::max(1.f, (a.sx1 - a.sx0) * (a.sy1 - a.sy0));
+            if (ox > 0 && oy > 0 && ox * oy > area * .35f) { out[i] = true; break; }
+        }
     }
     return out;
 }

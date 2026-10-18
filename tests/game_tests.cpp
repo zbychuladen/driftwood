@@ -776,6 +776,42 @@ static void testSaveSlots() {
     saves::setDir("");
 }
 
+// ---------------------------------------------------------------- the graphics pass
+static void testGraphicsPass() {
+    std::printf("see-through trees and easing\n");
+    Sim s;
+    s.newWorld(20261017);
+    int tree = -1;
+    for (auto& o : s.objs) if (!o.dead && o.type == "tree") { tree = o.i; break; }
+    auto item = [](Drawable::Kind k, int id, float sx0, float sy0, float sx1, float sy1) {
+        Drawable d{k, id, {0, 0, 1, 1, sx0, sy0, sx1, sy1}, {}};
+        return d;
+    };
+    // a settler drawn first (behind), then a tree whose crown covers them
+    std::vector<Drawable> behind{item(Drawable::PERSON, 1, 100, 100, 110, 130), item(Drawable::OBJECT, tree, 80, 60, 140, 150)};
+    std::vector<Drawable> front{item(Drawable::OBJECT, tree, 80, 60, 140, 150), item(Drawable::PERSON, 1, 100, 100, 110, 130)};
+    std::vector<Drawable> apart{item(Drawable::PERSON, 1, 300, 100, 310, 130), item(Drawable::OBJECT, tree, 80, 60, 140, 150)};
+    CHECK(tree >= 0 && WorldView::seeThrough(s, behind)[1], "a tree in front of a settler is drawn see-through");
+    CHECK(!WorldView::seeThrough(s, front)[0] && !WorldView::seeThrough(s, apart)[1], "a tree behind a settler, or beside them, is drawn as usual");
+
+    // easing between poses
+    figure::Pose a = figure::activity("sit", 3, 1), b = figure::walk(1.f);
+    figure::Pose h0 = figure::blend(a, b, 0), h1 = figure::blend(a, b, 1), half = figure::blend(a, b, .5f);
+    CHECK(h0.drop == a.drop && h1.drop == b.drop && std::abs(half.hip[0] - (a.hip[0] + b.hip[0]) / 2) < 1e-5f, "a pose eases part way from one to the next");
+    // an axe goes up slowly and comes down fast, with a strike at the bottom
+    int up = 0, down = 0, strikes = 0;
+    float last = -1;
+    for (int i = 0; i < 1000; i++) {
+        float t = i * .00526f;   // one swing
+        auto p = figure::activity("chop", t, 0);
+        float sh = p.shoulder[0];
+        if (last >= 0) { if (sh > last + 1e-4f) up++; else if (sh < last - 1e-4f) down++; }
+        strikes += p.strike > .5f;
+        last = sh;
+    }
+    CHECK(up > down * 2 && strikes > 0 && strikes < 100, cat("a swing lifts slowly and strikes fast (", up, " steps up, ", down, " down)").c_str());
+}
+
 int main() {
     testProjection();
     testPickPeople(20261017);
@@ -796,6 +832,7 @@ int main() {
     testBuildings();
     testDoors();
     testSaveSlots();
+    testGraphicsPass();
     std::printf(failures ? "\n%d check(s) failed\n" : "\nall checks passed\n", failures);
     return failures;
 }
